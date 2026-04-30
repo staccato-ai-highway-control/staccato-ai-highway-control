@@ -1,7 +1,15 @@
-FROM node:20-alpine
+﻿FROM node:20-alpine
 
 WORKDIR /app
 
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
 EXPOSE 3000
 
-CMD ["sh", "-c", "echo 'Frontend server placeholder. Add Next.js app later.' && sleep infinity"]
+CMD ["npm", "run", "dev"]
