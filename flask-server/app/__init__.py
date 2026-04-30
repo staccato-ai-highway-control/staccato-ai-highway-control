@@ -9,6 +9,7 @@ from app.routes.health_routes import health_bp
 from app.routes.incident_routes import incident_bp
 from app.routes.notification_routes import notification_bp
 from app.routes.report_routes import report_bp
+from app.routes.llm_report_routes import llm_report_bp
 
 
 def create_app():
@@ -24,5 +25,6 @@ def create_app():
     app.register_blueprint(notification_bp)
     app.register_blueprint(report_bp)
     app.register_blueprint(ai_detection_bp)
+    app.register_blueprint(llm_report_bp)
 
     return app
