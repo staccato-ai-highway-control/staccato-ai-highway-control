@@ -6,6 +6,7 @@ from app.routes.auth_routes import auth_bp
 from app.routes.cctv_routes import cctv_bp
 from app.routes.health_routes import health_bp
 from app.routes.incident_routes import incident_bp
+from app.routes.notification_routes import notification_bp
 
 
 def create_app():
@@ -18,5 +19,6 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(cctv_bp)
     app.register_blueprint(incident_bp)
+    app.register_blueprint(notification_bp)
 
     return app
