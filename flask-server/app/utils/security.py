@@ -70,8 +70,28 @@ def require_auth(fn):
         if not user:
             return jsonify({"message": "User not found."}), 404
 
+        if user.account_status != "ACTIVE":
+            return jsonify({"message": "Account is not active."}), 403
+
         request.current_user = user
 
         return fn(*args, **kwargs)
 
     return wrapper
+
+
+def require_roles(*allowed_roles):
+    def decorator(fn):
+        @wraps(fn)
+        @require_auth
+        def wrapper(*args, **kwargs):
+            user = request.current_user
+
+            if user.role not in allowed_roles:
+                return jsonify({"message": "Permission denied."}), 403
+
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
