@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.venv
+venv
+.env
+weights/*
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.h5
+*.log
