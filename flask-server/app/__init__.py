@@ -2,6 +2,7 @@
 
 from app.config import Config
 from app.extensions import init_extensions
+from app.routes.ai_detection_routes import ai_detection_bp
 from app.routes.auth_routes import auth_bp
 from app.routes.cctv_routes import cctv_bp
 from app.routes.health_routes import health_bp
@@ -22,5 +23,6 @@ def create_app():
     app.register_blueprint(incident_bp)
     app.register_blueprint(notification_bp)
     app.register_blueprint(report_bp)
+    app.register_blueprint(ai_detection_bp)
 
     return app
