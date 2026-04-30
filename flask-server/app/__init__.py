@@ -5,6 +5,7 @@ from app.extensions import init_extensions
 from app.routes.auth_routes import auth_bp
 from app.routes.cctv_routes import cctv_bp
 from app.routes.health_routes import health_bp
+from app.routes.incident_routes import incident_bp
 
 
 def create_app():
@@ -16,5 +17,6 @@ def create_app():
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(cctv_bp)
+    app.register_blueprint(incident_bp)
 
     return app
