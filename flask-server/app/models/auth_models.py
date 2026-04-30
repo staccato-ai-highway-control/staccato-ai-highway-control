@@ -27,6 +27,8 @@ class User(db.Model):
             "role": self.role,
             "account_status": self.account_status,
             "is_email_verified": bool(self.is_email_verified),
+            "approved_by": self.approved_by,
+            "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_login_at": self.last_login_at.isoformat() if self.last_login_at else None,
         }
@@ -45,6 +47,21 @@ class SignupRequest(db.Model):
     reject_reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False)
     updated_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self, user=None):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "request_status": self.request_status,
+            "requested_role": self.requested_role,
+            "request_memo": self.request_memo,
+            "reviewed_by": self.reviewed_by,
+            "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+            "reject_reason": self.reject_reason,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "user": user.to_public_dict() if user else None,
+        }
 
 
 class SecurityLog(db.Model):
