@@ -1,53 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { signup } from "@/features/auth/api";
 
 export default function SignupPage() {
   const router = useRouter();
 
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [isCodeSent, setIsCodeSent] = useState(false);
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
-  const [verificationCode, setVerificationCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [requestedRole, setRequestedRole] = useState("CONTROL_ADMIN");
+  const [reason, setReason] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSendCode = () => {
-    if (!email) {
-      alert("이메일을 입력해주세요.");
+  const handleSubmitSignup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!name || !email || !password) {
+      alert("이름, 이메일, 비밀번호를 입력해주세요.");
       return;
     }
 
-    // TODO: 백엔드 연동 예정
-    // POST /api/auth/email/send
-    setIsCodeSent(true);
-    alert("인증코드를 발송했습니다.");
-  };
-
-  const handleVerifyCode = () => {
-    if (!verificationCode) {
-      alert("인증코드를 입력해주세요.");
+    if (password !== passwordConfirm) {
+      alert("비밀번호가 일치하지 않습니다.");
       return;
     }
 
-    // TODO: 백엔드 연동 예정
-    // POST /api/auth/email/verify
-    setIsEmailVerified(true);
-    alert("이메일 인증이 완료되었습니다.");
-  };
-
-  const handleSubmitSignup = () => {
-    if (!isEmailVerified) {
-      alert("이메일 인증을 먼저 완료해주세요.");
+    if (!agreed) {
+      alert("개인정보 수집 및 이용에 동의해주세요.");
       return;
     }
 
-    // TODO: 백엔드 연동 예정
-    // POST /api/auth/signup
-    // 성공 시 account_status = PENDING_APPROVAL
+    try {
+      setIsSubmitting(true);
 
-    alert("회원가입 신청이 접수되었습니다. 관리자 승인 후 로그인이 가능합니다.");
-    router.push("/pending-approval");
+      await signup({
+        name,
+        phone,
+        email,
+        password,
+        requestedRole,
+        reason,
+        agreed,
+      });
+
+      alert("회원가입 신청이 접수되었습니다. 관리자 승인 후 로그인이 가능합니다.");
+      router.push("/pending-approval");
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "회원가입 신청 중 오류가 발생했습니다."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -60,7 +72,7 @@ export default function SignupPage() {
 
       <div className="absolute inset-0 bg-slate-950/75" />
 
-      <section className="relative z-10 w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950/75 p-8 shadow-2xl backdrop-blur-md">
+      <section className="relative z-10 w-full max-w-xl rounded-2xl border border-white/10 bg-slate-950/75 p-8 shadow-2xl backdrop-blur-md">
         <Link href="/" className="block no-underline">
           <img
             src="/assets/images/logo_01.png"
@@ -73,102 +85,86 @@ export default function SignupPage() {
           STAFF ACCESS REQUEST
         </p>
 
+        <h1 className="mt-3 text-3xl font-black">회원가입 신청</h1>
+
         <p className="mt-3 text-sm leading-6 text-slate-300">
-          이메일 인증 후 최고관리자 승인을 거쳐 관제 시스템을 사용할 수 있습니다.
+          회원가입 신청 후 최고관리자 승인을 거쳐 관제 시스템을 사용할 수 있습니다.
         </p>
 
-        <form className="mt-8 grid gap-5">
-        
-            <div>
-              <label className="text-sm font-semibold text-slate-300">
-                이름
-              </label>
-              <input
-                type="text"
-                placeholder="홍길동"
-                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-              />
-            </div>
-          
-
+        <form onSubmit={handleSubmitSignup} className="mt-8 grid gap-5">
           <div>
-            <label className="text-sm font-semibold text-slate-300">
-              연락처
-            </label>
+            <label className="text-sm font-semibold text-slate-300">이름</label>
             <input
-              type="tel"
-              placeholder="010-1234-5678"
+              type="text"
+              placeholder="홍길동"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
             />
           </div>
 
           <div>
-            <label className="text-sm font-semibold text-slate-300">
-              이메일
-            </label>
+            <label className="text-sm font-semibold text-slate-300">연락처</label>
+            <input
+              type="tel"
+              placeholder="010-1234-5678"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+            />
+          </div>
 
+          <div>
+            <label className="text-sm font-semibold text-slate-300">이메일</label>
             <div className="mt-2 flex gap-2">
               <input
                 type="email"
                 placeholder="staff@staccato.com"
                 value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setIsEmailVerified(false);
-                  setIsCodeSent(false);
-                  setVerificationCode("");
-                }}
-                disabled={isEmailVerified}
-                className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 disabled:opacity-60 focus:border-sky-400"
+                onChange={(event) => setEmail(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
               />
 
               <button
                 type="button"
-                onClick={handleSendCode}
-                disabled={isEmailVerified}
-                className="shrink-0 rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-300 transition hover:bg-sky-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled
+                className="shrink-0 cursor-not-allowed rounded-lg border border-slate-600 px-4 py-3 text-sm font-bold text-slate-500"
               >
-                인증요청
+                인증 준비중
               </button>
             </div>
 
-            {isEmailVerified && (
-              <p className="mt-2 text-sm font-semibold text-emerald-400">
-                이메일 인증 완료
-              </p>
-            )}
+            <p className="mt-2 text-xs text-slate-400">
+              이메일 인증 기능은 백엔드 API 구현 후 연결 예정입니다.
+            </p>
           </div>
 
-          {isCodeSent && !isEmailVerified && (
-            <div>
-              <label className="text-sm font-semibold text-slate-300">
-                이메일 인증코드
-              </label>
+          <div>
+            <label className="text-sm font-semibold text-slate-300">
+              요청 권한
+            </label>
+            <select
+              value={requestedRole}
+              onChange={(event) => setRequestedRole(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition focus:border-sky-400"
+            >
+              <option value="CONTROL_ADMIN">관제관리자</option>
+              <option value="MAINTAINER">유지보수 담당자</option>
+            </select>
+          </div>
 
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  placeholder="6자리 인증코드"
-                  value={verificationCode}
-                  onChange={(event) => setVerificationCode(event.target.value)}
-                  maxLength={6}
-                  className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-                />
-
-                <button
-                  type="button"
-                  onClick={handleVerifyCode}
-                  className="shrink-0 rounded-lg bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-400"
-                >
-                  인증확인
-                </button>
-              </div>
-
-              <p className="mt-2 text-xs text-slate-400">
-                이메일로 발송된 6자리 인증코드를 입력해주세요.
-              </p>
-            </div>
-          )}
+          <div>
+            <label className="text-sm font-semibold text-slate-300">
+              신청 사유
+            </label>
+            <textarea
+              placeholder="관제 시스템 사용 신청 사유를 입력해주세요."
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              rows={3}
+              className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+            />
+          </div>
 
           <div className="grid gap-5 md:grid-cols-2">
             <div>
@@ -178,6 +174,8 @@ export default function SignupPage() {
               <input
                 type="password"
                 placeholder="비밀번호 입력"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
                 className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
               />
             </div>
@@ -189,25 +187,33 @@ export default function SignupPage() {
               <input
                 type="password"
                 placeholder="비밀번호 재입력"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.target.value)}
                 className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
               />
             </div>
           </div>
 
+          <label className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(event) => setAgreed(event.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              개인정보 수집 및 이용에 동의합니다. 입력한 정보는 내부 직원 승인
+              및 계정 관리를 위해 사용됩니다.
+            </span>
+          </label>
+
           <button
-            type="button"
-            onClick={handleSubmitSignup}
-            disabled={!isEmailVerified}
+            type="submit"
+            disabled={isSubmitting}
             className="mt-2 w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            회원가입 신청
+            {isSubmitting ? "신청 중..." : "회원가입 신청"}
           </button>
-
-          {!isEmailVerified && (
-            <p className="text-center text-xs text-slate-400">
-              이메일 인증 완료 후 회원가입 신청이 가능합니다.
-            </p>
-          )}
         </form>
 
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -224,7 +230,6 @@ export default function SignupPage() {
           >
             로그인
           </Link>
-
         </div>
       </section>
     </main>
