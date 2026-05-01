@@ -160,6 +160,97 @@ class AuthService:
         }
 
     @staticmethod
+    def change_my_password(
+        user,
+        data,
+        ip_address=None,
+        user_agent=None,
+    ):
+        current_password = data.get("current_password") or ""
+        new_password = data.get("new_password") or ""
+
+        if not current_password:
+            raise AuthError("Current password is required.", 400)
+
+        if not new_password or len(new_password) < 8:
+            raise AuthError("New password must be at least 8 characters.", 400)
+
+        if not verify_password(current_password, user.password_hash):
+            AuthService.create_security_log(
+                action_type="PASSWORD_CHANGE_FAILED",
+                actor_user_id=user.id,
+                target_type="USER",
+                target_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                log_message="Current password verification failed.",
+            )
+            db.session.commit()
+            raise AuthError("Current password is incorrect.", 401)
+
+        if verify_password(new_password, user.password_hash):
+            raise AuthError("New password must be different from current password.", 400)
+
+        user.password_hash = hash_password(new_password)
+        user.updated_at = datetime.utcnow()
+
+        AuthService.create_security_log(
+            action_type="PASSWORD_CHANGED",
+            actor_user_id=user.id,
+            target_type="USER",
+            target_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message="User password changed.",
+        )
+
+        db.session.commit()
+
+        return user.to_public_dict()
+
+    @staticmethod
+    def withdraw_my_account(
+        user,
+        data,
+        ip_address=None,
+        user_agent=None,
+    ):
+        password = data.get("password") or ""
+
+        if not password:
+            raise AuthError("Password is required.", 400)
+
+        if not verify_password(password, user.password_hash):
+            AuthService.create_security_log(
+                action_type="ACCOUNT_WITHDRAW_FAILED",
+                actor_user_id=user.id,
+                target_type="USER",
+                target_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                log_message="Password verification failed during account withdrawal.",
+            )
+            db.session.commit()
+            raise AuthError("Password is incorrect.", 401)
+
+        user.account_status = "DELETED"
+        user.updated_at = datetime.utcnow()
+
+        AuthService.create_security_log(
+            action_type="ACCOUNT_WITHDRAWN",
+            actor_user_id=user.id,
+            target_type="USER",
+            target_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message="User account was deactivated by withdrawal.",
+        )
+
+        db.session.commit()
+
+        return user.to_public_dict()
+
+    @staticmethod
     def list_users():
         users = User.query.order_by(User.id.desc()).all()
         return [user.to_public_dict() for user in users]
