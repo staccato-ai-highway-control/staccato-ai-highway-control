@@ -6,7 +6,7 @@ import { incidentTypeLabels } from "@/features/incidents/types";
 
 export function IncidentAlertList() {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-slate-100">
       {mockIncidents.map((incident) => (
         <Link
           key={incident.id}

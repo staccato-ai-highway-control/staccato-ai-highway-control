@@ -1,6 +1,55 @@
+"use client";
+
 import Link from "next/link";
+import { FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { login } from "@/features/auth/api";
+import type { AuthResponse } from "@/features/auth/types";
+
+function getAccessToken(response: AuthResponse) {
+  return (
+    response.access_token ??
+    response.accessToken ??
+    response.token ??
+    response.data?.access_token ??
+    response.data?.accessToken ??
+    response.data?.token
+  );
+}
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+
+    try {
+      setIsSubmitting(true);
+      const response = await login({ email, password });
+      const accessToken = getAccessToken(response);
+
+      if (!accessToken) {
+        throw new Error("로그인 응답에서 access_token을 찾을 수 없습니다.");
+      }
+
+      localStorage.setItem("accessToken", accessToken);
+      router.push("/dashboard");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "로그인 중 오류가 발생했습니다."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 text-white">
       {/* Background image */}
@@ -31,14 +80,17 @@ export default function LoginPage() {
           AI 기반 고속도로 정차 차량 탐지 및 관제 시스템에 접속합니다.
         </p>
 
-        <form className="mt-8 space-y-5">
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <div>
             <label className="text-sm font-semibold text-slate-300">
               이메일
             </label>
             <input
               type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               placeholder="admin@staccato.com"
+              required
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
             />
           </div>
@@ -49,16 +101,26 @@ export default function LoginPage() {
             </label>
             <input
               type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
               placeholder="비밀번호 입력"
+              required
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
             />
           </div>
 
+          {errorMessage ? (
+            <p className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+              {errorMessage}
+            </p>
+          ) : null}
+
           <button
-            type="button"
-            className="w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400"
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            관제 시스템 로그인
+            {isSubmitting ? "로그인 중..." : "관제 시스템 로그인"}
           </button>
         </form>
 

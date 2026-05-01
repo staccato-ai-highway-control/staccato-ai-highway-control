@@ -1,3 +1,4 @@
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { CctvPlayer } from "@/components/cctv/CctvPlayer";
 import { RoiOverlay } from "@/components/cctv/RoiOverlay";
@@ -8,12 +9,14 @@ export default async function CctvDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const cctv = await getCctv(id);
   return (
-    <AppLayout title="CCTV 상세">
-      <div className="relative">
-        <CctvPlayer cctv={cctv} />
-        <RoiOverlay />
-        <AiDetectionOverlay />
-      </div>
-    </AppLayout>
+    <RequireAuth>
+      <AppLayout title="CCTV 상세">
+        <div className="relative">
+          <CctvPlayer cctv={cctv} />
+          <RoiOverlay />
+          <AiDetectionOverlay />
+        </div>
+      </AppLayout>
+    </RequireAuth>
   );
 }
