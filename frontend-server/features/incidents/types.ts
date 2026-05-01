@@ -1,11 +1,13 @@
 export type IncidentType = "LANE_STOP" | "SHOULDER_STOP";
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-export type IncidentStatus = "DETECTED" | "REVIEWING" | "IN_PROGRESS" | "RESOLVED" | "FALSE_POSITIVE";
+export type IncidentStatus = "DETECTED" | "REVIEWING" | "ASSIGNED" | "RESOLVED" | "FALSE_POSITIVE" | "CLOSED";
 
 export type Incident = {
   id: string;
   code: string;
+  title: string;
   eventType: IncidentType;
+  roadName: string;
   location: string;
   riskLevel: RiskLevel;
   riskScore: number;
@@ -13,6 +15,7 @@ export type Incident = {
   stoppedDurationSec: number;
   status: IncidentStatus;
   detectedAt: string;
+  assignee?: string;
   cctvId: string;
   snapshotUrl: string;
   roiType: "LANE" | "SHOULDER";
@@ -40,7 +43,8 @@ export const riskLevelLabels: Record<RiskLevel, string> = {
 export const incidentStatusLabels: Record<IncidentStatus, string> = {
   DETECTED: "탐지됨",
   REVIEWING: "검토중",
-  IN_PROGRESS: "처리중",
+  ASSIGNED: "담당 배정",
   RESOLVED: "처리완료",
   FALSE_POSITIVE: "오탐종료",
+  CLOSED: "종결",
 };

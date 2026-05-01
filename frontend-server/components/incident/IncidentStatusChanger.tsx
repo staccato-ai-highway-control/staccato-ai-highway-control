@@ -4,7 +4,7 @@ import { useState } from "react";
 import { updateIncidentStatus } from "@/features/incidents/api";
 import { incidentStatusLabels, type IncidentStatus } from "@/features/incidents/types";
 
-const statuses: IncidentStatus[] = ["DETECTED", "REVIEWING", "IN_PROGRESS", "RESOLVED", "FALSE_POSITIVE"];
+const statuses: IncidentStatus[] = ["DETECTED", "REVIEWING", "ASSIGNED", "RESOLVED", "FALSE_POSITIVE", "CLOSED"];
 
 type IncidentStatusChangerProps = {
   incidentId: string;

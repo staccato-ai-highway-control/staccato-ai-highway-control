@@ -1,3 +1,4 @@
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/common/Card";
 import { LlmReportEditor } from "@/components/llm/LlmReportEditor";
@@ -9,7 +10,8 @@ export default async function LlmReportPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const report = await getLlmReport(id);
   return (
-    <AppLayout title="LLM 보고서">
+    <RequireAuth>
+      <AppLayout title="LLM 보고서">
       <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <Card className="p-5">
           <h2 className="mb-3 font-black">보고서 초안 보기</h2>
@@ -24,6 +26,7 @@ export default async function LlmReportPage({ params }: { params: Promise<{ id: 
           </div>
         </Card>
       </div>
-    </AppLayout>
+      </AppLayout>
+    </RequireAuth>
   );
 }

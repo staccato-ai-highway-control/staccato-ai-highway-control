@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/common/Card";
 import { DetectionEvidence } from "@/components/incident/DetectionEvidence";
@@ -13,7 +14,8 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
   const incident = await getIncident(id);
 
   return (
-    <AppLayout title="사건 상세">
+    <RequireAuth>
+      <AppLayout title="사건 상세">
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <div className="grid gap-5">
           <DetectionEvidence incident={incident} />
@@ -43,6 +45,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
           </Card>
         </div>
       </div>
-    </AppLayout>
+      </AppLayout>
+    </RequireAuth>
   );
 }
