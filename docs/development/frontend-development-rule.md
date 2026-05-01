@@ -1,4 +1,4 @@
-﻿# STACCATO 프론트엔드 개발 규칙
+# STACCATO 프론트엔드 개발 규칙
 
 ## 1. 기본 원칙
 
@@ -124,23 +124,47 @@ frontend-server/.env.local
 
 ## 7. 실행 방법
 
+프론트 담당자는 우선 Docker 없이 Node.js로 실행한다.
+
+권장 버전:
+
+```text
+Node.js 20 이상
+```
+
+최초 1회 환경 파일 생성:
+
+```powershell
+cd frontend-server
+copy .env.example .env.local
+```
+
+macOS/Linux:
+
+```bash
+cd frontend-server
+cp .env.example .env.local
+```
+
 로컬 실행:
 
 ```powershell
 cd frontend-server
-npm install
+npm ci
 npm run dev
-```
-
-Docker 실행:
-
-```powershell
-docker compose build frontend-server
-docker compose up -d frontend-server
 ```
 
 브라우저 확인:
 
 ```text
 http://localhost:3000
+```
+
+Flask 서버는 별도 터미널에서 `http://localhost:5000`으로 실행되어 있어야 한다.
+
+Docker 실행은 통합 검증 단계에서 사용한다.
+
+```powershell
+docker compose build frontend-server
+docker compose up -d frontend-server
 ```
