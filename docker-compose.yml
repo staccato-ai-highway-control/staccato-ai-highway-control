@@ -29,6 +29,8 @@ services:
         condition: service_started
       its-server:
         condition: service_started
+      llm-server:
+        condition: service_started
     volumes:
       - ./storage:/app/storage
     networks:
@@ -57,6 +59,20 @@ services:
       - "${ITS_PORT:-8002}:8002"
     env_file:
       - .env
+    networks:
+      - staccato-network
+
+  llm-server:
+    build:
+      context: ./llm-server
+      dockerfile: Dockerfile
+    container_name: staccato-llm
+    ports:
+      - "${LLM_PORT:-8000}:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
     networks:
       - staccato-network
 
