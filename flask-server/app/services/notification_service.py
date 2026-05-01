@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from sqlalchemy import or_
 
@@ -132,8 +132,20 @@ class NotificationService:
         db.session.add(delivery)
         db.session.commit()
 
+        notification_payload = notification.to_dict()
+
+        try:
+            from app.sockets.notification_socket import emit_notification_created
+
+            emit_notification_created(
+                notification=notification_payload,
+                user_id=user_id,
+            )
+        except Exception:
+            pass
+
         return {
-            "notification": notification.to_dict(),
+            "notification": notification_payload,
             "delivery": delivery.to_dict(),
         }
 
