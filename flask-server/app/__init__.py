@@ -1,4 +1,4 @@
-﻿from flask import Flask
+from flask import Flask
 
 from app.config import Config
 from app.extensions import init_extensions
@@ -10,6 +10,7 @@ from app.routes.incident_routes import incident_bp
 from app.routes.notification_routes import notification_bp
 from app.routes.report_routes import report_bp
 from app.routes.llm_report_routes import llm_report_bp
+from app.sockets import register_socket_events
 
 
 def create_app():
@@ -17,6 +18,7 @@ def create_app():
     app.config.from_object(Config)
 
     init_extensions(app)
+    register_socket_events()
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
