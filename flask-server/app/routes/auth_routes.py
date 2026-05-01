@@ -66,6 +66,54 @@ def me():
     )
 
 
+@auth_bp.patch("/me/password")
+@require_auth
+def change_my_password():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = AuthService.change_my_password(
+            user=request.current_user,
+            data=data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify(
+            {
+                "message": "Password changed.",
+                "user": result,
+            }
+        ), 200
+
+    except AuthError as error:
+        return jsonify({"message": error.message}), error.status_code
+
+
+@auth_bp.delete("/me")
+@require_auth
+def withdraw_my_account():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = AuthService.withdraw_my_account(
+            user=request.current_user,
+            data=data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify(
+            {
+                "message": "Account withdrawn.",
+                "user": result,
+            }
+        ), 200
+
+    except AuthError as error:
+        return jsonify({"message": error.message}), error.status_code
+
+
 @auth_bp.get("/users")
 @require_roles("SUPER_ADMIN", "AUTH_ADMIN")
 def list_users():
