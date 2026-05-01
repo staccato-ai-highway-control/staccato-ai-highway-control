@@ -39,6 +39,50 @@ def signup():
         return jsonify({"message": error.message}), error.status_code
 
 
+@auth_bp.post("/verify-email")
+def verify_email():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = AuthService.verify_email(
+            data=data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify(
+            {
+                "message": "Email verified.",
+                "data": result,
+            }
+        ), 200
+
+    except AuthError as error:
+        return jsonify({"message": error.message}), error.status_code
+
+
+@auth_bp.post("/verify-email/resend")
+def resend_email_verification():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = AuthService.resend_email_verification(
+            data=data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify(
+            {
+                "message": "Email verification resent.",
+                "data": result,
+            }
+        ), 200
+
+    except AuthError as error:
+        return jsonify({"message": error.message}), error.status_code
+
+
 @auth_bp.post("/login")
 def login():
     data = request.get_json(silent=True) or {}

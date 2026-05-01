@@ -1,9 +1,12 @@
-﻿from datetime import datetime
+﻿from datetime import datetime, timedelta
+import hashlib
+import os
+import secrets
 
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.models.auth_models import SecurityLog, SignupRequest, User
+from app.models.auth_models import EmailVerification, SecurityLog, SignupRequest, User
 from app.utils.security import create_access_token, hash_password, verify_password
 
 
@@ -38,6 +41,46 @@ class AuthService:
 
         db.session.add(log)
         return log
+
+    @staticmethod
+    def _hash_email_token(raw_token):
+        return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _get_frontend_base_url():
+        return os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+
+    @staticmethod
+    def _build_email_verification_link(raw_token):
+        return f"{AuthService._get_frontend_base_url()}/auth/verify-email?token={raw_token}"
+
+    @staticmethod
+    def _create_email_verification(user, now=None):
+        now = now or datetime.utcnow()
+
+        pending_verifications = EmailVerification.query.filter_by(
+            user_id=user.id,
+            verification_status="PENDING",
+        ).all()
+
+        for verification in pending_verifications:
+            verification.verification_status = "CANCELLED"
+
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = AuthService._hash_email_token(raw_token)
+
+        verification = EmailVerification(
+            user_id=user.id,
+            email=user.email,
+            verification_token=token_hash,
+            verification_status="PENDING",
+            expires_at=now + timedelta(hours=24),
+            created_at=now,
+        )
+
+        db.session.add(verification)
+
+        return raw_token, verification
 
     @staticmethod
     def signup(data, ip_address=None, user_agent=None):
@@ -87,6 +130,8 @@ class AuthService:
 
         db.session.add(signup_request)
 
+        raw_token, verification = AuthService._create_email_verification(user, now=now)
+
         AuthService.create_security_log(
             action_type="SIGNUP_REQUESTED",
             actor_user_id=user.id,
@@ -95,6 +140,16 @@ class AuthService:
             ip_address=ip_address,
             user_agent=user_agent,
             log_message="User signup requested.",
+        )
+
+        AuthService.create_security_log(
+            action_type="EMAIL_VERIFICATION_CREATED",
+            actor_user_id=user.id,
+            target_type="EMAIL_VERIFICATION",
+            target_id=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message="Email verification token created.",
         )
 
         try:
@@ -106,6 +161,120 @@ class AuthService:
         return {
             "user": user.to_public_dict(),
             "signup_request_id": signup_request.id,
+            "email_verification": {
+                "id": verification.id,
+                "email": verification.email,
+                "expires_at": verification.expires_at.isoformat(),
+                "verification_link": AuthService._build_email_verification_link(raw_token),
+                "note": "Development mode only. Replace with SMTP email delivery later.",
+            },
+        }
+
+    @staticmethod
+    def verify_email(data, ip_address=None, user_agent=None):
+        raw_token = (data.get("token") or "").strip()
+
+        if not raw_token:
+            raise AuthError("Verification token is required.", 400)
+
+        token_hash = AuthService._hash_email_token(raw_token)
+
+        verification = EmailVerification.query.filter_by(
+            verification_token=token_hash
+        ).first()
+
+        if not verification:
+            raise AuthError("Invalid verification token.", 404)
+
+        if verification.verification_status == "VERIFIED":
+            raise AuthError("Email is already verified.", 409)
+
+        if verification.verification_status in ["CANCELLED", "EXPIRED"]:
+            raise AuthError(
+                f"Verification token is not valid. Current status: {verification.verification_status}",
+                409,
+            )
+
+        now = datetime.utcnow()
+
+        if verification.expires_at < now:
+            verification.verification_status = "EXPIRED"
+            db.session.commit()
+            raise AuthError("Verification token has expired.", 410)
+
+        user = User.query.get(verification.user_id)
+
+        if not user:
+            raise AuthError("User not found.", 404)
+
+        if user.account_status == "DELETED":
+            raise AuthError("Account is withdrawn.", 403)
+
+        user.is_email_verified = True
+        user.updated_at = now
+
+        verification.verification_status = "VERIFIED"
+        verification.verified_at = now
+
+        AuthService.create_security_log(
+            action_type="EMAIL_VERIFIED",
+            actor_user_id=user.id,
+            target_type="USER",
+            target_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message=f"Email verified for user {user.email}.",
+        )
+
+        db.session.commit()
+
+        return {
+            "user": user.to_public_dict(),
+            "email_verification": verification.to_public_dict(),
+        }
+
+    @staticmethod
+    def resend_email_verification(data, ip_address=None, user_agent=None):
+        email = (data.get("email") or "").strip().lower()
+
+        if not email:
+            raise AuthError("Email is required.", 400)
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user:
+            raise AuthError("User not found.", 404)
+
+        if user.account_status == "DELETED":
+            raise AuthError("Account is withdrawn.", 403)
+
+        if user.is_email_verified:
+            raise AuthError("Email is already verified.", 409)
+
+        now = datetime.utcnow()
+        raw_token, verification = AuthService._create_email_verification(user, now=now)
+
+        AuthService.create_security_log(
+            action_type="EMAIL_VERIFICATION_RESENT",
+            actor_user_id=user.id,
+            target_type="EMAIL_VERIFICATION",
+            target_id=None,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message=f"Email verification token resent for user {user.email}.",
+        )
+
+        db.session.commit()
+
+        return {
+            "email": user.email,
+            "email_verification": {
+                "id": verification.id,
+                "email": verification.email,
+                "expires_at": verification.expires_at.isoformat(),
+                "verification_link": AuthService._build_email_verification_link(raw_token),
+                "note": "Development mode only. Replace with SMTP email delivery later.",
+            },
         }
 
     @staticmethod
@@ -136,6 +305,14 @@ class AuthService:
                 f"Account is not active. Current status: {user.account_status}",
                 403,
             )
+
+        email_verification_required = os.getenv(
+            "EMAIL_VERIFICATION_REQUIRED",
+            "false",
+        ).lower() == "true"
+
+        if email_verification_required and not user.is_email_verified:
+            raise AuthError("Email is not verified.", 403)
 
         user.last_login_at = datetime.utcnow()
 
@@ -299,7 +476,6 @@ class AuthService:
         signup_request.reviewed_at = now
 
         user.account_status = "ACTIVE"
-        user.is_email_verified = True
         user.approved_by = reviewer_user.id
         user.approved_at = now
         user.role = signup_request.requested_role
