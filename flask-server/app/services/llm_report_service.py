@@ -8,6 +8,14 @@ from app.models.incident_models import DetectionLog, Incident, IncidentMemo
 from app.models.report_models import LlmReport
 
 
+ALLOWED_REPORT_STATUSES = {
+    "DRAFT",
+    "GENERATED",
+    "FAILED",
+    "CONFIRMED",
+}
+
+
 def create_mock_llm_report(
     incident_id: int,
     user_id: int | None = None,
@@ -15,9 +23,6 @@ def create_mock_llm_report(
 ) -> LlmReport:
     """
     Incident 기반 LLM Report를 생성하고 llm_reports 테이블에 저장한다.
-
-    현재 단계에서는 LLM_PROVIDER 설정에 따라
-    MOCK / LLM_SERVER / OPENAI_PLACEHOLDER 중 하나로 보고서를 생성한다.
     """
     incident = db.session.get(Incident, incident_id)
 
@@ -81,40 +86,83 @@ def create_mock_llm_report(
     return report
 
 
-def get_reports_by_incident(incident_id: int):
+def get_reports_by_incident(incident_id: int) -> list[LlmReport]:
     """
-    TODO:
-    - 사건별 LLM Report 목록 조회 구현
-    - 후속 브랜치: feat/llm-report-query-status
+    incident_id 기준 LLM Report 목록을 조회한다.
     """
-    raise NotImplementedError
+    incident = db.session.get(Incident, incident_id)
+
+    if incident is None:
+        raise ValueError("INCIDENT_NOT_FOUND")
+
+    return LlmReport.query.filter_by(
+        incident_id=incident_id
+    ).order_by(LlmReport.created_at.desc()).all()
 
 
-def get_report_by_id(report_id: int):
+def get_report_by_id(report_id: int) -> LlmReport:
     """
-    TODO:
-    - LLM Report 단건 조회 구현
-    - 후속 브랜치: feat/llm-report-query-status
+    report_id 기준 LLM Report 단건을 조회한다.
     """
-    raise NotImplementedError
+    report = db.session.get(LlmReport, report_id)
+
+    if report is None:
+        raise ValueError("LLM_REPORT_NOT_FOUND")
+
+    return report
 
 
-def update_report_status(report_id: int, status: str):
+def update_report_status(report_id: int, status: str) -> LlmReport:
     """
-    TODO:
-    - LLM Report 상태 변경 구현
-    - 후속 브랜치: feat/llm-report-query-status
+    LLM Report 상태를 변경한다.
+
+    현재 DB ENUM 기준:
+    - DRAFT
+    - GENERATED
+    - FAILED
+    - CONFIRMED
     """
-    raise NotImplementedError
+    normalized_status = status.upper() if status else ""
+
+    if normalized_status not in ALLOWED_REPORT_STATUSES:
+        raise ValueError("INVALID_REPORT_STATUS")
+
+    report = db.session.get(LlmReport, report_id)
+
+    if report is None:
+        raise ValueError("LLM_REPORT_NOT_FOUND")
+
+    report.report_status = normalized_status
+    report.updated_at = datetime.utcnow()
+
+    db.session.commit()
+
+    return report
+
+
+def delete_report(report_id: int) -> None:
+    """
+    LLM Report를 삭제한다.
+
+    현재 llm_reports 테이블에는 DELETED 상태나 deleted_at 컬럼이 없으므로,
+    이번 MVP 단계에서는 실제 row 삭제 방식으로 처리한다.
+    """
+    report = db.session.get(LlmReport, report_id)
+
+    if report is None:
+        raise ValueError("LLM_REPORT_NOT_FOUND")
+
+    db.session.delete(report)
+    db.session.commit()
 
 
 def soft_delete_report(report_id: int):
     """
-    TODO:
-    - LLM Report 삭제성 처리 구현
-    - 후속 브랜치: feat/llm-report-query-status
+    기존 함수명 호환용 wrapper.
+
+    현재 스키마에서는 soft delete가 불가능하므로 delete_report를 호출한다.
     """
-    raise NotImplementedError
+    return delete_report(report_id)
 
 
 def _build_incident_payload(incident: Incident) -> dict[str, Any]:
