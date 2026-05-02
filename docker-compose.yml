@@ -1,4 +1,4 @@
-services:
+﻿services:
   frontend-server:
     build:
       context: ./frontend-server
@@ -81,7 +81,7 @@ services:
     container_name: staccato-db
     restart: unless-stopped
     ports:
-      - "${MYSQL_PORT:-3307}:3306"
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-staccato}
       MYSQL_USER: ${MYSQL_USER:-staccato_user}
