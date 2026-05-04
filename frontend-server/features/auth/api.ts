@@ -1,24 +1,34 @@
 import type {
   AuthResponse,
   LoginRequest,
+  SendEmailVerificationRequest,
   SignupApiRequest,
   SignupRequest,
+  VerifyEmailTokenRequest,
 } from "./types";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
+  process.env.NEXT_PUBLIC_API_PROXY_PATH ?? "/backend-api";
 
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error(
+      `API 서버에 연결할 수 없습니다. 서버 주소를 확인해주세요: ${API_BASE_URL}`
+    );
+  }
 
   const data = await response.json().catch(() => null);
 
@@ -63,12 +73,16 @@ export function getMe(accessToken: string) {
   });
 }
 
-// TODO: 백엔드 이메일 인증 API 구현 후 실제 endpoint 연결
-export async function sendEmailVerification() {
-  throw new Error("이메일 인증 API는 아직 구현 전입니다.");
+export function resendEmailVerification(payload: SendEmailVerificationRequest) {
+  return request<AuthResponse>("/auth/verify-email/resend", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
-// TODO: 백엔드 이메일 인증 API 구현 후 실제 endpoint 연결
-export async function verifyEmailCode() {
-  throw new Error("이메일 인증 API는 아직 구현 전입니다.");
+export function verifyEmailToken(payload: VerifyEmailTokenRequest) {
+  return request<AuthResponse>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

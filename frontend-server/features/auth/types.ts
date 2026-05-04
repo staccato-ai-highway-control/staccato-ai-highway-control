@@ -17,9 +17,27 @@ export type SignupApiRequest = {
   request_memo?: string;
 };
 
+export type SendEmailVerificationRequest = {
+  email: string;
+};
+
+export type VerifyEmailTokenRequest = {
+  token: string;
+};
+
 export type LoginRequest = {
   email: string;
   password: string;
+};
+
+export type AuthUser = {
+  id?: string | number;
+  email?: string;
+  name?: string;
+  role?: string;
+  phone?: string | null;
+  account_status?: string;
+  is_email_verified?: boolean;
 };
 
 export type AuthResponse = {
@@ -29,12 +47,17 @@ export type AuthResponse = {
     access_token?: string;
     accessToken?: string;
     token?: string;
-    user?: unknown;
+    user?: AuthUser;
+    email_verification?: {
+      verification_link?: string;
+      token?: string;
+      verification_token?: string;
+    };
   };
   access_token?: string;
   accessToken?: string;
   token?: string;
-  user?: unknown;
+  user?: AuthUser;
 };
 
 export type LoginResponse = AuthResponse;

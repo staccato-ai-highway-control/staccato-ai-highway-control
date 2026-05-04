@@ -5,6 +5,11 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login } from "@/features/auth/api";
 import type { AuthResponse } from "@/features/auth/types";
+import {
+  getUserFromAuthResponse,
+  setStoredAccessToken,
+  setStoredAuthUser,
+} from "@/lib/authStorage";
 
 function getAccessToken(response: AuthResponse) {
   return (
@@ -37,7 +42,8 @@ export default function LoginPage() {
         throw new Error("로그인 응답에서 access_token을 찾을 수 없습니다.");
       }
 
-      localStorage.setItem("accessToken", accessToken);
+      setStoredAccessToken(accessToken);
+      setStoredAuthUser(getUserFromAuthResponse(response));
       router.push("/dashboard");
     } catch (error) {
       setErrorMessage(
