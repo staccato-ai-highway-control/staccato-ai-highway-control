@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Map,
   MessageSquare,
+  Newspaper,
   ShieldCheck,
   SlidersHorizontal,
   Users,
@@ -53,6 +54,7 @@ const sections: SidebarSection[] = [
     items: [
       { href: "/admin/signup-requests", icon: Users, label: "사용자 승인 관리" },
       { href: "/admin/security-logs", icon: ShieldCheck, label: "보안 로그" },
+      { href: "/admin/board", icon: Newspaper, label: "관리자 게시판" },
       { href: "/llm-training-data", icon: Database, label: "LLM 학습데이터" },
       { href: "/settings", icon: SlidersHorizontal, label: "시스템 설정" },
     ],
