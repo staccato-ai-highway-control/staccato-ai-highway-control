@@ -6,6 +6,7 @@ import secrets
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
+from app.services.email_service import EmailService
 from app.models.auth_models import EmailVerification, SecurityLog, SignupRequest, User
 from app.utils.security import create_access_token, hash_password, verify_password
 
@@ -158,6 +159,12 @@ class AuthService:
             db.session.rollback()
             raise AuthError("Failed to create signup request.", 409)
 
+        verification_link = AuthService._build_email_verification_link(raw_token)
+        email_delivery = EmailService.send_verification_email(
+            user.email,
+            verification_link,
+        )
+
         return {
             "user": user.to_public_dict(),
             "signup_request_id": signup_request.id,
@@ -165,8 +172,13 @@ class AuthService:
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
-                "verification_link": AuthService._build_email_verification_link(raw_token),
-                "note": "Development mode only. Replace with SMTP email delivery later.",
+                "verification_link": verification_link,
+                "email_delivery": email_delivery,
+                "note": (
+                    "Email verification link sent via SMTP."
+                    if email_delivery.get("sent")
+                    else "Development mode only or SMTP delivery failed. Use verification_link for testing."
+                ),
             },
         }
 
@@ -266,14 +278,25 @@ class AuthService:
 
         db.session.commit()
 
+        verification_link = AuthService._build_email_verification_link(raw_token)
+        email_delivery = EmailService.send_verification_email(
+            user.email,
+            verification_link,
+        )
+
         return {
             "email": user.email,
             "email_verification": {
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
-                "verification_link": AuthService._build_email_verification_link(raw_token),
-                "note": "Development mode only. Replace with SMTP email delivery later.",
+                "verification_link": verification_link,
+                "email_delivery": email_delivery,
+                "note": (
+                    "Email verification link sent via SMTP."
+                    if email_delivery.get("sent")
+                    else "Development mode only or SMTP delivery failed. Use verification_link for testing."
+                ),
             },
         }
 
