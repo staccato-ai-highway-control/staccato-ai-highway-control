@@ -5,6 +5,17 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "@/features/auth/api";
 
+function getTokenFromVerificationLink(verificationLink?: string) {
+  if (!verificationLink) return "";
+
+  try {
+    const url = new URL(verificationLink, window.location.origin);
+    return url.searchParams.get("token") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export default function SignupPage() {
   const router = useRouter();
 
@@ -39,7 +50,7 @@ export default function SignupPage() {
     try {
       setIsSubmitting(true);
 
-      await signup({
+      const response = await signup({
         name,
         phone,
         email,
@@ -49,7 +60,19 @@ export default function SignupPage() {
         agreed,
       });
 
-      alert("회원가입 신청이 접수되었습니다. 관리자 승인 후 로그인이 가능합니다.");
+      const emailVerification = response.data?.email_verification;
+      const token =
+        emailVerification?.token ??
+        emailVerification?.verification_token ??
+        getTokenFromVerificationLink(emailVerification?.verification_link);
+
+      alert("회원가입 신청이 접수되었습니다. 이메일 인증을 진행해주세요.");
+
+      if (token) {
+        router.push(`/verify-email?token=${encodeURIComponent(token)}`);
+        return;
+      }
+
       router.push("/pending-approval");
     } catch (error) {
       alert(
@@ -116,26 +139,16 @@ export default function SignupPage() {
 
           <div>
             <label className="text-sm font-semibold text-slate-300">이메일</label>
-            <div className="mt-2 flex gap-2">
-              <input
-                type="email"
-                placeholder="staff@staccato.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-              />
-
-              <button
-                type="button"
-                disabled
-                className="shrink-0 cursor-not-allowed rounded-lg border border-slate-600 px-4 py-3 text-sm font-bold text-slate-500"
-              >
-                인증 준비중
-              </button>
-            </div>
+            <input
+              type="email"
+              placeholder="staff@staccato.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+            />
 
             <p className="mt-2 text-xs text-slate-400">
-              이메일 인증 기능은 백엔드 API 구현 후 연결 예정입니다.
+              회원가입 신청 후 발송되는 인증 링크로 이메일 인증을 완료해주세요.
             </p>
           </div>
 
@@ -149,7 +162,7 @@ export default function SignupPage() {
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition focus:border-sky-400"
             >
               <option value="CONTROL_ADMIN">관제관리자</option>
-              <option value="MAINTAINER">유지보수 담당자</option>
+              <option value="MAINTENANCE_ADMIN">유지보수 담당자</option>
             </select>
           </div>
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/common/Badge";
 const users = [
   { name: "김관리", email: "kim.control@its.go.kr", role: "SUPER_ADMIN", department: "교통관제센터", status: "활성" },
   { name: "이순찰", email: "lee.patrol@its.go.kr", role: "CONTROL_ADMIN", department: "1팀", status: "활성" },
-  { name: "박정비", email: "park.maint@its.go.kr", role: "MAINTAINER", department: "시설관리팀", status: "활성" },
+  { name: "박정비", email: "park.maint@its.go.kr", role: "MAINTENANCE_ADMIN", department: "시설관리팀", status: "활성" },
 ];
 
 export default function AdminUsersPage() {

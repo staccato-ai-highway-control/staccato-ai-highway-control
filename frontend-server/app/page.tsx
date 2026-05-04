@@ -3,7 +3,31 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LogOut, UserRound } from "lucide-react";
+import { getMe } from "@/features/auth/api";
+import type { AuthUser } from "@/features/auth/types";
 import { MVP_DESCRIPTION } from "@/lib/constants";
+import {
+  clearStoredAuth,
+  getStoredAccessToken,
+  getStoredAuthUser,
+  getUserFromAuthResponse,
+  setStoredAuthUser,
+} from "@/lib/authStorage";
+
+function getRoleLabel(role?: string) {
+  const roleLabels: Record<string, string> = {
+    SUPER_ADMIN: "최고관리자",
+    AUTH_ADMIN: "회원관리자",
+    CONTROL_ADMIN: "관제관리자",
+    DISPATCH_ADMIN: "출동관리자",
+    MAINTENANCE_ADMIN: "시설관리자",
+    MAINTAINER: "유지보수 담당자",
+    VIEWER: "조회 사용자",
+  };
+
+  return role ? roleLabels[role] ?? role : "사용자";
+}
 
 export default function Home() {
   const router = useRouter();
@@ -11,9 +35,57 @@ export default function Home() {
   const hasNavigated = useRef(false);
 
   const [progress, setProgress] = useState(0);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function syncAuthState() {
+      const accessToken = getStoredAccessToken();
+
+      if (!accessToken) {
+        if (isMounted) setIsAuthReady(true);
+        return;
+      }
+
+      setAuthUser(getStoredAuthUser());
+
+      try {
+        const response = await getMe(accessToken);
+        const user = getUserFromAuthResponse(response);
+        setStoredAuthUser(user);
+
+        if (isMounted) {
+          setAuthUser(user);
+          setIsAuthReady(true);
+        }
+      } catch {
+        clearStoredAuth();
+
+        if (isMounted) {
+          setAuthUser(null);
+          setIsAuthReady(true);
+        }
+      }
+    }
+
+    syncAuthState();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function handleLogout() {
+    clearStoredAuth();
+    setAuthUser(null);
+    hasNavigated.current = false;
+  }
 
   useEffect(() => {
     const handleScroll = () => {
+      if (!isAuthReady) return;
       if (!sectionRef.current) return;
 
       const rect = sectionRef.current.getBoundingClientRect();
@@ -29,7 +101,7 @@ export default function Home() {
         hasNavigated.current = true;
 
         setTimeout(() => {
-          router.push("/login");
+          router.push(authUser ? "/dashboard" : "/login");
         }, 900);
       }
     };
@@ -38,7 +110,7 @@ export default function Home() {
     handleScroll();
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [router]);
+  }, [authUser, isAuthReady, router]);
 
   const boxOpacity = progress > 0.28 ? 1 : 0;
   const scanOpacity = progress > 0.38 ? 1 : 0;
@@ -65,21 +137,63 @@ export default function Home() {
               />
             </Link>
 
-            <div className="flex gap-3">
-              <Link
-                href="/login"
-                className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
-              >
-                로그인
-              </Link>
+            {authUser ? (
+              <div className="flex items-center gap-3">
+                <div className="hidden min-w-0 items-center gap-3 rounded-lg border border-white/25 bg-slate-950/35 px-3 py-2 backdrop-blur md:flex">
+                  <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-400 text-sm font-black text-slate-950">
+                    {(authUser.name || authUser.email || "S").slice(0, 1).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <strong className="block max-w-40 truncate text-sm text-white">
+                      {authUser.name ?? authUser.email ?? "사용자"}
+                    </strong>
+                    <span className="block truncate text-xs font-semibold text-slate-300">
+                      {getRoleLabel(authUser.role)}
+                    </span>
+                  </div>
+                </div>
 
-              <Link
-                href="/signup"
-                className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
-              >
-                회원가입 신청
-              </Link>
-            </div>
+                <Link
+                  href="/dashboard"
+                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  대시보드
+                </Link>
+
+                <Link
+                  href="/mypage"
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  <UserRound className="h-4 w-4" aria-hidden="true" />
+                  마이페이지
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                  로그아웃
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <Link
+                  href="/login"
+                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  로그인
+                </Link>
+
+                <Link
+                  href="/signup"
+                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  회원가입 신청
+                </Link>
+              </div>
+            )}
           </header>
 
           <div className="relative z-10 flex min-h-[calc(100vh-88px)] items-center px-6 md:px-12 lg:px-20 xl:px-28">
@@ -162,7 +276,7 @@ export default function Home() {
             </div>
 
             <p className="mt-5 text-xs text-slate-400">
-              스크롤 완료 시 관제 로그인 화면으로 이동합니다.
+              스크롤 완료 시 {authUser ? "관제 대시보드" : "관제 로그인 화면"}으로 이동합니다.
             </p>
           </div>
 

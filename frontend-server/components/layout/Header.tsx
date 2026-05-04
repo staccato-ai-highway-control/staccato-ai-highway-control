@@ -1,12 +1,34 @@
 "use client";
 
 import { Bell, LogOut, Search } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { AuthUser } from "@/features/auth/types";
+import { clearStoredAuth, getStoredAuthUser } from "@/lib/authStorage";
+
+function getRoleLabel(role?: string) {
+  const roleLabels: Record<string, string> = {
+    SUPER_ADMIN: "최고관리자",
+    AUTH_ADMIN: "회원관리자",
+    CONTROL_ADMIN: "관제관리자",
+    DISPATCH_ADMIN: "출동관리자",
+    MAINTENANCE_ADMIN: "시설관리자",
+    MAINTAINER: "유지보수 담당자",
+    VIEWER: "조회 사용자",
+  };
+
+  return role ? roleLabels[role] ?? role : "사용자";
+}
+
+function getInitial(user: AuthUser | null) {
+  return (user?.name || user?.email || "S").slice(0, 1).toUpperCase();
+}
 
 export function Header({ title }: { title: string }) {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState("");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     function updateTime() {
@@ -28,9 +50,13 @@ export function Header({ title }: { title: string }) {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
   function handleLogout() {
-    localStorage.removeItem("accessToken");
-    router.push("/login");
+    clearStoredAuth();
+    router.replace("/login");
   }
 
   return (
@@ -55,18 +81,26 @@ export function Header({ title }: { title: string }) {
         <Bell className="h-4 w-4" aria-hidden="true" />
         <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-staccato" />
       </button>
-      <div className="hidden min-w-0 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 md:flex">
+      <Link
+        href="/mypage"
+        className="hidden min-w-0 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 no-underline transition hover:bg-slate-50 md:flex"
+      >
         <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-sm font-black text-white">
-          김
+          {getInitial(authUser)}
         </div>
         <div className="min-w-0">
-          <strong className="block truncate text-sm text-slate-950">김관제</strong>
-          <span className="block truncate text-xs font-semibold text-slate-500">최고관리자</span>
+          <strong className="block truncate text-sm text-slate-950">
+            {authUser?.name ?? authUser?.email ?? "사용자"}
+          </strong>
+          <span className="block truncate text-xs font-semibold text-slate-500">
+            {getRoleLabel(authUser?.role)}
+          </span>
         </div>
-      </div>
+      </Link>
       <button
         type="button"
         onClick={handleLogout}
+        aria-label="로그아웃"
         className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
       >
         <LogOut className="h-4 w-4" aria-hidden="true" />

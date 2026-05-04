@@ -4,6 +4,12 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getMe } from "@/features/auth/api";
+import {
+  clearStoredAuth,
+  getStoredAccessToken,
+  getUserFromAuthResponse,
+  setStoredAuthUser,
+} from "@/lib/authStorage";
 
 export function RequireAuth({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -13,7 +19,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     let isMounted = true;
 
     async function verifySession() {
-      const accessToken = localStorage.getItem("accessToken");
+      const accessToken = getStoredAccessToken();
 
       if (!accessToken) {
         router.replace("/login");
@@ -21,13 +27,14 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       }
 
       try {
-        await getMe(accessToken);
+        const response = await getMe(accessToken);
+        setStoredAuthUser(getUserFromAuthResponse(response));
 
         if (isMounted) {
           setIsCheckingAuth(false);
         }
       } catch {
-        localStorage.removeItem("accessToken");
+        clearStoredAuth();
         router.replace("/login");
       }
     }
