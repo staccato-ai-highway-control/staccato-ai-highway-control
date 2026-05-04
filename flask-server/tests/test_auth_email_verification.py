@@ -1,15 +1,15 @@
 ﻿import os
+import sys
 import uuid
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import requests
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+os.environ.setdefault("MAIL_ENABLED", "false")
+os.environ.setdefault("EMAIL_VERIFICATION_REQUIRED", "true")
 
-API_BASE_URL = os.getenv("TEST_API_BASE_URL", "http://localhost:5000").rstrip("/")
-
-
-def api_url(path: str) -> str:
-    return f"{API_BASE_URL}{path}"
+from app import create_app
 
 
 def unique_email() -> str:
@@ -23,7 +23,7 @@ def extract_token(verification_link: str) -> str:
     return token
 
 
-def signup_user(email: str) -> dict:
+def signup_user(client, email: str) -> dict:
     payload = {
         "email": email,
         "password": "Test12345!",
@@ -33,14 +33,10 @@ def signup_user(email: str) -> dict:
         "request_memo": "pytest email verification flow",
     }
 
-    response = requests.post(
-        api_url("/auth/signup"),
-        json=payload,
-        timeout=10,
-    )
+    response = client.post("/auth/signup", json=payload)
 
     assert response.status_code == 201
-    body = response.json()
+    body = response.get_json()
 
     assert body["message"] == "Signup request created."
     assert body["data"]["user"]["email"] == email
@@ -53,20 +49,25 @@ def signup_user(email: str) -> dict:
 
 
 def test_health_endpoint_returns_ok():
-    response = requests.get(api_url("/health"), timeout=10)
+    app = create_app()
+
+    with app.test_client() as client:
+        response = client.get("/health")
 
     assert response.status_code == 200
 
-    body = response.json()
+    body = response.get_json()
     assert body["environment"] == "development"
     assert body["service"] == "flask-server"
     assert body["status"] == "ok"
 
 
 def test_signup_creates_pending_user_and_verification_link():
+    app = create_app()
     email = unique_email()
 
-    data = signup_user(email)
+    with app.test_client() as client:
+        data = signup_user(client, email)
 
     verification = data["email_verification"]
     verification_link = verification["verification_link"]
@@ -77,23 +78,23 @@ def test_signup_creates_pending_user_and_verification_link():
 
 
 def test_verify_email_token_marks_user_as_verified():
+    app = create_app()
     email = unique_email()
-    signup_data = signup_user(email)
 
-    verification_link = signup_data["email_verification"]["verification_link"]
-    token = extract_token(verification_link)
+    with app.test_client() as client:
+        signup_data = signup_user(client, email)
 
-    response = requests.post(
-        api_url("/auth/verify-email"),
-        json={"token": token},
-        timeout=10,
-    )
+        verification_link = signup_data["email_verification"]["verification_link"]
+        token = extract_token(verification_link)
+
+        response = client.post("/auth/verify-email", json={"token": token})
 
     assert response.status_code == 200
 
-    body = response.json()
+    body = response.get_json()
     assert body["message"] == "Email verified."
 
     user = body["data"]["user"]
     assert user["email"] == email
     assert user["is_email_verified"] is True
+
