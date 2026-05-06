@@ -214,7 +214,7 @@ class AuthService:
             db.session.commit()
             raise AuthError("Verification token has expired.", 410)
 
-        user = User.query.get(verification.user_id)
+        user = db.session.get(User, verification.user_id)
 
         if not user:
             raise AuthError("User not found.", 404)
@@ -467,7 +467,7 @@ class AuthService:
         result = []
 
         for signup_request in signup_requests:
-            user = User.query.get(signup_request.user_id)
+            user = db.session.get(User, signup_request.user_id)
             result.append(signup_request.to_dict(user=user))
 
         return result
@@ -479,7 +479,7 @@ class AuthService:
         ip_address=None,
         user_agent=None,
     ):
-        signup_request = SignupRequest.query.get(signup_request_id)
+        signup_request = db.session.get(SignupRequest, signup_request_id)
 
         if not signup_request:
             raise AuthError("Signup request not found.", 404)
@@ -487,7 +487,7 @@ class AuthService:
         if signup_request.request_status != "REQUESTED":
             raise AuthError("Signup request is already reviewed.", 409)
 
-        user = User.query.get(signup_request.user_id)
+        user = db.session.get(User, signup_request.user_id)
 
         if not user:
             raise AuthError("Target user not found.", 404)
@@ -528,7 +528,7 @@ class AuthService:
         ip_address=None,
         user_agent=None,
     ):
-        signup_request = SignupRequest.query.get(signup_request_id)
+        signup_request = db.session.get(SignupRequest, signup_request_id)
 
         if not signup_request:
             raise AuthError("Signup request not found.", 404)
@@ -536,7 +536,7 @@ class AuthService:
         if signup_request.request_status != "REQUESTED":
             raise AuthError("Signup request is already reviewed.", 409)
 
-        user = User.query.get(signup_request.user_id)
+        user = db.session.get(User, signup_request.user_id)
 
         if not user:
             raise AuthError("Target user not found.", 404)
