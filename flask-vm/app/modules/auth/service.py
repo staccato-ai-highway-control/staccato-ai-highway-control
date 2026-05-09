@@ -1,6 +1,7 @@
 ﻿from datetime import datetime, timedelta
 import hashlib
 import os
+import re
 import secrets
 
 from sqlalchemy.exc import IntegrityError
@@ -75,7 +76,7 @@ class AuthService:
             email=user.email,
             verification_token=token_hash,
             verification_status="PENDING",
-            expires_at=now + timedelta(hours=24),
+            expires_at=now + timedelta(minutes=10),
             created_at=now,
         )
 
@@ -85,11 +86,28 @@ class AuthService:
 
     @staticmethod
     def signup(data, ip_address=None, user_agent=None):
+        login_id = (
+            data.get("login_id")
+            or data.get("loginId")
+            or ""
+        ).strip().lower()
         email = (data.get("email") or "").strip().lower()
         password = data.get("password") or ""
         name = (data.get("name") or "").strip()
         phone = (data.get("phone") or "").strip() or None
         requested_role = data.get("requested_role") or "VIEWER"
+
+        if not login_id:
+            raise AuthError("Login ID is required.", 400)
+
+        if not re.fullmatch(r"[a-z0-9_-]{4,20}", login_id):
+            raise AuthError(
+                "Login ID must be 4-20 characters and contain only lowercase letters, numbers, underscores, or hyphens.",
+                400,
+            )
+
+        if "@" in login_id:
+            raise AuthError("Login ID cannot be an email address.", 400)
 
         if not email:
             raise AuthError("Email is required.", 400)
@@ -100,6 +118,11 @@ class AuthService:
         if not name:
             raise AuthError("Name is required.", 400)
 
+        existing_login_id = User.query.filter_by(login_id=login_id).first()
+
+        if existing_login_id:
+            raise AuthError("Login ID already exists.", 409)
+
         existing_user = User.query.filter_by(email=email).first()
 
         if existing_user:
@@ -108,6 +131,7 @@ class AuthService:
         now = datetime.utcnow()
 
         user = User(
+            login_id=login_id,
             email=email,
             password_hash=hash_password(password),
             name=name,
@@ -172,12 +196,14 @@ class AuthService:
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
-                "verification_link": verification_link,
-                "email_delivery": email_delivery,
+                "email_delivery": {
+                    "sent": email_delivery.get("sent", False),
+                    "reason": email_delivery.get("reason"),
+                },
                 "note": (
                     "Email verification link sent via SMTP."
                     if email_delivery.get("sent")
-                    else "Development mode only or SMTP delivery failed. Use verification_link for testing."
+                    else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
             },
         }
@@ -290,25 +316,33 @@ class AuthService:
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
-                "verification_link": verification_link,
-                "email_delivery": email_delivery,
+                "email_delivery": {
+                    "sent": email_delivery.get("sent", False),
+                    "reason": email_delivery.get("reason"),
+                },
                 "note": (
                     "Email verification link sent via SMTP."
                     if email_delivery.get("sent")
-                    else "Development mode only or SMTP delivery failed. Use verification_link for testing."
+                    else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
             },
         }
 
     @staticmethod
     def login(data, ip_address=None, user_agent=None):
-        email = (data.get("email") or "").strip().lower()
+        login_id = (
+            data.get("login_id")
+            or data.get("loginId")
+            or data.get("identifier")
+            or data.get("email")
+            or ""
+        ).strip().lower()
         password = data.get("password") or ""
 
-        if not email or not password:
-            raise AuthError("Email and password are required.", 400)
+        if not login_id or not password:
+            raise AuthError("Login ID and password are required.", 400)
 
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(login_id=login_id).first()
 
         if not user or not verify_password(password, user.password_hash):
             AuthService.create_security_log(
@@ -318,10 +352,10 @@ class AuthService:
                 target_id=user.id if user else None,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                log_message="Invalid email or password.",
+                log_message="Invalid login ID or password.",
             )
             db.session.commit()
-            raise AuthError("Invalid email or password.", 401)
+            raise AuthError("아이디 또는 비밀번호가 올바르지 않습니다.", 401)
 
         if user.account_status != "ACTIVE":
             raise AuthError(
