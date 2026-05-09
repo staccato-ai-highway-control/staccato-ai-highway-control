@@ -5,6 +5,7 @@ class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    login_id = db.Column(db.String(50), nullable=False, unique=True, index=True)
     email = db.Column(db.String(255), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -21,6 +22,7 @@ class User(db.Model):
     def to_public_dict(self):
         return {
             "id": self.id,
+            "login_id": self.login_id,
             "email": self.email,
             "name": self.name,
             "phone": self.phone,

@@ -5,17 +5,6 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signup } from "@/features/auth/api";
 
-function getTokenFromVerificationLink(verificationLink?: string) {
-  if (!verificationLink) return "";
-
-  try {
-    const url = new URL(verificationLink, window.location.origin);
-    return url.searchParams.get("token") ?? "";
-  } catch {
-    return "";
-  }
-}
-
 export default function SignupPage() {
   const router = useRouter();
 
@@ -50,7 +39,7 @@ export default function SignupPage() {
     try {
       setIsSubmitting(true);
 
-      const response = await signup({
+      await signup({
         name,
         phone,
         email,
@@ -60,18 +49,7 @@ export default function SignupPage() {
         agreed,
       });
 
-      const emailVerification = response.data?.email_verification;
-      const token =
-        emailVerification?.token ??
-        emailVerification?.verification_token ??
-        getTokenFromVerificationLink(emailVerification?.verification_link);
-
-      alert("회원가입 신청이 접수되었습니다. 이메일 인증을 진행해주세요.");
-
-      if (token) {
-        router.push(`/verify-email?token=${encodeURIComponent(token)}`);
-        return;
-      }
+      alert("회원가입 신청이 접수되었습니다. 이메일을 확인한 뒤 인증을 완료해주세요.");
 
       router.push("/pending-approval");
     } catch (error) {
