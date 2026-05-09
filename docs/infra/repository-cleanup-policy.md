@@ -1,0 +1,65 @@
+# Repository Cleanup Policy
+
+## Current Runtime Standard
+
+The current project runtime is based on separated VMs.
+
+| Server | Runtime |
+|---|---|
+| DB-VM | MySQL direct install |
+| FLASK-VM | Python venv |
+| FRONTEND-VM | Node.js/npm |
+| AI-VM | Docker |
+| ITS-VM | Python/FastAPI |
+| LLM Server | AI-VM internal service |
+
+## Keep
+
+The following directories are part of the current project structure.
+
+- ai-server/
+- db-server/
+- flask-server/
+- frontend-server/
+- its-server/
+- llm-server/
+- docs/infra/
+
+## Do Not Commit
+
+The following files and directories are runtime/local-only files and must not be committed.
+
+- .env
+- .env.local
+- .venv/
+- node_modules/
+- __pycache__/
+- *.pyc
+- .next/
+- runtime files under storage/
+
+## Legacy / Review Required
+
+The following files may include previous local or Docker-based development assumptions.
+Do not delete them without team agreement.
+
+- root docker-compose.yml
+- root .dockerignore
+- flask-server/Dockerfile
+- flask-server/.dockerignore
+- old local development instructions
+- version files that conflict with actual VM runtime
+
+## Current Verified Connections
+
+- FRONTEND-VM -> FLASK-VM: success
+- FLASK-VM -> DB-VM: success
+- FLASK-VM -> AI-VM LLM 8000: success
+- FLASK-VM -> AI-VM AI 8001: currently not running or not exposed
+
+## Cleanup Direction
+
+1. Keep VM-based runtime documents under docs/infra.
+2. Mark old local/Docker instructions as legacy if still needed.
+3. Remove or move legacy files only after team agreement.
+4. Do not commit actual environment files or runtime-generated files.
