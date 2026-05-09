@@ -91,3 +91,10 @@ logs/
 Thumbs.db
 desktop.ini
 .codex
+
+# AI VM env
+ai-vm/.env
+ai-vm/**/.env
+
+# LLM model checkpoint
+ai-vm/llm-server/storage/models/llm/*.pt
