@@ -31,7 +31,7 @@
 
 ## Virtual Environment
 
-    cd ~/staccato-flask/flask-server
+    cd ~/staccato-flask/flask-vm
 
     python3 -m venv .venv
     source .venv/bin/activate

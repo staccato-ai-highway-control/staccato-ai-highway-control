@@ -246,7 +246,7 @@ JWT\_EXPIRES\_HOURS=12
 
 AI\_SERVER\_URL=http://ai-server:8001
 
-ITS\_SERVER\_URL=http://its-server:8002
+ITS\_SERVER\_URL=http://192.168.0.189:8002
 
 LLM\_SERVER\_URL=http://llm-server:8000
 

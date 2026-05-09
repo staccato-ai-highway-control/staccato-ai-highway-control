@@ -6,7 +6,7 @@
 
 
 
-STACCATO 프로젝트에서 LLM 모델이 무거워질 가능성이 있으므로, LLM 추론 기능을 `flask-server` 내부가 아닌 별도 `llm-server`로 분리하는 구조를 정의한다.
+STACCATO 프로젝트에서 LLM 모델이 무거워질 가능성이 있으므로, LLM 추론 기능을 `flask-vm` 내부가 아닌 별도 `llm-server`로 분리하는 구조를 정의한다.
 
 
 
@@ -94,11 +94,11 @@ frontend-server
 
 
 
-중요한 점은 `frontend-server`가 `llm-server`를 직접 호출하지 않는다는 것이다.
+중요한 점은 `frontend-vm`가 `llm-server`를 직접 호출하지 않는다는 것이다.
 
 
 
-프론트는 항상 `flask-server` API만 호출한다.
+프론트는 항상 `flask-vm` API만 호출한다.
 
 
 
@@ -288,9 +288,9 @@ POST /incidents/{incident\_id}/llm-reports
 
 
 
-\- `llm-server`를 추가하더라도 `its-server`는 당장 제거하지 않는다.
+\- `llm-server`를 추가하더라도 `its-vm`는 당장 제거하지 않는다.
 
-\- 추후 `its-server`가 단순 CCTV URL 중계 역할만 한다고 판단되면 `flask-server` 내부 client로 통합을 검토할 수 있다.
+\- 추후 `its-vm`가 단순 CCTV URL 중계 역할만 한다고 판단되면 `flask-vm` 내부 client로 통합을 검토할 수 있다.
 
 
 
@@ -306,13 +306,13 @@ POST /incidents/{incident\_id}/llm-reports
 
 \- `llm-server`는 DB에 직접 접근하지 않는다.
 
-\- DB 조회와 저장은 `flask-server`가 담당한다.
+\- DB 조회와 저장은 `flask-vm`가 담당한다.
 
 \- `llm-server`는 문장 생성만 담당한다.
 
 \- `ai-server`에는 LLM 기능을 넣지 않는다.
 
-\- `its-server`는 현재 유지한다.
+\- `its-vm`는 현재 유지한다.
 
 \- 모델 파일 `.pt`는 GitHub에 업로드하지 않는다.
 
@@ -478,7 +478,7 @@ POST /incidents/{incident\_id}/llm-reports
 
 
 
-`flask-server/app/clients/llm\_client.py`는 Provider 분기 구조를 가진다.
+`flask-vm/app/clients/llm\_client.py`는 Provider 분기 구조를 가진다.
 
 
 
@@ -638,7 +638,7 @@ tokenizer.json
 
 5\. `docker-compose.yml`에 `llm-server` 추가
 
-6\. `flask-server/app/clients/llm\_client.py`에서 `LLM\_PROVIDER=LLM\_SERVER` 분기 추가
+6\. `flask-vm/app/clients/llm\_client.py`에서 `LLM\_PROVIDER=LLM\_SERVER` 분기 추가
 
 7\. Flask → llm-server 호출 테스트
 
@@ -686,7 +686,7 @@ LLM 모델이 무거워질 가능성이 있으므로, LLM 추론은 별도 `llm-
 
 
 
-다만 STACCATO의 메인 API 진입점은 계속 `flask-server`로 유지한다.
+다만 STACCATO의 메인 API 진입점은 계속 `flask-vm`로 유지한다.
 
 
 

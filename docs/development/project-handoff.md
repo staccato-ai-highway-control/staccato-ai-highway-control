@@ -77,12 +77,12 @@ frontend-server
 
 |서버|역할|
 |-|-|
-|`frontend-server`|사용자/관리자 화면|
-|`flask-server`|메인 백엔드 API, 인증/권한, DB 조회/저장, 내부 서버 호출|
+|`frontend-vm`|사용자/관리자 화면|
+|`flask-vm`|메인 백엔드 API, 인증/권한, DB 조회/저장, 내부 서버 호출|
 |`ai-server`|YOLO/OpenCV 기반 영상 분석, 객체 탐지|
-|`its-server`|외부 고속도로 CCTV/교통/기상 API 연동|
+|`its-vm`|외부 고속도로 CCTV/교통/기상 API 연동|
 |`llm-server`|LLM 보고서 텍스트 생성|
-|`db-server`|MySQL 데이터 저장|
+|`db-vm`|MySQL 데이터 저장|
 
 핵심 원칙:
 
@@ -172,7 +172,7 @@ frontend-server
 
 ### Provider 전략
 
-`flask-server/app/clients/llm\\\_client.py`는 Provider 분기 구조를 갖습니다.
+`flask-vm/app/clients/llm\\\_client.py`는 Provider 분기 구조를 갖습니다.
 
 ```text
 LLM\\\_PROVIDER=MOCK
@@ -235,7 +235,7 @@ feat/frontend-integration
 
 ```text
 feat/frontend-integration에 최신 develop merge 완료
-develop 대비 변경사항이 frontend-server/ 내부에만 있는지 확인 완료
+develop 대비 변경사항이 frontend-vm/ 내부에만 있는지 확인 완료
 원격 브랜치 push 완료
 ```
 

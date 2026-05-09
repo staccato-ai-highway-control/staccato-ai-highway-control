@@ -27,7 +27,7 @@ Flask Server는 STACCATO의 메인 백엔드 서버다.
 기준 구조:
 
 ```text
-flask-server/
+flask-vm/
 ├── app/
 │   ├── __init__.py
 │   ├── config.py
@@ -208,7 +208,7 @@ AI Server 원칙:
 ## 9. ITS Server 구조
 
 ```text
-its-server/
+its-vm/
 ├── app/
 │   ├── main.py
 │   ├── config.py
@@ -242,7 +242,7 @@ ITS Server 원칙:
 ## 10. Frontend 구조
 
 ```text
-frontend-server/
+frontend-vm/
 ├── app/
 │   ├── layout.tsx
 │   ├── page.tsx

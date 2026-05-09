@@ -26,7 +26,7 @@ Docker 내부 기준:
 |---|---|
 | DB | db-server:3306 |
 | AI Server | http://192.168.0.186:8001 |
-| ITS Server | http://its-server:8002 |
+| ITS Server | http://192.168.0.189:8002 |
 
 ## 3. 응답 형식
 

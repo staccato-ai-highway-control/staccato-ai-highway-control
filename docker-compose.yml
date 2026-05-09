@@ -6,7 +6,7 @@
 ﻿services:
   frontend-server:
     build:
-      context: ./frontend-server
+      context: ./frontend-vm
       dockerfile: Dockerfile
     container_name: staccato-frontend
     ports:
@@ -20,7 +20,7 @@
 
   flask-server:
     build:
-      context: ./flask-server
+      context: ./flask-vm
       dockerfile: Dockerfile
     container_name: staccato-flask
     ports:
@@ -41,7 +41,7 @@
 
   its-server:
     build:
-      context: ./its-server
+      context: ./its-vm
       dockerfile: Dockerfile
     container_name: staccato-its
     ports:
@@ -83,7 +83,7 @@
       - --default-time-zone=+09:00
     volumes:
       - staccato_mysql_data:/var/lib/mysql
-      - ./db-server/init:/docker-entrypoint-initdb.d:ro
+      - ./db-vm/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
       interval: 10s
