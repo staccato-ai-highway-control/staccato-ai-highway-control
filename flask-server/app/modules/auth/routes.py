@@ -1,6 +1,6 @@
 ﻿from flask import Blueprint, jsonify, request
 
-from app.services.auth_service import AuthError, AuthService
+from app.modules.auth.service import AuthError, AuthService
 from app.utils.security import require_auth, require_roles
 
 

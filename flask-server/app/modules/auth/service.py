@@ -6,7 +6,7 @@ import secrets
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
-from app.services.email_service import EmailService
+from app.modules.auth.email_service import EmailService
 from app.models.auth_models import EmailVerification, SecurityLog, SignupRequest, User
 from app.utils.security import create_access_token, hash_password, verify_password
 
