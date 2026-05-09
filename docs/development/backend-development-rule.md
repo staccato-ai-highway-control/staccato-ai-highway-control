@@ -25,9 +25,9 @@ AI Server와 ITS Server는 DB에 직접 접근하지 않는다.
 CCTV 기능을 추가할 경우:
 
 ```text
-flask-server/app/models/cctv_models.py
-flask-server/app/routes/cctv_routes.py
-flask-server/app/services/cctv_service.py
+flask-vm/app/models/cctv_models.py
+flask-vm/app/routes/cctv_routes.py
+flask-vm/app/services/cctv_service.py
 ```
 
 ---

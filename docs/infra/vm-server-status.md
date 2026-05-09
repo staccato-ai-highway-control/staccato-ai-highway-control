@@ -16,7 +16,7 @@
 
 - MySQL 8.0.45 installed
 - `staccato` database created
-- DB schema imported from `db-server/init`
+- DB schema imported from `db-vm/init`
 - Table count verified: 25
 - Seed data verified: `CCTV-TEST-001`
 - Charset: `utf8mb4`

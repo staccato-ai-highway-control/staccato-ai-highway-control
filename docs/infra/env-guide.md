@@ -8,7 +8,7 @@ Actual .env files must not be committed.
 
 Location:
 
-    ~/staccato-flask/flask-server/.env
+    ~/staccato-flask/flask-vm/.env
 
 Example:
 

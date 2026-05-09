@@ -18,7 +18,7 @@ Frontend는 Flask Server만 호출한다.
 ## 2. 기준 구조
 
 ```text
-frontend-server/
+frontend-vm/
 ├── app/
 │   ├── layout.tsx
 │   ├── page.tsx
@@ -79,20 +79,20 @@ frontend-server/
 NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
 ```
 
-API 호출 코드는 가능하면 `frontend-server/lib/api.ts`에 모은다.
+API 호출 코드는 가능하면 `frontend-vm/lib/api.ts`에 모은다.
 
 ---
 
 ## 5. 작업 위치 규칙
 
-조원이 만든 프론트 코드는 반드시 `frontend-server/` 내부에 위치해야 한다.
+조원이 만든 프론트 코드는 반드시 `frontend-vm/` 내부에 위치해야 한다.
 
 정상:
 
 ```text
-frontend-server/app/
-frontend-server/components/
-frontend-server/package.json
+frontend-vm/app/
+frontend-vm/components/
+frontend-vm/package.json
 ```
 
 금지:
@@ -112,12 +112,12 @@ package.json
 아래 파일과 폴더는 Git에 올리지 않는다.
 
 ```text
-frontend-server/node_modules/
-frontend-server/.next/
-frontend-server/dist/
-frontend-server/build/
-frontend-server/.env
-frontend-server/.env.local
+frontend-vm/node_modules/
+frontend-vm/.next/
+frontend-vm/dist/
+frontend-vm/build/
+frontend-vm/.env
+frontend-vm/.env.local
 ```
 
 ---

@@ -25,10 +25,10 @@ Docker is officially used only inside AI-VM.
 
 The following directories are part of the current project structure.
 
-- db-server/
-- flask-server/
-- frontend-server/
-- its-server/
+- db-vm/
+- flask-vm/
+- frontend-vm/
+- its-vm/
 - ai-vm/
 - docs/infra/
 
@@ -52,8 +52,8 @@ Do not delete them without team agreement.
 
 - root docker-compose.yml
 - root .dockerignore
-- flask-server/Dockerfile
-- flask-server/.dockerignore
+- flask-vm/Dockerfile
+- flask-vm/.dockerignore
 - old local development instructions
 - version files that conflict with actual VM runtime
 

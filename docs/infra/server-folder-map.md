@@ -11,10 +11,10 @@ The repository contains multiple server folders, but each VM should only check o
 | VM | IP | Repository Folders | Runtime |
 |---|---:|---|---|
 | AI-VM | 192.168.0.186 | ai-vm, docs | Docker |
-| FLASK-VM | 192.168.0.187 | flask-server, docs | Python venv |
-| FRONTEND-VM | 192.168.0.188 | frontend-server, docs | Node.js/npm |
-| ITS-VM | 192.168.0.189 | its-server, docs | Python/FastAPI |
-| DB-VM | 192.168.0.190 | db-server, docs | MySQL direct install |
+| FLASK-VM | 192.168.0.187 | flask-vm, docs | Python venv |
+| FRONTEND-VM | 192.168.0.188 | frontend-vm, docs | Node.js/npm |
+| ITS-VM | 192.168.0.189 | its-vm, docs | Python/FastAPI |
+| DB-VM | 192.168.0.190 | db-vm, docs | MySQL direct install |
 
 ## Important Rule
 
@@ -51,7 +51,7 @@ There are 5 VMs, and each VM has one primary runtime folder.
 ### DB-VM
 
 - Owns MySQL database runtime
-- Applies SQL files from db-server/init
+- Applies SQL files from db-vm/init
 - Allows MySQL port only from FLASK-VM
 
 ### FLASK-VM

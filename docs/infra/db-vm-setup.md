@@ -14,11 +14,11 @@
 
 The following SQL files were applied in order.
 
-1. db-server/init/01_schema.sql
-2. db-server/init/02_seed.sql
-3. db-server/init/03_indexes.sql
-4. db-server/init/04_mvp_extension.sql
-5. db-server/init/05_mvp_extension_indexes.sql
+1. db-vm/init/01_schema.sql
+2. db-vm/init/02_seed.sql
+3. db-vm/init/03_indexes.sql
+4. db-vm/init/04_mvp_extension.sql
+5. db-vm/init/05_mvp_extension_indexes.sql
 
 ## Verification Result
 
