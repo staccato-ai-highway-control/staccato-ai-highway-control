@@ -10,7 +10,7 @@ The repository contains multiple server folders, but each VM should only check o
 
 | VM | IP | Repository Folders | Runtime |
 |---|---:|---|---|
-| AI-VM | 192.168.0.186 | ai-server, ai-vm, docs | Docker |
+| AI-VM | 192.168.0.186 | ai-vm, docs | Docker |
 | FLASK-VM | 192.168.0.187 | flask-server, docs | Python venv |
 | FRONTEND-VM | 192.168.0.188 | frontend-server, docs | Node.js/npm |
 | ITS-VM | 192.168.0.189 | its-server, docs | Python/FastAPI |
@@ -18,17 +18,17 @@ The repository contains multiple server folders, but each VM should only check o
 
 ## Important Rule
 
-There are 5 VMs, but 6 server folders.
+There are 5 VMs, and each VM has one primary runtime folder.
 
-`ai-vm/llm-server` does not have a separate VM.
+`ai-vm/llm-server` is not a root-level server folder and does not have a separate VM.
 
-`ai-vm/llm-server` runs inside AI-VM together with `ai-server`.
+`ai-vm/llm-server` runs inside AI-VM.
 
 ## Recommended Sparse Checkout
 
 ### AI-VM
 
-    git sparse-checkout set ai-server ai-vm docs
+    git sparse-checkout set ai-vm docs
 
 ### FLASK-VM
 
@@ -68,7 +68,7 @@ There are 5 VMs, but 6 server folders.
 
 ### AI-VM
 
-- Owns AI detection server
+- Owns AI-VM Docker runtime
 - Owns LLM mock/report server
 - Uses Docker runtime
 
