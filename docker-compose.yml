@@ -69,7 +69,7 @@
 
   llm-server:
     build:
-      context: ./llm-server
+      context: ./ai-vm/llm-server
       dockerfile: Dockerfile
     container_name: staccato-llm
     ports:
