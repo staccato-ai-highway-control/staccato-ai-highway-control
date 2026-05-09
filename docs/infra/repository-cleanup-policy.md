@@ -63,3 +63,9 @@ Do not delete them without team agreement.
 2. Mark old local/Docker instructions as legacy if still needed.
 3. Remove or move legacy files only after team agreement.
 4. Do not commit actual environment files or runtime-generated files.
+
+## Related Documents
+
+- docs/infra/server-folder-map.md
+- docs/infra/vm-server-status.md
+- docs/infra/env-guide.md
