@@ -1,3 +1,8 @@
+# Legacy Notice:
+# This root docker-compose.yml is kept for previous local integration development reference.
+# Current official Docker runtime is limited to AI-VM only.
+# DB-VM, FLASK-VM, FRONTEND-VM, and ITS-VM do not use Docker in the current VM runtime.
+# See docs/infra/server-folder-map.md and docs/infra/repository-cleanup-policy.md.
 ﻿services:
   frontend-server:
     build:

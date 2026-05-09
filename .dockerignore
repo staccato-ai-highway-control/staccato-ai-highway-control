@@ -1,3 +1,6 @@
+# Legacy Notice:
+# This root .dockerignore is kept for previous local/Docker development reference.
+# Current official Docker runtime is limited to AI-VM only.
 .git
 .gitignore
 .github
