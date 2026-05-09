@@ -17,14 +17,14 @@ The current project runtime is based on separated VMs.
 
 Docker is officially used only inside AI-VM.
 
-- AI-VM uses Docker for `ai-server` and `ai-vm/llm-server`.
+- AI-VM uses Docker for services under `ai-vm/`, including `ai-vm/llm-server`.
 - DB-VM, FLASK-VM, FRONTEND-VM, and ITS-VM do not use Docker in the current VM runtime.
 - Non-AI Docker files are kept only for legacy/local development reference unless the team agrees to remove them.
+
 ## Keep
 
 The following directories are part of the current project structure.
 
-- ai-server/
 - db-server/
 - flask-server/
 - frontend-server/

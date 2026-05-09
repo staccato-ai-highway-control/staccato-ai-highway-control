@@ -25,7 +25,7 @@ Docker 내부 기준:
 | 대상 | URL |
 |---|---|
 | DB | db-server:3306 |
-| AI Server | http://ai-server:8001 |
+| AI Server | http://192.168.0.186:8001 |
 | ITS Server | http://its-server:8002 |
 
 ## 3. 응답 형식

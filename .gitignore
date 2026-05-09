@@ -62,8 +62,6 @@ storage/training-logs/*
 !storage/training-logs/.gitkeep
 
 # AI model weights
-ai-server/weights/*
-!ai-server/weights/.gitkeep
 *.pt
 *.pth
 *.onnx
