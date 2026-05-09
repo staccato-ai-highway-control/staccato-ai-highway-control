@@ -2,7 +2,7 @@ from flask import Flask
 
 from app.config import Config
 from app.extensions import init_extensions
-from app.routes.auth_routes import auth_bp
+from app.modules.auth.routes import auth_bp
 from app.routes.health_routes import health_bp
 
 
