@@ -1,3 +1,6 @@
+# Legacy Notice:
+# FLASK-VM currently runs with Python venv, not Docker.
+# This .dockerignore is kept for legacy/local development reference only.
 __pycache__
 *.pyc
 .venv
