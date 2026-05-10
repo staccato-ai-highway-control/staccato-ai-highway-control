@@ -1,14 +1,18 @@
 ﻿from datetime import datetime, timedelta
 import hashlib
+import json
 import os
 import re
 import secrets
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.modules.auth.email_service import EmailService
-from app.models.auth_models import EmailVerification, SecurityLog, SignupRequest, User
+from app.models.auth_models import EmailVerification, IdentityOAuthState, SecurityLog, SignupRequest, User
 from app.utils.security import create_access_token, hash_password, verify_password
 
 
@@ -47,6 +51,87 @@ class AuthService:
     @staticmethod
     def _hash_email_token(raw_token):
         return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _hash_oauth_state(raw_state):
+        return hashlib.sha256(raw_state.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _build_identity_result_redirect(provider, status, message=None):
+        base_url = AuthService._get_frontend_base_url()
+        query = {
+            "identity": provider,
+            "status": status,
+        }
+
+        if message:
+            query["message"] = message
+
+        return f"{base_url}/pending-approval?{urllib.parse.urlencode(query)}"
+
+    @staticmethod
+    def _get_google_oauth_config():
+        enabled = os.getenv("GOOGLE_IDENTITY_ENABLED", "false").lower() == "true"
+        client_id = os.getenv("GOOGLE_CLIENT_ID")
+        client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+        redirect_uri = os.getenv("GOOGLE_REDIRECT_URI")
+
+        if not enabled:
+            raise AuthError("Google identity verification is disabled.", 503)
+
+        if not client_id or not client_secret or not redirect_uri:
+            raise AuthError("Google OAuth is not configured.", 500)
+
+        return {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+        }
+
+    @staticmethod
+    def _exchange_google_code_for_token(code):
+        config = AuthService._get_google_oauth_config()
+
+        payload = urllib.parse.urlencode({
+            "code": code,
+            "client_id": config["client_id"],
+            "client_secret": config["client_secret"],
+            "redirect_uri": config["redirect_uri"],
+            "grant_type": "authorization_code",
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://oauth2.googleapis.com/token",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return json.loads(res.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise AuthError(f"Google token exchange failed: {detail}", 502)
+        except Exception as error:
+            raise AuthError(f"Google token exchange failed: {error}", 502)
+
+    @staticmethod
+    def _fetch_google_userinfo(access_token):
+        req = urllib.request.Request(
+            "https://openidconnect.googleapis.com/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            method="GET",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                return json.loads(res.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            raise AuthError(f"Google userinfo request failed: {detail}", 502)
+        except Exception as error:
+            raise AuthError(f"Google userinfo request failed: {error}", 502)
 
     @staticmethod
     def _get_frontend_base_url():
@@ -249,6 +334,9 @@ class AuthService:
             raise AuthError("Account is withdrawn.", 403)
 
         user.is_email_verified = True
+        user.identity_provider = "EMAIL"
+        user.identity_provider_user_id = None
+        user.identity_verified_at = now
         user.updated_at = now
 
         verification.verification_status = "VERIFIED"
@@ -326,6 +414,180 @@ class AuthService:
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
             },
+        }
+
+    @staticmethod
+    def start_google_identity_verification(data, ip_address=None, user_agent=None):
+        config = AuthService._get_google_oauth_config()
+
+        email = (data.get("email") or "").strip().lower()
+
+        if not email:
+            raise AuthError("Email is required.", 400)
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user:
+            raise AuthError("User not found. Please sign up first.", 404)
+
+        if user.account_status == "DELETED":
+            raise AuthError("Account is withdrawn.", 403)
+
+        if user.is_email_verified:
+            raise AuthError("Identity is already verified.", 409)
+
+        now = datetime.utcnow()
+
+        pending_states = IdentityOAuthState.query.filter_by(
+            provider="GOOGLE",
+            target_email=email,
+            status="PENDING",
+        ).all()
+
+        for pending_state in pending_states:
+            if pending_state.expires_at < now:
+                pending_state.status = "EXPIRED"
+            else:
+                pending_state.status = "CANCELLED"
+
+        expires_minutes = int(os.getenv("GOOGLE_OAUTH_STATE_EXPIRES_MINUTES", "10"))
+
+        raw_state = secrets.token_urlsafe(32)
+        state_hash = AuthService._hash_oauth_state(raw_state)
+
+        oauth_state = IdentityOAuthState(
+            provider="GOOGLE",
+            target_email=email,
+            state_hash=state_hash,
+            status="PENDING",
+            expires_at=now + timedelta(minutes=expires_minutes),
+            created_at=now,
+        )
+
+        db.session.add(oauth_state)
+
+        AuthService.create_security_log(
+            action_type="GOOGLE_IDENTITY_STARTED",
+            actor_user_id=user.id,
+            target_type="USER",
+            target_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message=f"Google identity verification started for user {user.email}.",
+        )
+
+        db.session.commit()
+
+        query = urllib.parse.urlencode({
+            "client_id": config["client_id"],
+            "redirect_uri": config["redirect_uri"],
+            "response_type": "code",
+            "scope": "openid email profile",
+            "state": raw_state,
+            "include_granted_scopes": "true",
+        })
+
+        authorization_url = f"https://accounts.google.com/o/oauth2/v2/auth?{query}"
+
+        return {
+            "provider": "GOOGLE",
+            "email": email,
+            "authorization_url": authorization_url,
+            "expires_at": oauth_state.expires_at.isoformat(),
+        }
+
+    @staticmethod
+    def complete_google_identity_verification(args, ip_address=None, user_agent=None):
+        code = (args.get("code") or "").strip()
+        raw_state = (args.get("state") or "").strip()
+
+        if not code:
+            raise AuthError("Google authorization code is required.", 400)
+
+        if not raw_state:
+            raise AuthError("OAuth state is required.", 400)
+
+        state_hash = AuthService._hash_oauth_state(raw_state)
+
+        oauth_state = IdentityOAuthState.query.filter_by(
+            provider="GOOGLE",
+            state_hash=state_hash,
+        ).first()
+
+        if not oauth_state:
+            raise AuthError("Invalid OAuth state.", 404)
+
+        now = datetime.utcnow()
+
+        if oauth_state.status != "PENDING":
+            raise AuthError(f"OAuth state is not valid. Current status: {oauth_state.status}", 409)
+
+        if oauth_state.expires_at < now:
+            oauth_state.status = "EXPIRED"
+            db.session.commit()
+            raise AuthError("OAuth state has expired.", 410)
+
+        user = User.query.filter_by(email=oauth_state.target_email).first()
+
+        if not user:
+            raise AuthError("User not found.", 404)
+
+        if user.account_status == "DELETED":
+            raise AuthError("Account is withdrawn.", 403)
+
+        token_response = AuthService._exchange_google_code_for_token(code)
+        access_token = token_response.get("access_token")
+
+        if not access_token:
+            raise AuthError("Google access token was not returned.", 502)
+
+        google_user = AuthService._fetch_google_userinfo(access_token)
+
+        google_sub = (google_user.get("sub") or "").strip()
+        google_email = (google_user.get("email") or "").strip().lower()
+        email_verified_raw = google_user.get("email_verified")
+
+        email_verified = str(email_verified_raw).lower() in ["true", "1"]
+
+        if not google_sub:
+            raise AuthError("Google account identifier was not returned.", 502)
+
+        if not google_email:
+            raise AuthError("Google email was not returned.", 502)
+
+        if not email_verified:
+            raise AuthError("Google email is not verified.", 403)
+
+        if google_email != user.email.lower():
+            raise AuthError("Google email does not match signup email.", 409)
+
+        user.is_email_verified = True
+        user.identity_provider = "GOOGLE"
+        user.identity_provider_user_id = google_sub
+        user.identity_verified_at = now
+        user.updated_at = now
+
+        oauth_state.status = "USED"
+        oauth_state.used_at = now
+
+        AuthService.create_security_log(
+            action_type="GOOGLE_IDENTITY_VERIFIED",
+            actor_user_id=user.id,
+            target_type="USER",
+            target_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            log_message=f"Google identity verified for user {user.email}.",
+        )
+
+        db.session.commit()
+
+        return {
+            "user": user.to_public_dict(),
+            "redirect_url": AuthService._build_identity_result_redirect(
+                provider="google",
+                status="verified",
+            ),
         }
 
     @staticmethod

@@ -225,3 +225,44 @@ def reject_signup_request(signup_request_id):
 
     except AuthError as error:
         return jsonify({"message": error.message}), error.status_code
+
+@auth_bp.post("/identity/google/start")
+def start_google_identity_verification():
+    try:
+        result = AuthService.start_google_identity_verification(
+            request.get_json(silent=True) or {},
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify({
+            "message": "Google identity verification started.",
+            "data": result,
+        }), 200
+
+    except AuthError as error:
+        return jsonify({
+            "message": error.message,
+        }), error.status_code
+
+
+@auth_bp.get("/identity/google/callback")
+def complete_google_identity_verification():
+    from flask import redirect
+
+    try:
+        result = AuthService.complete_google_identity_verification(
+            request.args,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return redirect(result["redirect_url"])
+
+    except AuthError as error:
+        redirect_url = AuthService._build_identity_result_redirect(
+            provider="google",
+            status="failed",
+            message=error.message,
+        )
+        return redirect(redirect_url)

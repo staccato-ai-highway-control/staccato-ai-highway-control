@@ -13,6 +13,9 @@ class User(db.Model):
     role = db.Column(db.String(50), nullable=False, default="VIEWER")
     account_status = db.Column(db.String(50), nullable=False, default="PENDING")
     is_email_verified = db.Column(db.Boolean, nullable=False, default=False)
+    identity_provider = db.Column(db.String(30), nullable=True)
+    identity_provider_user_id = db.Column(db.String(255), nullable=True)
+    identity_verified_at = db.Column(db.DateTime, nullable=True)
     approved_by = db.Column(db.BigInteger, nullable=True)
     approved_at = db.Column(db.DateTime, nullable=True)
     last_login_at = db.Column(db.DateTime, nullable=True)
@@ -29,6 +32,9 @@ class User(db.Model):
             "role": self.role,
             "account_status": self.account_status,
             "is_email_verified": bool(self.is_email_verified),
+            "identity_provider": self.identity_provider,
+            "identity_provider_user_id": self.identity_provider_user_id,
+            "identity_verified_at": self.identity_verified_at.isoformat() if self.identity_verified_at else None,
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
@@ -86,6 +92,30 @@ class EmailVerification(db.Model):
             "verification_status": self.verification_status,
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "verified_at": self.verified_at.isoformat() if self.verified_at else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class IdentityOAuthState(db.Model):
+    __tablename__ = "identity_oauth_states"
+
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    provider = db.Column(db.String(30), nullable=False)
+    target_email = db.Column(db.String(255), nullable=False)
+    state_hash = db.Column(db.String(255), nullable=False, unique=True)
+    status = db.Column(db.String(50), nullable=False, default="PENDING")
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "provider": self.provider,
+            "target_email": self.target_email,
+            "status": self.status,
+            "expires_at": self.expires_at.isoformat() if self.expires_at else None,
+            "used_at": self.used_at.isoformat() if self.used_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
