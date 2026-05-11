@@ -1,4 +1,4 @@
-﻿import os
+import os
 import smtplib
 from email.message import EmailMessage
 
@@ -9,7 +9,7 @@ class EmailService:
         return os.getenv("MAIL_ENABLED", "false").lower() == "true"
 
     @staticmethod
-    def send_verification_email(to_email, verification_link):
+    def send_verification_email(to_email, verification_code):
         if not EmailService.is_enabled():
             return {
                 "sent": False,
@@ -37,18 +37,18 @@ class EmailService:
             }
 
         message = EmailMessage()
-        message["Subject"] = "[STACCATO] 이메일 인증 안내"
+        message["Subject"] = "[STACCATO] 이메일 인증번호 안내"
         message["From"] = mail_from
         message["To"] = to_email
 
         message.set_content(
             f"""STACCATO 이메일 인증 안내입니다.
 
-아래 링크를 클릭하여 이메일 인증을 완료해 주세요.
+아래 6자리 인증번호를 입력하여 이메일 인증을 완료해 주세요.
 
-{verification_link}
+인증번호: {verification_code}
 
-이 링크는 일정 시간이 지나면 만료될 수 있습니다.
+이 인증번호는 10분 후 만료됩니다.
 본인이 요청하지 않았다면 이 메일을 무시해 주세요.
 """
         )
