@@ -281,7 +281,7 @@ class AuthService:
                     "reason": email_delivery.get("reason"),
                 },
                 "note": (
-                    "Email verification link sent via SMTP."
+                    "Email verification code sent via SMTP."
                     if email_delivery.get("sent")
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
@@ -418,7 +418,7 @@ class AuthService:
                     "reason": email_delivery.get("reason"),
                 },
                 "note": (
-                    "Email verification link sent via SMTP."
+                    "Email verification code sent via SMTP."
                     if email_delivery.get("sent")
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
