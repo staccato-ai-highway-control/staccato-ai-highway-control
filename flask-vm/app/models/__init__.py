@@ -22,6 +22,32 @@ from app.models.llm_models import (
     LlmReport,
 )
 
+from app.models.board_models import (
+    BoardAttachment,
+    BoardComment,
+    BoardPost,
+)
+
+from app.models.its_models import (
+    ExternalApiLog,
+    ItsRiskScore,
+    ItsTrafficSnapshot,
+    ItsWeatherSnapshot,
+)
+
+from app.models.notification_models import (
+    Notification,
+    NotificationDelivery,
+)
+
+from app.models.chat_models import (
+    ChatMessage,
+    ChatMessageRead,
+    ChatRoom,
+    ChatbotConversation,
+    ChatbotMessage,
+)
+
 __all__ = [
     "User",
     "SignupRequest",
@@ -35,4 +61,18 @@ __all__ = [
     "DetectionLog",
     "IncidentSnapshot",
     "LlmReport",
+    "BoardPost",
+    "BoardComment",
+    "BoardAttachment",
+    "ItsWeatherSnapshot",
+    "ItsTrafficSnapshot",
+    "ItsRiskScore",
+    "ExternalApiLog",
+    "Notification",
+    "NotificationDelivery",
+    "ChatRoom",
+    "ChatMessage",
+    "ChatMessageRead",
+    "ChatbotConversation",
+    "ChatbotMessage",
 ]
