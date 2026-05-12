@@ -1,99 +1,88 @@
-# Server Folder Map
+# STACCATO Server Folder Map
 
-## Overview
+## 현재 저장소 구조
 
-This project uses a single Git repository with separated VM runtime servers.
+STACCATO는 하나의 GitHub 저장소 안에서 VM별 폴더를 분리해 관리합니다.
 
-The repository contains multiple server folders, but each VM should only check out and run the folders required for its role.
+저장소 기준 구조:
 
-## VM and Folder Mapping
+    staccato-ai-highway-control/
+    ├── ai-vm/
+    ├── db-vm/
+    ├── flask-vm/
+    ├── frontend-vm/
+    ├── its-vm/
+    ├── docs/
+    ├── storage/
+    ├── README.md
+    └── LICENSE
 
-| VM | IP | Repository Folders | Runtime |
-|---|---:|---|---|
-| AI-VM | 192.168.0.186 | ai-vm, docs | Docker |
-| FLASK-VM | 192.168.0.187 | flask-vm, docs | Python venv |
-| FRONTEND-VM | 192.168.0.188 | frontend-vm, docs | Node.js/npm |
-| ITS-VM | 192.168.0.189 | its-vm, docs | Python/FastAPI |
-| DB-VM | 192.168.0.190 | db-vm, docs | MySQL direct install |
+## VM별 담당 폴더
 
-## Important Rule
+| VM | IP | 담당 폴더 | Runtime |
+|---|---|---|---|
+| AI-VM | 192.168.0.186 | `ai-vm/` | Docker |
+| FLASK-VM | 192.168.0.187 | `flask-vm/` | Python venv |
+| FRONTEND-VM | 192.168.0.188 | `frontend-vm/` | Node.js/npm |
+| ITS-VM | 192.168.0.189 | `its-vm/` | Python/FastAPI |
+| DB-VM | 192.168.0.190 | `db-vm/` | MySQL direct install |
 
-There are 5 VMs, and each VM has one primary runtime folder.
+## Docker 사용 정책
 
-`ai-vm/llm-server` is not a root-level server folder and does not have a separate VM.
+Docker는 `AI-VM`에서만 사용합니다.
 
-`ai-vm/llm-server` runs inside AI-VM.
+유지되는 Docker 파일:
 
-## Recommended Sparse Checkout
+| 경로 | 목적 |
+|---|---|
+| `ai-vm/docker-compose.yml` | AI-VM Docker Compose 실행 |
+| `ai-vm/llm-server/Dockerfile` | LLM 서버 Docker 이미지 빌드 |
 
-### AI-VM
+삭제된 Docker 파일:
 
-    git sparse-checkout set ai-vm docs
+| 경로 | 사유 |
+|---|---|
+| `docker-compose.yml` | 루트 통합 Docker Compose 미사용 |
+| `.dockerignore` | 루트 Docker 빌드 미사용 |
+| `flask-vm/Dockerfile` | FLASK-VM은 Python venv 기준 |
+| `flask-vm/.dockerignore` | FLASK-VM Docker 빌드 미사용 |
+| `frontend-vm/Dockerfile` | FRONTEND-VM은 Node.js/npm 기준 |
+| `frontend-vm/.dockerignore` | FRONTEND-VM Docker 빌드 미사용 |
+| `its-vm/Dockerfile` | ITS-VM은 Python/FastAPI 기준 |
+| `its-vm/.dockerignore` | ITS-VM Docker 빌드 미사용 |
 
-### FLASK-VM
+## 권장 작업 위치
 
-    git sparse-checkout set flask-server docs .python-version
+| 작업 | 권장 위치 |
+|---|---|
+| Flask API 수정 | `FLASK-VM ~/staccato-flask/flask-vm` |
+| Frontend 수정 | `FRONTEND-VM ~/staccato-frontend/frontend-vm` |
+| AI Docker 수정 | `AI-VM ~/staccato-ai/ai-vm` |
+| DB 설정 수정 | `DB-VM ~/staccato-db/db-vm` |
+| ITS 수정 | `ITS-VM ~/staccato-its/its-vm` |
+| 공통 문서, 루트 파일, 저장소 정리 | 전체 저장소 루트 |
 
-### FRONTEND-VM
+## Sparse Checkout 권장 구조
 
-    git sparse-checkout set frontend-server docs .nvmrc
+추후 각 VM은 Sparse Checkout으로 자기 담당 폴더만 보이게 정리할 수 있습니다.
 
-### ITS-VM
+| VM | Sparse Checkout 대상 |
+|---|---|
+| FLASK-VM | `flask-vm docs` |
+| FRONTEND-VM | `frontend-vm docs` |
+| AI-VM | `ai-vm docs storage` |
+| DB-VM | `db-vm docs` |
+| ITS-VM | `its-vm docs` |
 
-    git sparse-checkout set its-server docs .python-version
+예시:
 
-### DB-VM
+    git sparse-checkout init --cone
+    git sparse-checkout set flask-vm docs
 
-    git sparse-checkout set db-server docs
+## 주의 사항
 
-## Runtime Responsibility
-
-### DB-VM
-
-- Owns MySQL database runtime
-- Applies SQL files from db-vm/init
-- Allows MySQL port only from FLASK-VM
-
-### FLASK-VM
-
-- Owns backend API gateway
-- Connects to DB-VM
-- Connects to AI-VM LLM server
-- Exposes Flask API to FRONTEND-VM
-
-### FRONTEND-VM
-
-- Owns Next.js frontend runtime
-- Connects to FLASK-VM API
-
-### AI-VM
-
-- Owns AI-VM Docker runtime
-- Owns LLM mock/report server
-- Uses Docker runtime
-
-### ITS-VM
-
-- Owns ITS traffic/weather integration server
-
-## Do Not Commit
-
-- .env
-- .env.local
-- .venv/
-- node_modules/
-- __pycache__/
-- *.pyc
-- .next/
-- runtime storage files
-
-## Legacy / Review Required
-
-The following files may exist for local development or previous Docker-based development.
-
-Do not delete them without team agreement.
-
-- root docker-compose.yml
-- root .dockerignore
-- server-specific Dockerfiles not currently used by VM runtime
-- old local development instructions
+- `staccato-flask`, `staccato-frontend` 같은 상위 폴더명은 VM별 로컬 작업 폴더 이름입니다.
+- 실제 GitHub 기준 폴더는 `flask-vm`, `frontend-vm`, `ai-vm`, `db-vm`, `its-vm`입니다.
+- 프론트엔드는 DB에 직접 연결하지 않고 Flask API만 호출합니다.
+- Secret, DB Password, JWT Secret, SMTP Password는 Git에 올리지 않습니다.
+- 비-AI VM에는 Dockerfile을 다시 추가하지 않습니다.

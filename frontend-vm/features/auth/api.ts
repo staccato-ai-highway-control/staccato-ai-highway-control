@@ -4,7 +4,6 @@ import type {
   SendEmailVerificationRequest,
   SignupApiRequest,
   SignupRequest,
-  VerifyEmailTokenRequest,
 } from "./types";
 
 const API_BASE_URL =
@@ -30,10 +29,21 @@ async function request<T>(
     );
   }
 
-  const data = await response.json().catch(() => null);
+  const responseText = await response.text().catch(() => "");
+  const data = responseText
+    ? (() => {
+        try {
+          return JSON.parse(responseText);
+        } catch {
+          return null;
+        }
+      })()
+    : null;
 
   if (!response.ok) {
-    throw new Error(data?.message ?? `API 요청 실패: ${response.status}`);
+    throw new Error(
+      data?.message ?? responseText ?? `API 요청 실패: ${response.status}`
+    );
   }
 
   return data as T;
@@ -41,12 +51,10 @@ async function request<T>(
 
 export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   return {
+    login_id: payload.login_id,
     email: payload.email,
     password: payload.password,
     name: payload.name,
-    phone: payload.phone || undefined,
-    requested_role: payload.requestedRole,
-    request_memo: payload.reason || undefined,
   };
 }
 
@@ -73,16 +81,20 @@ export function getMe(accessToken: string) {
   });
 }
 
-export function resendEmailVerification(payload: SendEmailVerificationRequest) {
+export function sendEmailVerificationCode(email: string) {
   return request<AuthResponse>("/auth/verify-email/resend", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ email }),
   });
 }
 
-export function verifyEmailToken(payload: VerifyEmailTokenRequest) {
+export function resendEmailVerification(payload: SendEmailVerificationRequest) {
+  return sendEmailVerificationCode(payload.email);
+}
+
+export function verifyEmailCode(email: string, code: string) {
   return request<AuthResponse>("/auth/verify-email", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ email, code }),
   });
 }
