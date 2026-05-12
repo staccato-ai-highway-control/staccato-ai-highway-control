@@ -1,11 +1,12 @@
 "use client";
 
 import { Send, ShieldAlert } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { getChatMessages, getOrCreateChatRoom, sendChatMessage, type ChatMessageDto } from "@/features/chat/api";
 import { cn } from "@/lib/utils";
 
 type ChatMessageType = "TEXT" | "SYSTEM" | "INCIDENT_UPDATE";
@@ -22,6 +23,7 @@ type ChatMessage = {
 
 type ChatRoom = {
   id: string;
+  incidentId: number;
   roomCode: string;
   incidentCode: string;
   title: string;
@@ -34,6 +36,7 @@ type ChatRoom = {
 const mockChatRooms: ChatRoom[] = [
   {
     id: "room-001",
+    incidentId: 1,
     roomCode: "CHAT-20260429-001",
     incidentCode: "STP-20260429-001",
     title: "수원IC 주행차로 정차 긴급 대응",
@@ -44,6 +47,7 @@ const mockChatRooms: ChatRoom[] = [
   },
   {
     id: "room-002",
+    incidentId: 2,
     roomCode: "CHAT-20260429-002",
     incidentCode: "STP-20260429-002",
     title: "용인IC 갓길 장기 정차 확인",
@@ -54,6 +58,7 @@ const mockChatRooms: ChatRoom[] = [
   },
   {
     id: "room-003",
+    incidentId: 4,
     roomCode: "CHAT-20260428-011",
     incidentCode: "STP-20260428-011",
     title: "대소JC 갓길 정차 처리 완료",
@@ -155,36 +160,132 @@ function formatNow() {
   }).format(new Date());
 }
 
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function mapApiMessage(message: ChatMessageDto): ChatMessage {
+  const isSystem = message.message_type !== "TEXT";
+
+  return {
+    id: `api-msg-${message.id}`,
+    roomId: String(message.room_id),
+    senderName: isSystem ? "시스템" : message.sender_id === 1 ? "김관제" : `사용자 ${message.sender_id}`,
+    senderRole: isSystem ? message.message_type : message.sender_id === 1 ? "최고관리자" : "담당자",
+    messageType: message.message_type,
+    content: message.content,
+    createdAt: formatDateTime(message.created_at),
+  };
+}
+
 export default function ChatPage() {
   const [selectedRoomId, setSelectedRoomId] = useState(mockChatRooms[0].id);
   const [messages, setMessages] = useState(initialMessages);
   const [draft, setDraft] = useState("");
+  const [backendRoomIds, setBackendRoomIds] = useState<Record<string, number>>({});
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const selectedRoom = mockChatRooms.find((room) => room.id === selectedRoomId) ?? mockChatRooms[0];
+  const activeBackendRoomId = backendRoomIds[selectedRoom.id];
 
   const selectedMessages = useMemo(() => {
-    return messages.filter((message) => message.roomId === selectedRoom.id);
-  }, [messages, selectedRoom.id]);
+    return messages.filter((message) => message.roomId === String(activeBackendRoomId ?? selectedRoom.id));
+  }, [activeBackendRoomId, messages, selectedRoom.id]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadRoomMessages() {
+      setIsLoadingMessages(true);
+      setErrorMessage("");
+
+      try {
+        const roomResponse = await getOrCreateChatRoom(selectedRoom.incidentId);
+        const backendRoomId = roomResponse.data.id;
+        const messagesResponse = await getChatMessages(backendRoomId);
+        const apiMessages = messagesResponse.data.messages.map(mapApiMessage);
+
+        if (ignore) return;
+
+        setBackendRoomIds((current) => ({ ...current, [selectedRoom.id]: backendRoomId }));
+        setMessages((current) => [
+          ...current.filter((message) => message.roomId !== String(backendRoomId)),
+          ...apiMessages,
+        ]);
+      } catch (error) {
+        if (!ignore) {
+          const message = error instanceof Error ? error.message : "알 수 없는 오류";
+          setErrorMessage(`채팅 메시지 조회에 실패했습니다. ${message}`);
+        }
+      } finally {
+        if (!ignore) setIsLoadingMessages(false);
+      }
+    }
+
+    loadRoomMessages();
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedRoom.id, selectedRoom.incidentId]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const content = draft.trim();
-    if (!content) return;
+    if (!content || isSending) return;
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: `msg-local-${current.length + 1}`,
-        roomId: selectedRoom.id,
-        senderName: "김관제",
-        senderRole: "최고관리자",
-        messageType: "TEXT",
-        content,
-        createdAt: formatNow(),
-      },
-    ]);
+    const fallbackRoomId = activeBackendRoomId ?? selectedRoom.id;
+    const optimisticMessage: ChatMessage = {
+      id: `msg-local-${Date.now()}`,
+      roomId: String(fallbackRoomId),
+      senderName: "김관제",
+      senderRole: "최고관리자",
+      messageType: "TEXT",
+      content,
+      createdAt: formatNow(),
+    };
+
+    setMessages((current) => [...current, optimisticMessage]);
     setDraft("");
+    setIsSending(true);
+    setErrorMessage("");
+
+    try {
+      const roomId =
+        activeBackendRoomId ??
+        (await getOrCreateChatRoom(selectedRoom.incidentId)).data.id;
+      const response = await sendChatMessage(roomId, 1, content);
+      const savedMessage = mapApiMessage(response.data);
+
+      setBackendRoomIds((current) => ({ ...current, [selectedRoom.id]: roomId }));
+      setMessages((current) => [
+        ...current.filter((message) => message.id !== optimisticMessage.id),
+        savedMessage,
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setErrorMessage(`채팅 메시지 전송에 실패했습니다. ${message}`);
+      setMessages((current) =>
+        current.filter((message) => message.id !== optimisticMessage.id)
+      );
+      setDraft(content);
+    } finally {
+      setIsSending(false);
+    }
   }
 
   return (
@@ -256,12 +357,22 @@ export default function ChatPage() {
                 </div>
               </div>
               <p className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-xs font-semibold text-slate-500">
-                TODO: Socket.IO 실시간 채팅 연결은 백엔드 이벤트 계약 확정 후 추가합니다.
+                현재 메시지는 Flask 채팅 API로 조회/전송하며, 실시간 이벤트는 백엔드 계약 확정 후 추가합니다.
               </p>
+              {errorMessage ? (
+                <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700">
+                  {errorMessage}
+                </p>
+              ) : null}
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-5">
               <div className="grid gap-4">
+                {isLoadingMessages ? (
+                  <p className="mx-auto rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500">
+                    메시지를 불러오는 중입니다.
+                  </p>
+                ) : null}
                 {selectedMessages.map((message) => {
                   const isMine = message.senderName === "김관제";
                   const isSystem = message.messageType !== "TEXT";
@@ -297,11 +408,12 @@ export default function ChatPage() {
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   placeholder="사고 대응 메시지를 입력하세요."
+                  disabled={isSending}
                   className="h-12 min-w-0 flex-1 rounded-lg border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-teal-600"
                 />
-                <button type="submit" className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-sm font-black text-white transition hover:bg-teal-800">
+                <button type="submit" disabled={isSending} className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-sm font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">
                   <Send className="h-4 w-4" aria-hidden="true" />
-                  전송
+                  {isSending ? "전송중" : "전송"}
                 </button>
               </div>
             </form>
