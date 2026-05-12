@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  sendEmailVerificationCode,
+  resendEmailVerification,
   signup,
   verifyEmailCode,
 } from "@/features/auth/api";
@@ -32,7 +32,8 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit =
-    Boolean(loginId && email && password && name && isEmailVerified) &&
+    Boolean(loginId && email && password && passwordConfirm && name && agreed) &&
+    !isCodeSent &&
     !isSubmitting;
 
   function handleEmailChange(nextEmail: string) {
@@ -49,14 +50,19 @@ export default function SignupPage() {
       return;
     }
 
+    if (!isCodeSent) {
+      setEmailVerifyMessage("회원가입 신청 후 인증번호를 재발송할 수 있습니다.");
+      return;
+    }
+
     try {
       setIsSendingCode(true);
       setEmailVerifyMessage("");
-      await sendEmailVerificationCode(email);
+      await resendEmailVerification({ email });
       setIsCodeSent(true);
       setIsEmailVerified(false);
       setCode("");
-      setEmailVerifyMessage("인증번호를 전송했습니다. 이메일을 확인해주세요.");
+      setEmailVerifyMessage("인증번호를 다시 전송했습니다. 이메일을 확인해주세요.");
     } catch (error) {
       setIsCodeSent(false);
       setIsEmailVerified(false);
@@ -82,6 +88,8 @@ export default function SignupPage() {
       await verifyEmailCode(email, code);
       setIsEmailVerified(true);
       setEmailVerifyMessage("이메일 인증이 완료되었습니다.");
+      alert("이메일 인증이 완료되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
+      router.push("/pending-approval");
     } catch {
       setIsEmailVerified(false);
       setEmailVerifyMessage("인증번호가 올바르지 않습니다.");
@@ -100,11 +108,6 @@ export default function SignupPage() {
 
     if (!LOGIN_ID_PATTERN.test(loginId)) {
       alert("아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.");
-      return;
-    }
-
-    if (!isEmailVerified) {
-      alert("이메일 인증을 완료해야 회원가입할 수 있습니다.");
       return;
     }
 
@@ -132,9 +135,10 @@ export default function SignupPage() {
         agreed,
       });
 
-      alert("회원가입 신청이 접수되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
-
-      router.push("/pending-approval");
+      setIsCodeSent(true);
+      setIsEmailVerified(false);
+      setCode("");
+      setEmailVerifyMessage("회원가입 신청이 접수되었습니다. 이메일로 받은 인증번호를 입력해주세요.");
     } catch (error) {
       alert(
         error instanceof Error
@@ -235,19 +239,19 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={handleSendVerificationCode}
-                disabled={!email || isSendingCode || isEmailVerified}
+                disabled={!email || !isCodeSent || isSendingCode || isEmailVerified}
                 className="rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
               >
                 {isSendingCode
-                  ? "전송 중..."
+                  ? "재발송 중..."
                   : isEmailVerified
                     ? "인증 완료"
-                    : "인증번호 전송"}
+                    : "인증번호 재발송"}
               </button>
             </div>
 
             <p className="mt-2 text-xs text-slate-400">
-              이메일 인증을 완료해야 회원가입할 수 있습니다.
+              회원가입 신청이 완료되면 인증번호가 이메일로 자동 발송됩니다.
             </p>
 
             {isCodeSent && !isEmailVerified ? (
@@ -357,12 +361,16 @@ export default function SignupPage() {
             disabled={!canSubmit}
             className="mt-2 w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            {isSubmitting ? "신청 중..." : "회원가입 신청"}
+            {isSubmitting
+              ? "신청 중..."
+              : isCodeSent
+                ? "인증번호 발송 완료"
+                : "회원가입 신청"}
           </button>
 
-          {!isEmailVerified ? (
+          {!isCodeSent ? (
             <p className="text-center text-xs font-semibold text-slate-400">
-              이메일 인증을 완료해야 회원가입할 수 있습니다.
+              회원가입 신청 후 이메일로 받은 6자리 인증번호를 입력해주세요.
             </p>
           ) : null}
         </form>
