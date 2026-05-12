@@ -43,8 +43,8 @@
 |---|---|---|---|---|
 | docs/mvp-api-spec | MVP API 명세 문서 추가 | docs/mvp-api-spec.md | develop 미반영 | 문서 내용 확인 후 반영 검토 |
 | docs/vm-setup-guide | VM 서버 구축 및 배포 방향 문서 추가 | docs/vm-setup-guide.md | develop 미반영 | 현재 VM 기준과 충돌 여부 확인 후 반영 검토 |
-| feat/flask-vm-setup | Flask VM 환경 예시 파일 추가 | flask-vm/.env.example | develop 미반영 | Secret 포함 여부 확인 후 반영 권장 |
-| feat/frontend-integration | Frontend 환경 예시 파일 수정 | frontend-vm/.env.example | develop 미반영 | .env 기준과 맞는지 확인 후 반영 권장 |
+| feat/flask-vm-setup | Flask VM 환경 예시 파일 제거 및 문서 기준으로 통합 | 환경변수 예시 파일 제거됨 | develop 미반영 | Secret 포함 여부 확인 후 반영 권장 |
+| feat/frontend-integration | Frontend 환경 예시 파일 제거 및 문서 기준으로 통합 | 환경변수 예시 파일 제거됨 | develop 미반영 | env-guide 기준으로 관리 |
 
 ## develop에 내용이 반영된 것으로 확인된 브랜치
 
@@ -111,7 +111,7 @@
 | 버그 수정 | fix/flask-auth-health-check |
 | 문서 수정 | docs/update-vm-runtime-guide |
 | 저장소 정리 | chore/repo-folder-structure-cleanup |
-| 환경 설정 | chore/update-env-examples |
+| 환경 설정 | 환경변수 예시 파일 제거 작업 |
 
 ## 현재 우선 확인이 필요한 브랜치
 
@@ -119,8 +119,8 @@
 
 | 우선순위 | 브랜치 | 확인 포인트 |
 |---|---|---|
-| 1 | feat/flask-vm-setup | flask-vm/.env.example에 실제 Secret이 없는지 확인 |
-| 2 | feat/frontend-integration | frontend-vm/.env.example이 .env 기준과 맞는지 확인 |
+| 1 | feat/flask-vm-setup | 환경변수 예시 파일 제거됨에 env-guide 기준으로 관리 |
+| 2 | feat/frontend-integration | 환경변수 예시 파일 제거됨이 .env 기준과 맞는지 확인 |
 | 3 | docs/vm-setup-guide | 현재 VM 구조와 Docker 정책이 최신 기준인지 확인 |
 | 4 | docs/mvp-api-spec | 최신 API 구조와 충돌 없는지 확인 |
 
