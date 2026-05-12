@@ -1,52 +1,77 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { verifyEmailToken } from "@/features/auth/api";
+import { FormEvent, useEffect, useState } from "react";
+import { resendEmailVerification, verifyEmailCode } from "@/features/auth/api";
 
-type VerifyStatus = "checking" | "success" | "error";
+type VerifyStatus = "idle" | "submitting" | "success" | "error";
+
+function getFriendlyVerifyError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "이메일 인증 중 오류가 발생했습니다.";
+
+  if (message.toLowerCase().includes("already verified")) {
+    return "이미 인증된 이메일입니다.";
+  }
+
+  return message;
+}
 
 export default function VerifyEmailPage() {
-  const [status, setStatus] = useState<VerifyStatus>("checking");
-  const [message, setMessage] = useState("이메일 인증을 확인하는 중입니다.");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [status, setStatus] = useState<VerifyStatus>("idle");
+  const [message, setMessage] = useState("이메일로 받은 6자리 인증번호를 입력해주세요.");
+  const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
+    const emailFromQuery = new URLSearchParams(window.location.search).get("email");
 
-    async function verifyEmail() {
-      const token = new URLSearchParams(window.location.search).get("token");
+    if (emailFromQuery) {
+      setEmail(emailFromQuery);
+    }
+  }, []);
 
-      if (!token) {
-        setStatus("error");
-        setMessage("이메일 인증 토큰이 없습니다.");
-        return;
-      }
+  async function handleVerify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("submitting");
+    setMessage("");
 
-      try {
-        await verifyEmailToken({ token });
-
-        if (isMounted) {
-          setStatus("success");
-          setMessage("이메일 인증이 완료되었습니다.");
-        }
-      } catch (error) {
-        if (isMounted) {
-          setStatus("error");
-          setMessage(
-            error instanceof Error
-              ? error.message
-              : "이메일 인증 중 오류가 발생했습니다."
-          );
-        }
-      }
+    if (!email || code.length !== 6) {
+      setStatus("error");
+      setMessage("이메일과 6자리 인증번호를 입력해주세요.");
+      return;
     }
 
-    verifyEmail();
+    try {
+      await verifyEmailCode(email, code);
+      setStatus("success");
+      setMessage("이메일 인증이 완료되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getFriendlyVerifyError(error));
+    }
+  }
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  async function handleResend() {
+    if (!email) {
+      setStatus("error");
+      setMessage("인증번호를 재발송할 이메일을 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsResending(true);
+      await resendEmailVerification({ email });
+      setStatus("idle");
+      setMessage("인증번호를 다시 발송했습니다. 이메일을 확인해주세요.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(getFriendlyVerifyError(error));
+    } finally {
+      setIsResending(false);
+    }
+  }
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 text-white">
@@ -76,14 +101,61 @@ export default function VerifyEmailPage() {
         </p>
 
         <h1 className="mt-4 text-3xl font-black">
-          {status === "checking"
-            ? "이메일 인증 확인 중"
-            : status === "success"
-              ? "이메일 인증 완료"
-              : "이메일 인증 실패"}
+          {status === "success"
+            ? "이메일 인증 완료"
+            : "이메일 인증번호 입력"}
         </h1>
 
         <p className="mt-5 leading-7 text-slate-300">{message}</p>
+
+        {status !== "success" ? (
+          <form onSubmit={handleVerify} className="mt-8 grid gap-4 text-left">
+            <div>
+              <label className="text-sm font-semibold text-slate-300">이메일</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="user@example.com"
+                required
+                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-semibold text-slate-300">
+                인증번호
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+                placeholder="6자리 인증번호"
+                required
+                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-center text-lg font-bold tracking-[0.2em] text-white outline-none transition placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-500 focus:border-sky-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={status === "submitting"}
+              className="rounded-lg bg-sky-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+            >
+              {status === "submitting" ? "인증 중..." : "이메일 인증 완료"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={isResending}
+              className="rounded-lg border border-white/20 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:text-slate-500"
+            >
+              {isResending ? "재발송 중..." : "인증번호 재발송"}
+            </button>
+          </form>
+        ) : null}
 
         <div className="mt-8 flex justify-center gap-3">
           {status === "success" ? (
