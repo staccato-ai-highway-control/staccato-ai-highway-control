@@ -12,6 +12,12 @@ from app.models.report_models import (
     ReportAttachment,
 )
 
+from app.models.report_support_models import (
+    ReportLocation,
+    ReportMemo,
+    ReportStatusHistory,
+)
+
 from app.models.incident_models import (
     DetectionLog,
     Incident,
@@ -31,6 +37,9 @@ __all__ = [
     "IncidentReport",
     "ReportAttachment",
     "ReportAnalysisJob",
+    "ReportLocation",
+    "ReportMemo",
+    "ReportStatusHistory",
     "Incident",
     "DetectionLog",
     "IncidentSnapshot",
