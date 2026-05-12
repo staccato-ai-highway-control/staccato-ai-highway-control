@@ -22,9 +22,29 @@ function getAccessToken(response: AuthResponse) {
   );
 }
 
+function getFriendlyLoginError(error: unknown) {
+  const message =
+    error instanceof Error ? error.message : "로그인 중 오류가 발생했습니다.";
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes("email") && lowerMessage.includes("verified")) {
+    return "이메일 인증이 필요합니다. 이메일로 받은 6자리 인증번호를 입력해주세요.";
+  }
+
+  if (lowerMessage.includes("pending")) {
+    return "이메일 인증은 완료되었지만 관리자 승인 대기 중입니다.";
+  }
+
+  if (lowerMessage.includes("not active") || lowerMessage.includes("inactive")) {
+    return "아직 활성화되지 않은 계정입니다. 관리자 승인 상태를 확인해주세요.";
+  }
+
+  return message;
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,22 +55,32 @@ export default function LoginPage() {
 
     try {
       setIsSubmitting(true);
-      const response = await login({ email, password });
+      const response = await login({ login_id: loginId, password });
       const accessToken = getAccessToken(response);
+      const user = getUserFromAuthResponse(response);
 
       if (!accessToken) {
         throw new Error("로그인 응답에서 access_token을 찾을 수 없습니다.");
       }
 
       setStoredAccessToken(accessToken);
-      setStoredAuthUser(getUserFromAuthResponse(response));
+      setStoredAuthUser(user);
+
+      if (user?.is_email_verified === false) {
+        router.push(
+          `/verify-email${user.email ? `?email=${encodeURIComponent(user.email)}` : ""}`
+        );
+        return;
+      }
+
+      if (user?.account_status?.toUpperCase() === "PENDING") {
+        router.push("/pending-approval");
+        return;
+      }
+
       router.push("/dashboard");
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : "로그인 중 오류가 발생했습니다."
-      );
+      setErrorMessage(getFriendlyLoginError(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -89,13 +119,15 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <div>
             <label className="text-sm font-semibold text-slate-300">
-              이메일
+              아이디
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="admin@staccato.com"
+              type="text"
+              name="login_id"
+              autoComplete="username"
+              value={loginId}
+              onChange={(event) => setLoginId(event.target.value)}
+              placeholder="아이디를 입력하세요"
               required
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
             />

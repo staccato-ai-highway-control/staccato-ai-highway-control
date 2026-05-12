@@ -1,4 +1,5 @@
 export type SignupRequest = {
+  login_id: string;
   email: string;
   password: string;
   name: string;
@@ -9,29 +10,24 @@ export type SignupRequest = {
 };
 
 export type SignupApiRequest = {
+  login_id: string;
   email: string;
   password: string;
   name: string;
-  phone?: string;
-  requested_role: string;
-  request_memo?: string;
 };
 
 export type SendEmailVerificationRequest = {
   email: string;
 };
 
-export type VerifyEmailTokenRequest = {
-  token: string;
-};
-
 export type LoginRequest = {
-  email: string;
+  login_id: string;
   password: string;
 };
 
 export type AuthUser = {
   id?: string | number;
+  login_id?: string;
   email?: string;
   name?: string;
   role?: string;
