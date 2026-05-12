@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/common/Card";
 import { RiskLevelBadge } from "@/components/incident/RiskLevelBadge";
 import { IncidentStatusBadge } from "@/components/incident/IncidentStatusBadge";
+import { askIncidentChatbot, type ChatbotIncidentContext } from "@/features/chat/api";
 import { mockIncidents } from "@/features/incidents/mock";
 import { incidentTypeLabels, type Incident } from "@/features/incidents/types";
 import { cn } from "@/lib/utils";
@@ -34,20 +35,23 @@ function formatNow() {
   }).format(new Date());
 }
 
-function createMockAnswer(question: string, incident: Incident) {
-  if (question.includes("위험도")) {
-    return `${incident.code}의 위험도는 ${incident.riskLevel}입니다. 판단 근거는 AI 신뢰도 ${Math.round(incident.confidence * 100)}%, 정차 지속 ${incident.stoppedDurationSec}초, 위치(${incident.location})와 교통량(${incident.its.trafficVolume})을 함께 본 결과입니다. 이 문구는 관리자 검토용 보조 의견입니다.`;
-  }
+function getBackendIncidentId(incident: Incident) {
+  const numericId = Number(incident.id.replace(/\D/g, ""));
+  return Number.isFinite(numericId) && numericId > 0 ? numericId : 1;
+}
 
-  if (question.includes("조치")) {
-    return `권장 조치: 1) CCTV 확대 확인, 2) 담당자 배정 상태 확인, 3) 순찰 ETA(${incident.its.nearestPatrolEta}) 공유, 4) 필요 시 사고 대응 채팅방에 상황 전파, 5) 처리 후 상태를 RESOLVED 또는 FALSE_POSITIVE로 갱신하세요.`;
-  }
-
-  if (question.includes("보고서")) {
-    return `[보고서 초안]\n사고 코드: ${incident.code}\n유형: ${incidentTypeLabels[incident.eventType]}\n위치: ${incident.location}\n상태: ${incident.status}\n위험도: ${incident.riskLevel}\n탐지 근거: AI 신뢰도 ${Math.round(incident.confidence * 100)}%, 정차 시간 ${incident.stoppedDurationSec}초\n관리자 확인 사항: ${incident.memo ?? "현장 확인 및 후속 조치 필요"}`;
-  }
-
-  return `${incident.code}는 ${incident.location}에서 감지된 ${incidentTypeLabels[incident.eventType]} 사고입니다. 현재 상태는 ${incident.status}, 위험도는 ${incident.riskLevel}, 담당자는 ${incident.assignee ?? "미배정"}입니다. LLM 답변은 최종 판단이 아니라 관리자 검토를 돕는 보조 정보입니다.`;
+function createIncidentContext(incident: Incident): ChatbotIncidentContext {
+  return {
+    incident_type: incident.eventType,
+    risk_level: incident.riskLevel,
+    location: incident.location,
+    stopped_seconds: incident.stoppedDurationSec,
+    incident_code: incident.code,
+    status: incident.status,
+    confidence: incident.confidence,
+    traffic_volume: incident.its.trafficVolume,
+    nearest_patrol_eta: incident.its.nearestPatrolEta,
+  };
 }
 
 export default function ChatbotPage() {
@@ -61,34 +65,58 @@ export default function ChatbotPage() {
       createdAt: formatNow(),
     },
   ]);
+  const [isAsking, setIsAsking] = useState(false);
 
   const selectedIncident = useMemo(() => {
     return mockIncidents.find((incident) => incident.id === selectedIncidentId) ?? mockIncidents[0];
   }, [selectedIncidentId]);
 
-  function submitQuestion(question: string) {
+  async function submitQuestion(question: string) {
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) return;
+    if (!trimmedQuestion || isAsking) return;
 
     const now = formatNow();
-    const answer = createMockAnswer(trimmedQuestion, selectedIncident);
+    const userMessage: ChatbotMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: trimmedQuestion,
+      createdAt: now,
+    };
 
-    setMessages((current) => [
-      ...current,
-      {
-        id: `user-${current.length + 1}`,
-        role: "user",
-        content: trimmedQuestion,
-        createdAt: now,
-      },
-      {
-        id: `assistant-${current.length + 2}`,
-        role: "assistant",
-        content: answer,
-        createdAt: formatNow(),
-      },
-    ]);
+    setMessages((current) => [...current, userMessage]);
     setDraft("");
+    setIsAsking(true);
+
+    try {
+      const response = await askIncidentChatbot(
+        getBackendIncidentId(selectedIncident),
+        trimmedQuestion,
+        createIncidentContext(selectedIncident)
+      );
+
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: response.data.answer,
+          createdAt: formatNow(),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "알 수 없는 오류";
+      setMessages((current) => [
+        ...current,
+        {
+          id: `assistant-error-${Date.now()}`,
+          role: "assistant",
+          content: `챗봇 답변 요청에 실패했습니다. ${message}`,
+          createdAt: formatNow(),
+        },
+      ]);
+    } finally {
+      setIsAsking(false);
+    }
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -164,6 +192,7 @@ export default function ChatbotPage() {
                     key={question}
                     type="button"
                     onClick={() => submitQuestion(question)}
+                    disabled={isAsking}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     <Sparkles className="h-4 w-4 text-sky-500" aria-hidden="true" />
@@ -206,11 +235,12 @@ export default function ChatbotPage() {
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   placeholder="사고 대응 관련 질문만 입력하세요."
+                  disabled={isAsking}
                   className="h-12 min-w-0 flex-1 rounded-lg border border-slate-200 px-4 text-sm font-semibold outline-none focus:border-teal-600"
                 />
-                <button type="submit" className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-sm font-black text-white transition hover:bg-teal-800">
+                <button type="submit" disabled={isAsking} className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-teal-700 px-5 text-sm font-black text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-slate-300">
                   <Send className="h-4 w-4" aria-hidden="true" />
-                  질문
+                  {isAsking ? "요청중" : "질문"}
                 </button>
               </div>
             </form>
