@@ -162,7 +162,7 @@ git switch develop
 
 환경변수 파일 생성
 
-cp .env.example .env
+vi .env  # docs/infra/env-guide.md 기준으로 직접 작성
 
 nano .env
 
@@ -196,7 +196,7 @@ docker compose logs -f db-server
 
 
 
-GitHub에는 변수명 공유용 .env.example만 올린다.
+GitHub에는 실제 환경변수 파일과 예시 환경변수 파일을 올리지 않는다. 환경변수 항목은 `docs/infra/env-guide.md`에서 관리한다.
 
 
 

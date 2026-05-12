@@ -136,14 +136,14 @@ Node.js 20 이상
 
 ```powershell
 cd frontend-server
-copy .env.example .env.local
+copy NUL .env.local  # docs/infra/env-guide.md 기준으로 직접 작성
 ```
 
 macOS/Linux:
 
 ```bash
 cd frontend-server
-cp .env.example .env.local
+touch .env.local  # docs/infra/env-guide.md 기준으로 직접 작성
 ```
 
 로컬 실행:

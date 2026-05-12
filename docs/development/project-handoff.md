@@ -40,7 +40,7 @@ develop 최신화
 * PR base는 `develop`
 * merge 후 작업 브랜치 삭제
 * `.env`는 GitHub에 올리지 않음
-* `.env.example`은 변수명 공유용으로 GitHub에 올림
+* 예시 환경변수 파일은 GitHub에 올리지 않으며, 환경변수 항목은 `docs/infra/env-guide.md`에서 관리함
 * 모델 파일 `.pt`, `.bin`, tokenizer, 대용량 데이터는 GitHub에 올리지 않음
 
 기본 시작 명령어:
@@ -476,7 +476,7 @@ API health check
 git clone https://github.com/staccato-ai-highway-control/staccato-ai-highway-control.git
 cd staccato-ai-highway-control
 git switch develop
-cp .env.example .env
+vi .env  # docs/infra/env-guide.md 기준으로 직접 작성
 nano .env
 docker compose up -d --build
 docker compose ps

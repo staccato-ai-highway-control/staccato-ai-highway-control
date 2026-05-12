@@ -320,7 +320,7 @@ POST /incidents/{incident\_id}/llm-reports
 
 \- `.env`는 GitHub에 올리지 않는다.
 
-\- `.env.example`에는 변수명만 공유한다.
+\- 환경변수 항목은 `docs/infra/env-guide.md`에서 관리하며, `.env` 파일은 각 VM에서 직접 생성한다.
 
 
 
