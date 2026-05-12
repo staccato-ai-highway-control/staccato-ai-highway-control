@@ -49,7 +49,7 @@ STACCATO MVP는 5개 서버 구조를 기준으로 한다.
 | Container | Docker Compose |
 | Backend Package 관리 | requirements.txt |
 | Frontend Package 관리 | package.json |
-| 환경변수 예시 | .env.example |
+| 환경변수 기준 | docs/infra/env-guide.md |
 | 실제 환경변수 | .env, Git 제외 |
 
 ## 5. Git 운영 기준

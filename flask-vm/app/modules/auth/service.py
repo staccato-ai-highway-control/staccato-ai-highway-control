@@ -137,9 +137,6 @@ class AuthService:
     def _get_frontend_base_url():
         return os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
 
-    @staticmethod
-    def _build_email_verification_link(raw_token):
-        return f"{AuthService._get_frontend_base_url()}/auth/verify-email?token={raw_token}"
 
     @staticmethod
     def _create_email_verification(user, now=None):
@@ -153,7 +150,7 @@ class AuthService:
         for verification in pending_verifications:
             verification.verification_status = "CANCELLED"
 
-        raw_token = secrets.token_urlsafe(32)
+        raw_token = f"{secrets.randbelow(1000000):06d}"
         token_hash = AuthService._hash_email_token(raw_token)
 
         verification = EmailVerification(
@@ -267,11 +264,9 @@ class AuthService:
         except IntegrityError:
             db.session.rollback()
             raise AuthError("Failed to create signup request.", 409)
-
-        verification_link = AuthService._build_email_verification_link(raw_token)
         email_delivery = EmailService.send_verification_email(
             user.email,
-            verification_link,
+            raw_token,
         )
 
         return {
@@ -286,7 +281,7 @@ class AuthService:
                     "reason": email_delivery.get("reason"),
                 },
                 "note": (
-                    "Email verification link sent via SMTP."
+                    "Email verification code sent via SMTP."
                     if email_delivery.get("sent")
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
@@ -295,26 +290,42 @@ class AuthService:
 
     @staticmethod
     def verify_email(data, ip_address=None, user_agent=None):
-        raw_token = (data.get("token") or "").strip()
+        data = data or {}
 
-        if not raw_token:
-            raise AuthError("Verification token is required.", 400)
+        raw_code = (
+            data.get("code")
+            or data.get("verification_code")
+            or data.get("token")
+            or ""
+        ).strip()
 
-        token_hash = AuthService._hash_email_token(raw_token)
+        email = (data.get("email") or "").strip().lower()
+
+        if not raw_code:
+            raise AuthError("Verification code is required.", 400)
+
+        if not raw_code.isdigit() or len(raw_code) != 6:
+            raise AuthError("Verification code must be 6 digits.", 400)
+
+        if not email:
+            raise AuthError("Email is required.", 400)
+
+        token_hash = AuthService._hash_email_token(raw_code)
 
         verification = EmailVerification.query.filter_by(
-            verification_token=token_hash
+            email=email,
+            verification_token=token_hash,
         ).first()
 
         if not verification:
-            raise AuthError("Invalid verification token.", 404)
+            raise AuthError("Invalid verification code.", 404)
 
         if verification.verification_status == "VERIFIED":
             raise AuthError("Email is already verified.", 409)
 
         if verification.verification_status in ["CANCELLED", "EXPIRED"]:
             raise AuthError(
-                f"Verification token is not valid. Current status: {verification.verification_status}",
+                f"Verification code is not valid. Current status: {verification.verification_status}",
                 409,
             )
 
@@ -323,7 +334,7 @@ class AuthService:
         if verification.expires_at < now:
             verification.verification_status = "EXPIRED"
             db.session.commit()
-            raise AuthError("Verification token has expired.", 410)
+            raise AuthError("Verification code has expired.", 410)
 
         user = db.session.get(User, verification.user_id)
 
@@ -391,11 +402,9 @@ class AuthService:
         )
 
         db.session.commit()
-
-        verification_link = AuthService._build_email_verification_link(raw_token)
         email_delivery = EmailService.send_verification_email(
             user.email,
-            verification_link,
+            raw_token,
         )
 
         return {
@@ -409,7 +418,7 @@ class AuthService:
                     "reason": email_delivery.get("reason"),
                 },
                 "note": (
-                    "Email verification link sent via SMTP."
+                    "Email verification code sent via SMTP."
                     if email_delivery.get("sent")
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),

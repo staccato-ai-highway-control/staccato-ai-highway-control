@@ -1,78 +1,49 @@
-# Repository Cleanup Policy
+# STACCATO Repository Cleanup Policy
 
-## Current Runtime Standard
+## 2026-05-11 기준 정리 정책
 
-The current project runtime is based on separated VMs.
+STACCATO 프로젝트는 VM 분리 구조를 기준으로 운영합니다.
 
-| Server | Runtime |
+Docker는 `AI-VM`에서만 사용합니다.
+
+## 유지 대상
+
+| 경로 | 이유 |
+|---|---|
+| `ai-vm/docker-compose.yml` | AI-VM Docker Compose 실행 기준 |
+| `ai-vm/llm-server/Dockerfile` | LLM 서버 Docker 이미지 빌드 기준 |
+
+## 삭제 완료 대상
+
+| 경로 | 사유 |
+|---|---|
+| `docker-compose.yml` | 루트 통합 Docker Compose는 현재 VM 운영 기준과 맞지 않음 |
+| `.dockerignore` | 루트 Docker 빌드를 사용하지 않음 |
+| `flask-vm/Dockerfile` | FLASK-VM은 Python venv 기준 |
+| `flask-vm/.dockerignore` | FLASK-VM Docker 빌드 미사용 |
+| `frontend-vm/Dockerfile` | FRONTEND-VM은 Node.js/npm 직접 실행 기준 |
+| `frontend-vm/.dockerignore` | FRONTEND-VM Docker 빌드 미사용 |
+| `its-vm/Dockerfile` | ITS-VM은 Python/FastAPI 직접 실행 기준 |
+| `its-vm/.dockerignore` | ITS-VM Docker 빌드 미사용 |
+
+## VM별 실행 기준
+
+| VM | Runtime |
 |---|---|
 | DB-VM | MySQL direct install |
 | FLASK-VM | Python venv |
 | FRONTEND-VM | Node.js/npm |
 | AI-VM | Docker |
 | ITS-VM | Python/FastAPI |
-| LLM Server | AI-VM internal service |
 
-## Docker Runtime Policy
+## 금지 사항
 
-Docker is officially used only inside AI-VM.
+- 비-AI VM에 Dockerfile을 다시 추가하지 않습니다.
+- 루트 `docker-compose.yml`을 다시 추가하지 않습니다.
+- 프론트엔드에서 DB에 직접 접근하지 않습니다.
+- `.env`, `.env.local`, Secret 파일을 Git에 커밋하지 않습니다.
 
-- AI-VM uses Docker for services under `ai-vm/`, including `ai-vm/llm-server`.
-- DB-VM, FLASK-VM, FRONTEND-VM, and ITS-VM do not use Docker in the current VM runtime.
-- Non-AI Docker files are kept only for legacy/local development reference unless the team agrees to remove them.
+## 예외
 
-## Keep
-
-The following directories are part of the current project structure.
-
-- db-vm/
-- flask-vm/
-- frontend-vm/
-- its-vm/
-- ai-vm/
-- docs/infra/
-
-## Do Not Commit
-
-The following files and directories are runtime/local-only files and must not be committed.
-
-- .env
-- .env.local
-- .venv/
-- node_modules/
-- __pycache__/
-- *.pyc
-- .next/
-- runtime files under storage/
-
-## Legacy / Review Required
-
-The following files may include previous local or Docker-based development assumptions.
-Do not delete them without team agreement.
-
-- root docker-compose.yml
-- root .dockerignore
-- flask-vm/Dockerfile
-- flask-vm/.dockerignore
-- old local development instructions
-- version files that conflict with actual VM runtime
-
-## Current Verified Connections
-
-- FRONTEND-VM -> FLASK-VM: success
-- FLASK-VM -> DB-VM: success
-- FLASK-VM -> AI-VM LLM 8000: success
-- FLASK-VM -> AI-VM AI 8001: currently not running or not exposed
-
-## Cleanup Direction
-
-1. Keep VM-based runtime documents under docs/infra.
-2. Mark old local/Docker instructions as legacy if still needed.
-3. Remove or move legacy files only after team agreement.
-4. Do not commit actual environment files or runtime-generated files.
-
-## Related Documents
-
-- docs/infra/server-folder-map.md
-- docs/infra/vm-server-status.md
-- docs/infra/env-guide.md
+AI-VM 관련 Docker 파일은 유지합니다.
+AI-VM 외 Docker 실행이 필요해질 경우, 팀 합의 후 별도 PR로 정책 문서를 먼저 수정해야 합니다.
