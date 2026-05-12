@@ -3,26 +3,108 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signup } from "@/features/auth/api";
+import {
+  sendEmailVerificationCode,
+  signup,
+  verifyEmailCode,
+} from "@/features/auth/api";
+
+const LOGIN_ID_PATTERN = /^[a-z0-9_-]{4,20}$/;
 
 export default function SignupPage() {
   const router = useRouter();
 
   const [name, setName] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [requestedRole, setRequestedRole] = useState("CONTROL_ADMIN");
   const [reason, setReason] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [isCodeSent, setIsCodeSent] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [emailVerifyMessage, setEmailVerifyMessage] = useState("");
+  const [isSendingCode, setIsSendingCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const canSubmit =
+    Boolean(loginId && email && password && name && isEmailVerified) &&
+    !isSubmitting;
+
+  function handleEmailChange(nextEmail: string) {
+    setEmail(nextEmail);
+    setIsEmailVerified(false);
+    setIsCodeSent(false);
+    setCode("");
+    setEmailVerifyMessage("");
+  }
+
+  async function handleSendVerificationCode() {
+    if (!email) {
+      setEmailVerifyMessage("이메일 주소를 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsSendingCode(true);
+      setEmailVerifyMessage("");
+      await sendEmailVerificationCode(email);
+      setIsCodeSent(true);
+      setIsEmailVerified(false);
+      setCode("");
+      setEmailVerifyMessage("인증번호를 전송했습니다. 이메일을 확인해주세요.");
+    } catch (error) {
+      setIsCodeSent(false);
+      setIsEmailVerified(false);
+      setEmailVerifyMessage(
+        error instanceof Error
+          ? error.message
+          : "인증번호 전송 중 오류가 발생했습니다."
+      );
+    } finally {
+      setIsSendingCode(false);
+    }
+  }
+
+  async function handleVerifyEmailCode() {
+    if (code.length !== 6) {
+      setEmailVerifyMessage("6자리 인증번호를 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsVerifyingCode(true);
+      setEmailVerifyMessage("");
+      await verifyEmailCode(email, code);
+      setIsEmailVerified(true);
+      setEmailVerifyMessage("이메일 인증이 완료되었습니다.");
+    } catch {
+      setIsEmailVerified(false);
+      setEmailVerifyMessage("인증번호가 올바르지 않습니다.");
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  }
 
   const handleSubmitSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!name || !email || !password) {
-      alert("이름, 이메일, 비밀번호를 입력해주세요.");
+    if (!name || !loginId || !email || !password) {
+      alert("이름, 아이디, 이메일, 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    if (!LOGIN_ID_PATTERN.test(loginId)) {
+      alert("아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.");
+      return;
+    }
+
+    if (!isEmailVerified) {
+      alert("이메일 인증을 완료해야 회원가입할 수 있습니다.");
       return;
     }
 
@@ -41,6 +123,7 @@ export default function SignupPage() {
 
       await signup({
         name,
+        login_id: loginId,
         phone,
         email,
         password,
@@ -49,7 +132,7 @@ export default function SignupPage() {
         agreed,
       });
 
-      alert("회원가입 신청이 접수되었습니다. 이메일을 확인한 뒤 인증을 완료해주세요.");
+      alert("회원가입 신청이 접수되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
 
       router.push("/pending-approval");
     } catch (error) {
@@ -105,6 +188,27 @@ export default function SignupPage() {
           </div>
 
           <div>
+            <label className="text-sm font-semibold text-slate-300">아이디</label>
+            <input
+              type="text"
+              name="login_id"
+              autoComplete="username"
+              placeholder="영문 소문자, 숫자, _, -"
+              value={loginId}
+              onChange={(event) => setLoginId(event.target.value.trim())}
+              pattern="[a-z0-9_-]{4,20}"
+              minLength={4}
+              maxLength={20}
+              required
+              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+            />
+
+            <p className="mt-2 text-xs text-slate-400">
+              4~20자의 영문 소문자, 숫자, _, -만 사용할 수 있습니다. @는 사용할 수 없습니다.
+            </p>
+          </div>
+
+          <div>
             <label className="text-sm font-semibold text-slate-300">연락처</label>
             <input
               type="tel"
@@ -117,17 +221,67 @@ export default function SignupPage() {
 
           <div>
             <label className="text-sm font-semibold text-slate-300">이메일</label>
-            <input
-              type="email"
-              placeholder="staff@staccato.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
-            />
+            <div className="mt-2 grid gap-3 md:grid-cols-[1fr_auto]">
+              <input
+                type="email"
+                name="email"
+                autoComplete="email"
+                placeholder="이메일 주소를 입력하세요"
+                value={email}
+                onChange={(event) => handleEmailChange(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+              />
+
+              <button
+                type="button"
+                onClick={handleSendVerificationCode}
+                disabled={!email || isSendingCode || isEmailVerified}
+                className="rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
+              >
+                {isSendingCode
+                  ? "전송 중..."
+                  : isEmailVerified
+                    ? "인증 완료"
+                    : "인증번호 전송"}
+              </button>
+            </div>
 
             <p className="mt-2 text-xs text-slate-400">
-              회원가입 신청 후 발송되는 인증 링크로 이메일 인증을 완료해주세요.
+              이메일 인증을 완료해야 회원가입할 수 있습니다.
             </p>
+
+            {isCodeSent && !isEmailVerified ? (
+              <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+                  placeholder="6자리 인증번호"
+                  className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleVerifyEmailCode}
+                  disabled={code.length !== 6 || isVerifyingCode}
+                  className="rounded-lg bg-sky-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                >
+                  {isVerifyingCode ? "확인 중..." : "인증 확인"}
+                </button>
+              </div>
+            ) : null}
+
+            {emailVerifyMessage ? (
+              <p
+                className={`mt-2 text-xs font-semibold ${
+                  isEmailVerified ? "text-emerald-300" : "text-sky-200"
+                }`}
+              >
+                {emailVerifyMessage}
+              </p>
+            ) : null}
           </div>
 
           <div>
@@ -200,11 +354,17 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={!canSubmit}
             className="mt-2 w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
             {isSubmitting ? "신청 중..." : "회원가입 신청"}
           </button>
+
+          {!isEmailVerified ? (
+            <p className="text-center text-xs font-semibold text-slate-400">
+              이메일 인증을 완료해야 회원가입할 수 있습니다.
+            </p>
+          ) : null}
         </form>
 
         <div className="mt-6 grid grid-cols-2 gap-3">
