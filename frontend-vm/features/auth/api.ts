@@ -1,10 +1,12 @@
 import type {
   AuthResponse,
+  GoogleIdentityStartResponse,
   LoginRequest,
   SendEmailVerificationRequest,
   SignupApiRequest,
   SignupRequest,
 } from "./types";
+import { apiClient } from "@/lib/apiClient";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_PROXY_PATH ?? "/backend-api";
@@ -55,6 +57,10 @@ export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
     email: payload.email,
     password: payload.password,
     name: payload.name,
+    phone: payload.phone?.trim() || undefined,
+    requested_role: payload.requestedRole,
+    request_memo: payload.reason?.trim() || undefined,
+    agreed: payload.agreed,
   };
 }
 
@@ -96,5 +102,12 @@ export function verifyEmailCode(email: string, code: string) {
   return request<AuthResponse>("/auth/verify-email", {
     method: "POST",
     body: JSON.stringify({ email, code }),
+  });
+}
+
+export function startGoogleIdentityVerification(email: string) {
+  return apiClient<GoogleIdentityStartResponse>("/auth/identity/google/start", {
+    method: "POST",
+    body: { email },
   });
 }

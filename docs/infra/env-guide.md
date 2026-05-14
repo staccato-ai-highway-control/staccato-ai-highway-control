@@ -31,4 +31,4 @@ Example:
 - Do not commit actual passwords.
 - If the DB password contains #, encode it as %23 in DATABASE_URL.
 - Keep actual .env files only on each VM.
-- Use .env.example or documentation for shared examples.
+- Use this document as the single source of truth for environment variable keys. Do not commit runtime environment files or example environment files.
