@@ -1,18 +1,25 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.services.report_service import ReportService
+from app.utils.security import require_auth
 import logging
+
+from app.modules.report_upload.service import ReportUploadService
 
 # 로깅 설정 (에러 추적용)
 logger = logging.getLogger(__name__)
 
-report_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
+report_upload_bp = Blueprint('report_upload', __name__, url_prefix='/api/reports')
 
-@report_bp.route('', methods=['POST'])
-@jwt_required()
+
+@report_upload_bp.route("/health", methods=["GET"])
+def health():
+    return {"status": "report upload module ok"}, 200
+
+
+@report_upload_bp.route('', methods=['POST'])
+@require_auth
 def create_report():
     try:
-        user_id = get_jwt_identity()
+        user_id = request.current_user.id
 
         # multipart/form-data에서 텍스트 데이터 추출
         data = request.form.to_dict()
@@ -24,7 +31,7 @@ def create_report():
             return jsonify({"error": "파일이 업로드되지 않았습니다."}), 400
 
         # 서비스 로직 호출
-        report = ReportService.create_report(user_id, data, files)
+        report = ReportUploadService.create_report(user_id, data, files)
 
         return jsonify({
             "message": "리포트가 성공적으로 접수되었습니다.",

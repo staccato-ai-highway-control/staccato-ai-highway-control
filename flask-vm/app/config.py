@@ -61,7 +61,7 @@ class Config:
     # === File Restrictions 추가 ===
     UPLOAD_MAX_IMAGE_SIZE_MB = int(os.getenv("UPLOAD_MAX_IMAGE_SIZE_MB", "20"))
     UPLOAD_MAX_VIDEO_SIZE_MB = int(os.getenv("UPLOAD_MAX_VIDEO_SIZE_MB", "500"))
-    
+
     # 리스트 형태로 변환하여 사용하기 편하게 설정
     ALLOWED_IMAGE_EXTENSIONS = os.getenv("ALLOWED_IMAGE_EXTENSIONS", "jpg,jpeg,png").split(",")
     ALLOWED_VIDEO_EXTENSIONS = os.getenv("ALLOWED_VIDEO_EXTENSIONS", "mp4,mov,avi").split(",")

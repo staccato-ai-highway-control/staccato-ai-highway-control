@@ -11,13 +11,13 @@ from app import create_app
 try:
     from app import db
 except ImportError:
-    from app.extensions import db 
+    from app.extensions import db
 
 from app.modules.incident.service import IncidentService
 
 def test_incident_creation_console():
     app = create_app()
-    
+
     with app.app_context():
         print("\n" + "="*50)
         print("🔍 [Unit Test] IncidentService 저장 테스트 시작")
@@ -29,7 +29,7 @@ def test_incident_creation_console():
             "incident_type": "Pothole",
             "description": "유닛 테스트 중입니다."
         }
-        
+
         # 서비스가 요구할 법한 파일 정보들을 다 때려 넣습니다.
         test_file = {
             "file_path": "/home/lsh/staccato-ai-highway-control/flask-vm/storage/test.jpg",
@@ -38,7 +38,7 @@ def test_incident_creation_console():
             "original_filename": "pothole_photo.jpg",
             "mime_type": "image/jpeg"
         }
-        
+
         user_id = 1
 
         try:

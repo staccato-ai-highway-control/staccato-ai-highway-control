@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from flask import current_app
 
 
-class ReportService:
+class ReportUploadService:
     @staticmethod
     def create_report(user_id, data, files):
         from app.extensions import db
@@ -48,7 +48,7 @@ class ReportService:
                     if not file or file.filename == "":
                         continue
 
-                    file_type = ReportService._get_file_type(file.filename)
+                    file_type = ReportUploadService._get_file_type(file.filename)
 
                     file.seek(0, os.SEEK_END)
                     file_length = file.tell()
@@ -113,6 +113,23 @@ class ReportService:
             db.session.rollback()
             current_app.logger.error(f"Report creation failed: {str(e)}")
             raise e
+
+
+    @staticmethod
+    def process_file_upload(file):
+        """Single file upload helper used by incident routes."""
+        if file is None or not getattr(file, "filename", ""):
+            raise ValueError("파일이 업로드되지 않았습니다.")
+
+        filename = file.filename
+        file_type = ReportUploadService._get_file_type(filename)
+
+        return {
+            "filename": filename,
+            "original_filename": filename,
+            "file_type": file_type,
+            "content_type": getattr(file, "content_type", None),
+        }
 
     @staticmethod
     def _get_file_type(filename):

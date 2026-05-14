@@ -1,10 +1,11 @@
 import io
 import pytest
-from flask_jwt_extended import create_access_token, JWTManager
+import jwt
 from app import create_app
 from app.extensions import db
 from app.models import User, IncidentReport
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
+from uuid import uuid4
 
 @pytest.fixture
 def app():
@@ -12,12 +13,10 @@ def app():
     app.config.update({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        "SECRET_KEY": "test-very-long-secret-key-32-chars-at-least",
         "JWT_SECRET_KEY": "test-very-long-secret-key-32-chars-at-least",
         "UPLOAD_BASE_PATH": "/tmp/flask_test_uploads"
     })
-
-    if 'flask-jwt-extended' not in app.extensions:
-        JWTManager(app)
 
     with app.app_context():
         db.create_all()
@@ -32,19 +31,34 @@ def client(app):
 @pytest.fixture
 def auth_header(app):
     with app.app_context():
+        suffix = uuid4().hex[:12]
         test_user = User(
-            login_id="test_admin",
+            login_id=f"report_admin_{suffix}",
             name="테스트유저",
             password_hash="hashed_pw",
-            email="test@example.com",
-            role="ADMIN",
-            account_status="APPROVED",
+            email=f"report_admin_{suffix}@test.local",
+            role="SUPER_ADMIN",
+            account_status="ACTIVE",
             created_at=datetime.now(UTC)
         )
         db.session.add(test_user)
         db.session.commit()
 
-        access_token = create_access_token(identity=str(test_user.id))
+        now = datetime.now(UTC)
+        payload = {
+            "sub": str(test_user.id),
+            "user_id": test_user.id,
+            "id": test_user.id,
+            "login_id": test_user.login_id,
+            "role": test_user.role,
+            "iat": now,
+            "exp": now + timedelta(hours=1),
+        }
+        access_token = jwt.encode(
+            payload,
+            app.config["SECRET_KEY"],
+            algorithm="HS256"
+        )
         return {"Authorization": f"Bearer {access_token}"}
 
 
