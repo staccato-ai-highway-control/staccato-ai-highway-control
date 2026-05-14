@@ -8,8 +8,14 @@ import {
   signup,
   verifyEmailCode,
 } from "@/features/auth/api";
+import type { UserRole } from "@/features/auth/types";
 
 const LOGIN_ID_PATTERN = /^[a-z0-9_-]{4,20}$/;
+
+function isEmailAlreadyExistsError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  return message.toLowerCase().includes("email already exists");
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -21,7 +27,7 @@ export default function SignupPage() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
-  const [requestedRole, setRequestedRole] = useState("CONTROL_ADMIN");
+  const [requestedRole, setRequestedRole] = useState<UserRole>("CONTROL_ADMIN");
   const [reason, setReason] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [isCodeSent, setIsCodeSent] = useState(false);
@@ -32,8 +38,15 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit =
-    Boolean(loginId && email && password && passwordConfirm && name && agreed) &&
-    !isCodeSent &&
+    Boolean(
+      loginId &&
+        email &&
+        password &&
+        passwordConfirm &&
+        name &&
+        agreed &&
+        isEmailVerified
+    ) &&
     !isSubmitting;
 
   function handleEmailChange(nextEmail: string) {
@@ -47,11 +60,6 @@ export default function SignupPage() {
   async function handleSendVerificationCode() {
     if (!email) {
       setEmailVerifyMessage("이메일 주소를 입력해주세요.");
-      return;
-    }
-
-    if (!isCodeSent) {
-      setEmailVerifyMessage("회원가입 신청 후 인증번호를 재발송할 수 있습니다.");
       return;
     }
 
@@ -87,9 +95,7 @@ export default function SignupPage() {
       setEmailVerifyMessage("");
       await verifyEmailCode(email, code);
       setIsEmailVerified(true);
-      setEmailVerifyMessage("이메일 인증이 완료되었습니다.");
-      alert("이메일 인증이 완료되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
-      router.push("/pending-approval");
+      setEmailVerifyMessage("이메일 인증이 완료되었습니다. 이제 회원가입 신청을 진행할 수 있습니다.");
     } catch {
       setIsEmailVerified(false);
       setEmailVerifyMessage("인증번호가 올바르지 않습니다.");
@@ -121,6 +127,11 @@ export default function SignupPage() {
       return;
     }
 
+    if (!isEmailVerified) {
+      setEmailVerifyMessage("회원가입 신청 전에 이메일 인증을 완료해주세요.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -135,11 +146,13 @@ export default function SignupPage() {
         agreed,
       });
 
-      setIsCodeSent(true);
-      setIsEmailVerified(false);
-      setCode("");
-      setEmailVerifyMessage("회원가입 신청이 접수되었습니다. 이메일로 받은 인증번호를 입력해주세요.");
+      router.push("/pending-approval");
     } catch (error) {
+      if (isEmailAlreadyExistsError(error)) {
+        setEmailVerifyMessage("이미 가입 신청된 이메일입니다. 로그인 또는 승인 상태를 확인해주세요.");
+        return;
+      }
+
       alert(
         error instanceof Error
           ? error.message
@@ -151,7 +164,7 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 py-10 text-white">
+    <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-slate-950 px-6 py-10 text-white">
       <img
         src="/assets/images/hero-piano-road.png"
         alt="고속도로 관제 배경"
@@ -239,20 +252,50 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={handleSendVerificationCode}
-                disabled={!email || !isCodeSent || isSendingCode || isEmailVerified}
+                disabled={!email || isSendingCode || isEmailVerified}
                 className="rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
               >
                 {isSendingCode
-                  ? "재발송 중..."
+                  ? "발송 중..."
                   : isEmailVerified
                     ? "인증 완료"
-                    : "인증번호 재발송"}
+                    : isCodeSent
+                      ? "인증번호 재발송"
+                      : "인증번호 발송"}
               </button>
             </div>
 
             <p className="mt-2 text-xs text-slate-400">
-              회원가입 신청이 완료되면 인증번호가 이메일로 자동 발송됩니다.
+              회원가입 신청 전에 이메일 인증을 먼저 완료해주세요.
             </p>
+
+            <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-sm font-bold text-slate-100">
+                본인인증 방법
+              </p>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                MVP에서는 이메일 인증으로 본인인증을 진행합니다.
+              </p>
+
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={handleSendVerificationCode}
+                  disabled={!email || isSendingCode || isEmailVerified}
+                  className="rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
+                >
+                  {isEmailVerified ? "이메일 인증 완료" : "이메일 인증하기"}
+                </button>
+
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-lg border border-white/10 bg-slate-800/70 px-4 py-3 text-sm font-bold text-slate-400 disabled:cursor-not-allowed"
+                >
+                  Google 본인인증은 추후 지원 예정입니다.
+                </button>
+              </div>
+            </div>
 
             {isCodeSent && !isEmailVerified ? (
               <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
@@ -261,7 +304,9 @@ export default function SignupPage() {
                   inputMode="numeric"
                   maxLength={6}
                   value={code}
-                  onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+                  onChange={(event) =>
+                    setCode(event.target.value.replace(/\D/g, ""))
+                  }
                   placeholder="6자리 인증번호"
                   className="w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
                 />
@@ -280,7 +325,9 @@ export default function SignupPage() {
             {emailVerifyMessage ? (
               <p
                 className={`mt-2 text-xs font-semibold ${
-                  isEmailVerified ? "text-emerald-300" : "text-sky-200"
+                  isEmailVerified
+                    ? "text-emerald-300"
+                    : "text-sky-200"
                 }`}
               >
                 {emailVerifyMessage}
@@ -294,11 +341,12 @@ export default function SignupPage() {
             </label>
             <select
               value={requestedRole}
-              onChange={(event) => setRequestedRole(event.target.value)}
+              onChange={(event) => setRequestedRole(event.target.value as UserRole)}
               className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition focus:border-sky-400"
             >
-              <option value="CONTROL_ADMIN">관제관리자</option>
-              <option value="MAINTENANCE_ADMIN">유지보수 담당자</option>
+              <option value="CONTROL_ADMIN">관제 관리자</option>
+              <option value="DISPATCH_ADMIN">출동 관리자</option>
+              <option value="VIEWER">일반 조회 계정</option>
             </select>
           </div>
 
@@ -361,16 +409,12 @@ export default function SignupPage() {
             disabled={!canSubmit}
             className="mt-2 w-full rounded-lg bg-sky-500 px-4 py-3 font-bold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
           >
-            {isSubmitting
-              ? "신청 중..."
-              : isCodeSent
-                ? "인증번호 발송 완료"
-                : "회원가입 신청"}
+            {isSubmitting ? "신청 중..." : "회원가입 신청"}
           </button>
 
-          {!isCodeSent ? (
+          {!isEmailVerified ? (
             <p className="text-center text-xs font-semibold text-slate-400">
-              회원가입 신청 후 이메일로 받은 6자리 인증번호를 입력해주세요.
+              이메일 인증을 완료하면 회원가입 신청 버튼이 활성화됩니다.
             </p>
           ) : null}
         </form>
