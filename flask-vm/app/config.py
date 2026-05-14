@@ -4,7 +4,6 @@ from urllib.parse import quote_plus
 
 from dotenv import load_dotenv
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -51,4 +50,21 @@ class Config:
     SOCKETIO_CORS_ORIGINS = os.getenv("SOCKETIO_CORS_ORIGINS", CORS_ORIGINS)
 
     INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
+
+    # === Storage Settings 수정 및 추가 ===
     STORAGE_ROOT = os.getenv("STORAGE_ROOT", str(BASE_DIR / "storage"))
+    UPLOAD_BASE_PATH = os.getenv("UPLOAD_BASE_PATH", os.path.join(STORAGE_ROOT, "uploads"))
+    THUMBNAIL_BASE_PATH = os.getenv("THUMBNAIL_BASE_PATH", os.path.join(STORAGE_ROOT, "thumbnails"))
+    SNAPSHOT_BASE_PATH = os.getenv("SNAPSHOT_BASE_PATH", os.path.join(STORAGE_ROOT, "snapshots"))
+    ANALYSIS_RESULT_BASE_PATH = os.getenv("ANALYSIS_RESULT_BASE_PATH", os.path.join(STORAGE_ROOT, "analysis-results"))
+
+    # === File Restrictions 추가 ===
+    UPLOAD_MAX_IMAGE_SIZE_MB = int(os.getenv("UPLOAD_MAX_IMAGE_SIZE_MB", "20"))
+    UPLOAD_MAX_VIDEO_SIZE_MB = int(os.getenv("UPLOAD_MAX_VIDEO_SIZE_MB", "500"))
+
+    # 리스트 형태로 변환하여 사용하기 편하게 설정
+    ALLOWED_IMAGE_EXTENSIONS = os.getenv("ALLOWED_IMAGE_EXTENSIONS", "jpg,jpeg,png").split(",")
+    ALLOWED_VIDEO_EXTENSIONS = os.getenv("ALLOWED_VIDEO_EXTENSIONS", "mp4,mov,avi").split(",")
+
+    # Flask 자체 파일 업로드 용량 제한 (필요 시 설정)
+    MAX_CONTENT_LENGTH = UPLOAD_MAX_VIDEO_SIZE_MB * 1024 * 1024
