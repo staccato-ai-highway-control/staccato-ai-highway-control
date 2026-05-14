@@ -1,16 +1,11 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/internal/llm/chatbot", tags=["LLM Chatbot"])
+from app.schemas.chatbot_schema import ChatbotAnswerRequest
+from app.services.llm_service import generate_chatbot_answer
 
-@router.post("/answer")
-def answer_chatbot():
-    return {
-        "success": True,
-        "message": "Mock chatbot answer generated",
-        "data": {
-            "answer": "이 사고는 주행 차로 내 정차로 판단되어 위험도가 높습니다. 정차 지속 시간과 ROI 위치를 확인해야 합니다.",
-            "llm_provider": "MOCK",
-            "llm_model": "mock-llm",
-            "prompt_version": "v1"
-        }
-    }
+router = APIRouter()
+
+
+@router.post("/internal/llm/chatbot/answer")
+def chatbot_answer(request: ChatbotAnswerRequest):
+    return generate_chatbot_answer(request.model_dump())
