@@ -22,6 +22,15 @@ function getAccessToken(response: AuthResponse) {
   );
 }
 
+function getTokenType(response: AuthResponse) {
+  return (
+    response.token_type ??
+    response.tokenType ??
+    response.data?.token_type ??
+    response.data?.tokenType
+  );
+}
+
 function getFriendlyLoginError(error: unknown) {
   const message =
     error instanceof Error ? error.message : "로그인 중 오류가 발생했습니다.";
@@ -61,6 +70,11 @@ export default function LoginPage() {
 
       if (!accessToken) {
         throw new Error("로그인 응답에서 access_token을 찾을 수 없습니다.");
+      }
+
+      const tokenType = getTokenType(response);
+      if (tokenType && tokenType.toLowerCase() !== "bearer") {
+        throw new Error(`지원하지 않는 토큰 타입입니다: ${tokenType}`);
       }
 
       setStoredAccessToken(accessToken);

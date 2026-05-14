@@ -1,10 +1,16 @@
+export type UserRole =
+  | "SUPER_ADMIN"
+  | "CONTROL_ADMIN"
+  | "DISPATCH_ADMIN"
+  | "VIEWER";
+
 export type SignupRequest = {
   login_id: string;
   email: string;
   password: string;
   name: string;
   phone?: string;
-  requestedRole: string;
+  requestedRole: UserRole;
   reason?: string;
   agreed: boolean;
 };
@@ -14,6 +20,10 @@ export type SignupApiRequest = {
   email: string;
   password: string;
   name: string;
+  phone?: string;
+  requested_role: UserRole;
+  request_memo?: string;
+  agreed: boolean;
 };
 
 export type SendEmailVerificationRequest = {
@@ -30,11 +40,23 @@ export type AuthUser = {
   login_id?: string;
   email?: string;
   name?: string;
-  role?: string;
+  role?: UserRole;
+  requested_role?: UserRole;
   phone?: string | null;
   account_status?: string;
   is_email_verified?: boolean;
+  email_verified_at?: string | null;
 };
+
+export interface GoogleIdentityStartResponse {
+  message: string;
+  data: {
+    provider: "GOOGLE";
+    email: string;
+    authorization_url: string;
+    expires_at: string;
+  };
+}
 
 export type AuthResponse = {
   success?: boolean;
@@ -43,6 +65,8 @@ export type AuthResponse = {
     access_token?: string;
     accessToken?: string;
     token?: string;
+    token_type?: string;
+    tokenType?: string;
     user?: AuthUser;
     email_verification?: {
       verification_link?: string;
@@ -53,6 +77,8 @@ export type AuthResponse = {
   access_token?: string;
   accessToken?: string;
   token?: string;
+  token_type?: string;
+  tokenType?: string;
   user?: AuthUser;
 };
 

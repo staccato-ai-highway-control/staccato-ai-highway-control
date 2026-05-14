@@ -1,6 +1,55 @@
-import Link from "next/link";
+"use client";
 
-export default function PendingApprovalPage() {
+import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getStoredAuthUser } from "@/lib/authStorage";
+
+function isIdentityVerified(user: ReturnType<typeof getStoredAuthUser>) {
+  return Boolean(user?.is_email_verified || user?.email_verified_at);
+}
+
+function PendingApprovalContent() {
+  const searchParams = useSearchParams();
+  const [authUser, setAuthUser] = useState(() => getStoredAuthUser());
+  const [email, setEmail] = useState("");
+
+  const queryEmail = searchParams.get("email");
+  const isVerified = isIdentityVerified(authUser);
+
+  useEffect(() => {
+    const storedUser = getStoredAuthUser();
+    setAuthUser(storedUser);
+    setEmail(queryEmail ?? storedUser?.email ?? "");
+  }, [queryEmail]);
+
+  const notice = useMemo(() => {
+    if (isVerified) {
+      return {
+        tone: "success",
+        title: "본인인증이 완료되었습니다.",
+        description: "관리자 승인 후 서비스를 이용할 수 있습니다.",
+      };
+    }
+
+    return {
+      tone: "info",
+      title: "본인인증 방법을 선택해주세요.",
+      description: "MVP에서는 이메일 인증으로 본인인증을 진행합니다.",
+    };
+  }, [isVerified]);
+
+  const emailVerificationHref = email.trim()
+    ? `/verify-email?email=${encodeURIComponent(email.trim())}`
+    : "/verify-email";
+
+  const noticeClassName =
+    notice.tone === "success"
+      ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"
+      : notice.tone === "error"
+        ? "border-rose-400/30 bg-rose-400/10 text-rose-100"
+        : "border-amber-400/30 bg-amber-400/10 text-amber-100";
+
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 text-white">
       <img
@@ -26,17 +75,50 @@ export default function PendingApprovalPage() {
 
         <h1 className="mt-4 text-3xl font-black">관리자 승인 대기 중</h1>
 
-        <p className="mt-5 leading-7 text-slate-300">
-          회원가입 신청이 접수되었습니다.
-          <br />
-          최고관리자 승인 후 관제 시스템 로그인이 가능합니다.
-        </p>
+        <div className={`mt-6 rounded-xl border p-4 text-left text-sm ${noticeClassName}`}>
+          <p className="font-bold">{notice.title}</p>
+          <p className="mt-2 leading-6 text-slate-200">{notice.description}</p>
+        </div>
 
-        <div className="mt-8 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-left text-sm text-amber-100">
-          <p className="font-bold">승인 절차</p>
+        {!isVerified ? (
+          <div className="mt-8 grid gap-4 text-left">
+            <div>
+              <label className="text-sm font-semibold text-slate-300">
+                가입 이메일
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="user@example.com"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900/80 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400"
+              />
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Link
+                href={emailVerificationHref}
+                className="rounded-lg border border-sky-400/60 px-4 py-3 text-center text-sm font-bold text-sky-100 no-underline transition hover:bg-sky-500/20"
+              >
+                이메일 인증하기
+              </Link>
+
+              <button
+                type="button"
+                disabled
+                className="rounded-lg border border-white/10 bg-slate-800/70 px-4 py-3 text-sm font-bold text-slate-400 disabled:cursor-not-allowed"
+              >
+                Google 본인인증은 추후 지원 예정입니다.
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-4 text-left text-sm">
+          <p className="font-bold text-slate-100">승인 절차</p>
 
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-300">
-            <li>이메일 인증 완료</li>
+            <li>본인인증 완료</li>
             <li>회원가입 신청 접수</li>
             <li>최고관리자 계정 승인</li>
             <li>승인 후 로그인 가능</li>
@@ -60,5 +142,13 @@ export default function PendingApprovalPage() {
         </div>
       </section>
     </main>
+  );
+}
+
+export default function PendingApprovalPage() {
+  return (
+    <Suspense fallback={null}>
+      <PendingApprovalContent />
+    </Suspense>
   );
 }

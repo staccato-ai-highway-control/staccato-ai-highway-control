@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/lib/constants";
+import { getStoredAccessToken } from "@/lib/authStorage";
 
 type ApiOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
@@ -6,7 +7,7 @@ type ApiOptions = Omit<RequestInit, "body"> & {
 };
 
 export async function apiClient<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+  const token = getStoredAccessToken();
   const headers = new Headers(options.headers);
 
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -26,4 +27,3 @@ export async function apiClient<T>(path: string, options: ApiOptions = {}): Prom
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
-
