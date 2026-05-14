@@ -7,21 +7,15 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import type { UserRole } from "@/features/auth/types";
 import { apiClient } from "@/lib/apiClient";
 
 type SignupRequestStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "CANCELLED";
-type AdminRole =
-  | "SUPER_ADMIN"
-  | "AUTH_ADMIN"
-  | "CONTROL_ADMIN"
-  | "DISPATCH_ADMIN"
-  | "MAINTENANCE_ADMIN"
-  | "VIEWER";
 
 type SignupRequestApiItem = {
   id: number;
   request_status: SignupRequestStatus;
-  requested_role: AdminRole;
+  requested_role: UserRole;
   request_memo?: string | null;
   created_at?: string | null;
   user?: {
@@ -40,7 +34,7 @@ type AdminSignupRequest = {
   name: string;
   email: string;
   phone: string;
-  requestedRole: AdminRole;
+  requestedRole: UserRole;
   reason: string;
   status: SignupRequestStatus;
   requestedAt: string;
@@ -60,13 +54,11 @@ const statusTone: Record<SignupRequestStatus, "amber" | "green" | "red" | "slate
   CANCELLED: "slate",
 };
 
-const roleLabels: Record<AdminRole, string> = {
-  SUPER_ADMIN: "최고관리자",
-  AUTH_ADMIN: "회원관리자",
-  CONTROL_ADMIN: "관제관리자",
-  DISPATCH_ADMIN: "출동관리자",
-  MAINTENANCE_ADMIN: "유지보수 담당자",
-  VIEWER: "조회 사용자",
+const roleLabels: Record<UserRole, string> = {
+  SUPER_ADMIN: "최고 관리자",
+  CONTROL_ADMIN: "관제 관리자",
+  DISPATCH_ADMIN: "출동 관리자",
+  VIEWER: "일반 조회 계정",
 };
 
 export default function SignupRequestsPage() {
@@ -147,11 +139,11 @@ export default function SignupRequestsPage() {
               회원가입 신청자를 최고관리자가 승인하거나 거절합니다.
             </p>
           </div>
-          <Badge tone="blue">SUPER_ADMIN / AUTH_ADMIN</Badge>
+          <Badge tone="blue">SUPER_ADMIN</Badge>
         </section>
 
         <div className="mb-5 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm font-semibold text-sky-800">
-          승인 대기 상태는 DB의 REQUESTED 값을 사용하고, 유지보수 담당자는 MAINTENANCE_ADMIN 권한으로 저장됩니다.
+          승인 대기 상태는 DB의 REQUESTED 값을 사용하고, 요청 권한은 SUPER_ADMIN / CONTROL_ADMIN / DISPATCH_ADMIN / VIEWER 체계를 따릅니다.
         </div>
 
         {errorMessage ? (
