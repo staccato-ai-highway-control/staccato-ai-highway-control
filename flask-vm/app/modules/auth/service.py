@@ -442,7 +442,7 @@ class AuthService:
         if user.account_status == "DELETED":
             raise AuthError("Account is withdrawn.", 403)
 
-        if user.is_email_verified:
+        if user.identity_provider == "GOOGLE" and user.identity_verified_at:
             raise AuthError("Identity is already verified.", 409)
 
         now = datetime.utcnow()
