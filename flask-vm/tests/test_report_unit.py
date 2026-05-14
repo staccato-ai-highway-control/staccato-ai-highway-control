@@ -22,7 +22,7 @@ def app():
         db.create_all()
         yield app
         db.session.remove()
-        db.drop_all()
+        # Keep shared development DB schema intact after this test fixture.
 
 @pytest.fixture
 def client(app):
