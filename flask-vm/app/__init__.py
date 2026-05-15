@@ -84,6 +84,7 @@ from app.modules.chatbot.routes import chatbot_bp
 # - 파일 위치: app/modules/chat/
 # ============================================================
 from app.modules.chat.routes import chat_bp
+from app.modules.frontend_config.routes import frontend_config_bp
 
 
 
@@ -143,6 +144,7 @@ def register_blueprints(app):
     app.register_blueprint(llm_gateway_bp)
     app.register_blueprint(chatbot_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(frontend_config_bp)
 
 
 

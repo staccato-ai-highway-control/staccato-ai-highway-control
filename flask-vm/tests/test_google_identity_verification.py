@@ -173,9 +173,14 @@ def test_start_google_identity_verification_rejects_already_verified_user(
     app_context,
 ):
     email = f"google-already-verified-{uuid4().hex[:8]}@example.com"
-    _make_test_user(email=email, is_email_verified=True)
+    user = _make_test_user(email=email, is_email_verified=True)
 
     try:
+        user.identity_provider = "GOOGLE"
+        user.identity_provider_user_id = "google-sub-already-verified"
+        user.identity_verified_at = datetime.utcnow()
+        db.session.commit()
+
         with pytest.raises(AuthError) as error:
             AuthService.start_google_identity_verification(
                 {"email": email},
