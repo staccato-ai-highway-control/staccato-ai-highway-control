@@ -68,3 +68,9 @@ class Config:
 
     # Flask 자체 파일 업로드 용량 제한 (필요 시 설정)
     MAX_CONTENT_LENGTH = UPLOAD_MAX_VIDEO_SIZE_MB * 1024 * 1024
+
+    # Kakao API keys
+    # - KAKAO_MAP_JS_KEY: 프론트에서 Kakao Maps JavaScript SDK 로드 시 사용
+    # - KAKAO_REST_API_KEY: 백엔드 서버 내부 REST API 호출용, 프론트 응답에 노출 금지
+    KAKAO_MAP_JS_KEY = os.getenv("KAKAO_MAP_JS_KEY")
+    KAKAO_REST_API_KEY = os.getenv("KAKAO_REST_API_KEY")
