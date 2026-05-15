@@ -20,4 +20,5 @@ def create_app():
     app.register_blueprint(llm_gateway_bp)
     app.register_blueprint(chatbot_bp)
     app.register_blueprint(chat_bp)
+    app.register_blueprint(board_bp)
     return app
