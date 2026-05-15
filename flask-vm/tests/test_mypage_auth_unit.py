@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from uuid import uuid4
 
@@ -11,20 +12,27 @@ from app.utils.security import create_access_token, hash_password
 
 @pytest.fixture
 def app():
-    app = create_app()
-    app.config.update(
+    test_database_url = os.environ.get("TEST_DATABASE_URL")
+    assert test_database_url, "TEST_DATABASE_URL is required for MySQL-isolated tests."
+    assert "staccato_test" in test_database_url, "Refusing to run tests outside staccato_test database."
+
+    app = create_app(
         {
             "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "SQLALCHEMY_DATABASE_URI": test_database_url,
             "SECRET_KEY": "test-very-long-secret-key-32-chars-at-least",
             "JWT_SECRET_KEY": "test-very-long-secret-key-32-chars-at-least",
         }
     )
 
     with app.app_context():
+        assert "staccato_test" in str(db.engine.url), f"Unsafe test DB: {db.engine.url}"
+        db.session.remove()
+        db.drop_all()
         db.create_all()
         yield app
         db.session.remove()
+        db.drop_all()
 
 
 @pytest.fixture
