@@ -110,6 +110,36 @@ def me():
     )
 
 
+
+@auth_bp.patch("/me/profile")
+@require_auth
+def update_my_profile():
+    data = request.get_json(silent=True)
+
+    if data is None:
+        data = {}
+
+    if not isinstance(data, dict):
+        return jsonify({"message": "Request body must be a JSON object."}), 400
+
+    try:
+        result = AuthService.update_my_profile(
+            user=request.current_user,
+            data=data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify(
+            {
+                "message": "Profile updated.",
+                "user": result,
+            }
+        ), 200
+    except AuthError as error:
+        return jsonify({"message": error.message}), error.status_code
+
+
 @auth_bp.patch("/me/password")
 @require_auth
 def change_my_password():
