@@ -1,72 +1,44 @@
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, request, jsonify
+from app.utils.security import require_auth
+import logging
 
 from app.modules.report_upload.service import ReportUploadService
-from app.utils.security import require_auth
 
-report_upload_bp = Blueprint("report_upload", __name__, url_prefix="/api/reports")
+# 로깅 설정 (에러 추적용)
+logger = logging.getLogger(__name__)
 
-
-@report_upload_bp.get("/health")
-def report_upload_health():
-    return jsonify({"status": "ok", "service": "report_upload"})
+report_upload_bp = Blueprint('report_upload', __name__, url_prefix='/api/reports')
 
 
-# ──────────────────────────────────────────
-# POST /api/reports/<id>/attachments — 파일 업로드
-# ──────────────────────────────────────────
-@report_upload_bp.post("/<int:report_id>/attachments")
+@report_upload_bp.route("/health", methods=["GET"])
+def health():
+    return {"status": "report upload module ok"}, 200
+
+
+@report_upload_bp.route('', methods=['POST'])
 @require_auth
-def upload_attachment(report_id):
-    if "file" not in request.files:
-        return jsonify({"success": False, "error": "file 필드가 없습니다."}), 400
-
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"success": False, "error": "파일명이 비어있습니다."}), 400
-
+def create_report():
     try:
-        result = ReportUploadService.save_attachment(
-            report_id=report_id,
-            file=file,
-            current_user=request.current_user,
-        )
-        return jsonify({"message": "File uploaded.", "data": result}), 201
+        user_id = request.current_user.id
 
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        # multipart/form-data에서 텍스트 데이터 추출
+        data = request.form.to_dict()
 
+        # 업로드된 파일 목록 추출 ('files'라는 이름으로 여러 개 보낼 때)
+        files = request.files.getlist('files')
 
-# ──────────────────────────────────────────
-# GET /api/reports/<id>/attachments — 첨부파일 목록
-# ──────────────────────────────────────────
-@report_upload_bp.get("/<int:report_id>/attachments")
-@require_auth
-def list_attachments(report_id):
-    try:
-        result = ReportUploadService.list_attachments(report_id=report_id)
-        return jsonify({"data": result}), 200
+        if not files:
+            return jsonify({"error": "파일이 업로드되지 않았습니다."}), 400
+
+        # 서비스 로직 호출
+        report = ReportUploadService.create_report(user_id, data, files)
+
+        return jsonify({
+            "message": "리포트가 성공적으로 접수되었습니다.",
+            "report_code": report.report_code,
+            "report_id": report.id
+        }), 201
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ──────────────────────────────────────────
-# DELETE /api/reports/<id>/attachments/<attachment_id> — 파일 삭제
-# ──────────────────────────────────────────
-@report_upload_bp.delete("/<int:report_id>/attachments/<int:attachment_id>")
-@require_auth
-def delete_attachment(report_id, attachment_id):
-    try:
-        ReportUploadService.delete_attachment(
-            report_id=report_id,
-            attachment_id=attachment_id,
-            current_user=request.current_user,
-        )
-        return jsonify({"message": "File deleted."}), 200
-
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"리포트 생성 중 오류 발생: {str(e)}")
+        return jsonify({"error": "서버 내부 오류가 발생했습니다.", "details": str(e)}), 500

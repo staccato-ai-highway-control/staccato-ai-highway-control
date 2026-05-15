@@ -1,31 +1,26 @@
 "use client";
 
-import { Bell, LogOut, Search } from "lucide-react";
+import { Bell, LogOut, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { AuthUser } from "@/features/auth/types";
+import { getRoleLabel } from "@/config/navigation";
 import { clearStoredAuth, getStoredAuthUser } from "@/lib/authStorage";
-
-function getRoleLabel(role?: string) {
-  const roleLabels: Record<string, string> = {
-    SUPER_ADMIN: "최고관리자",
-    AUTH_ADMIN: "회원관리자",
-    CONTROL_ADMIN: "관제관리자",
-    DISPATCH_ADMIN: "출동관리자",
-    MAINTENANCE_ADMIN: "시설관리자",
-    MAINTAINER: "유지보수 담당자",
-    VIEWER: "조회 사용자",
-  };
-
-  return role ? roleLabels[role] ?? role : "사용자";
-}
 
 function getInitial(user: AuthUser | null) {
   return (user?.name || user?.email || "S").slice(0, 1).toUpperCase();
 }
 
-export function Header({ title }: { title: string }) {
+export function Header({
+  title,
+  isMobileMenuOpen,
+  onMobileMenuToggle,
+}: {
+  title: string;
+  isMobileMenuOpen?: boolean;
+  onMobileMenuToggle?: () => void;
+}) {
   const router = useRouter();
   const [currentTime, setCurrentTime] = useState("");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -61,6 +56,19 @@ export function Header({ title }: { title: string }) {
 
   return (
     <header className="sticky top-0 z-20 flex min-h-16 items-center gap-4 border-b border-slate-200 bg-white px-5 py-3">
+      <button
+        type="button"
+        onClick={onMobileMenuToggle}
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-50 xl:hidden"
+        aria-label={isMobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
+        aria-expanded={Boolean(isMobileMenuOpen)}
+      >
+        {isMobileMenuOpen ? (
+          <X className="h-5 w-5" aria-hidden="true" />
+        ) : (
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        )}
+      </button>
       <h1 className="sr-only">{title}</h1>
       <div className="relative min-w-0 flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
@@ -81,6 +89,15 @@ export function Header({ title }: { title: string }) {
         <Bell className="h-4 w-4" aria-hidden="true" />
         <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-staccato" />
       </button>
+      <Link
+        href="/mypage"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 no-underline transition hover:bg-slate-50 md:hidden"
+        aria-label="마이페이지"
+      >
+        <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-900 text-sm font-black text-white">
+          {getInitial(authUser)}
+        </div>
+      </Link>
       <Link
         href="/mypage"
         className="hidden min-w-0 items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 no-underline transition hover:bg-slate-50 md:flex"

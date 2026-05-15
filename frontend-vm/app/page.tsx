@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { LogOut, UserRound } from "lucide-react";
 import { getMe } from "@/features/auth/api";
 import type { AuthUser } from "@/features/auth/types";
+import { getRoleLabel } from "@/config/navigation";
 import { MVP_DESCRIPTION } from "@/lib/constants";
 import {
   clearStoredAuth,
@@ -14,20 +15,6 @@ import {
   getUserFromAuthResponse,
   setStoredAuthUser,
 } from "@/lib/authStorage";
-
-function getRoleLabel(role?: string) {
-  const roleLabels: Record<string, string> = {
-    SUPER_ADMIN: "최고관리자",
-    AUTH_ADMIN: "회원관리자",
-    CONTROL_ADMIN: "관제관리자",
-    DISPATCH_ADMIN: "출동관리자",
-    MAINTENANCE_ADMIN: "시설관리자",
-    MAINTAINER: "유지보수 담당자",
-    VIEWER: "조회 사용자",
-  };
-
-  return role ? roleLabels[role] ?? role : "사용자";
-}
 
 export default function Home() {
   const router = useRouter();
