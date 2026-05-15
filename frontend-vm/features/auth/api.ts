@@ -80,4 +80,3 @@ export function startGoogleIdentityVerification(email: string) {
     body: { email },
   });
 }
-
