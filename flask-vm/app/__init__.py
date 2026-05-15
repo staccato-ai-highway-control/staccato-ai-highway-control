@@ -17,7 +17,7 @@ from app.extensions import init_extensions
 # - 담당: 공통 백엔드
 # - 예: health check
 # ============================================================
-from app.routes.health_routes import health_bp
+from app.modules.health.routes import health_bp
 
 
 
@@ -171,9 +171,12 @@ def register_blueprints(app):
 
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    if test_config is not None:
+        app.config.update(test_config)
 
     init_extensions(app)
     register_blueprints(app)
