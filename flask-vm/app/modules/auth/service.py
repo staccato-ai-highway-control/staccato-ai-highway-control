@@ -442,7 +442,7 @@ class AuthService:
         if user.account_status == "DELETED":
             raise AuthError("Account is withdrawn.", 403)
 
-        if user.is_email_verified:
+        if user.identity_provider == "GOOGLE" and user.identity_verified_at:
             raise AuthError("Identity is already verified.", 409)
 
         now = datetime.utcnow()
@@ -663,6 +663,86 @@ class AuthService:
             "token_type": "Bearer",
             "user": user.to_public_dict(),
         }
+
+
+    @staticmethod
+    def update_my_profile(user, data, ip_address=None, user_agent=None):
+        """Update current user's editable profile fields for MyPage."""
+        if user is None:
+            raise AuthError("Authentication is required.", 401)
+
+        if user.account_status == "DELETED":
+            raise AuthError("Account is withdrawn.", 403)
+
+        if user.account_status != "ACTIVE":
+            raise AuthError("Only active accounts can update profile.", 403)
+
+        if not isinstance(data, dict):
+            raise AuthError("Request body must be a JSON object.", 400)
+
+        allowed_fields = {"name", "phone"}
+        requested_fields = set(data.keys())
+        blocked_fields = requested_fields - allowed_fields
+
+        if blocked_fields:
+            blocked = ", ".join(sorted(blocked_fields))
+            raise AuthError(f"Cannot update restricted fields: {blocked}", 400)
+
+        if not requested_fields:
+            raise AuthError("At least one profile field is required.", 400)
+
+        changed = False
+
+        if "name" in data:
+            name = (data.get("name") or "").strip()
+
+            if not name:
+                raise AuthError("Name is required.", 400)
+
+            if len(name) > 50:
+                raise AuthError("Name must be 50 characters or less.", 400)
+
+            if user.name != name:
+                user.name = name
+                changed = True
+
+        if "phone" in data:
+            raw_phone = data.get("phone")
+
+            if raw_phone is None or str(raw_phone).strip() == "":
+                phone = None
+            else:
+                phone = str(raw_phone).strip()
+
+                if len(phone) > 20:
+                    raise AuthError("Phone number must be 20 characters or less.", 400)
+
+                if not re.fullmatch(r"[0-9+()\-\s]+", phone):
+                    raise AuthError("Phone number format is invalid.", 400)
+
+            if user.phone != phone:
+                user.phone = phone
+                changed = True
+
+        if changed:
+            user.updated_at = datetime.utcnow()
+            AuthService.create_security_log(
+                action_type="MY_PROFILE_UPDATED",
+                actor_user_id=user.id,
+                target_type="USER",
+                target_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                log_message="User updated own profile.",
+            )
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise AuthError("Failed to update profile.", 500)
+
+        return user.to_public_dict()
 
     @staticmethod
     def change_my_password(

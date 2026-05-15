@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { apiClient } from "@/lib/apiClient";
 
+
 export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   return {
     login_id: payload.login_id,
@@ -79,3 +80,4 @@ export function startGoogleIdentityVerification(email: string) {
     body: { email },
   });
 }
+

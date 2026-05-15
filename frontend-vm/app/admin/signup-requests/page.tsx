@@ -148,7 +148,7 @@ export default function SignupRequestsPage() {
         </section>
 
         <div className="mb-5 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm font-semibold text-sky-800">
-          승인 대기 상태는 DB의 REQUESTED 값을 사용하고, 요청 권한은 SUPER_ADMIN / CONTROL_ADMIN / DISPATCH_ADMIN / VIEWER 체계를 따릅니다.
+          승인 대기 상태는 DB의 REQUESTED 값을 사용하고, 요청 권한은 SUPER_ADMIN / AUTH_ADMIN / CONTROL_ADMIN / MAINTAINER / DISPATCH_ADMIN / VIEWER 체계를 따릅니다.
         </div>
 
         {errorMessage ? (

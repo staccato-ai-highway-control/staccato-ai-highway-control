@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app.modules.incident.service import IncidentService
 from app.modules.report_upload.service import ReportUploadService
+from app.utils.security import require_auth
 
 incident_bp = Blueprint("incident", __name__, url_prefix="/api/incidents")
 
@@ -9,6 +10,7 @@ def health():
     return {"status": "incident module ok"}, 200
 
 @incident_bp.route("", methods=["POST"])
+@require_auth
 def create_incident():
     print(f"Files: {request.files}")
     print(f"Form: {request.form}")
@@ -24,7 +26,7 @@ def create_incident():
 
     try:
         file_info = ReportUploadService.process_file_upload(file)
-        result = IncidentService.create_incident(form_data, file_info, user_id=1)
+        result = IncidentService.create_incident(form_data, file_info, user_id=request.current_user.id)
 
         # 수정된 부분: 'status' 키를 확인하거나 리턴값 구조에 맞춰 체크
         if result.get('status') == 'success':
