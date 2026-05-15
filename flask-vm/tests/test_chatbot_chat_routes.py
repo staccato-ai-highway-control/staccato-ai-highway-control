@@ -1,8 +1,10 @@
 from datetime import datetime
+from uuid import uuid4
 
 from app import create_app
 from app.extensions import db
 from app.models.auth_models import User
+from app.models.incident_models import Incident
 from app.utils.security import create_access_token
 
 
@@ -14,9 +16,11 @@ def _create_chat_test_user(app):
     account_status가 ACTIVE인지 검사한다.
     """
     with app.app_context():
+        suffix = uuid4().hex[:12]
+
         user = User(
-            login_id="chat_test_user",
-            email="chat-test@example.com",
+            login_id=f"chat_test_user_{suffix}",
+            email=f"chat-test-{suffix}@example.com",
             password_hash="test-password-hash",
             name="채팅테스트",
             role="CONTROL_ADMIN",
@@ -63,9 +67,28 @@ def test_chat_room_requires_auth():
     assert response.status_code == 401
 
 
+
+def _create_chat_test_incident(app):
+    with app.app_context():
+        incident = Incident(
+            incident_code=f"TEST-INC-{uuid4().hex[:12]}",
+            incident_type="TEST",
+            incident_status="DETECTED",
+            risk_level="LOW",
+            detected_at=datetime.utcnow(),
+            created_at=datetime.utcnow(),
+        )
+
+        db.session.add(incident)
+        db.session.commit()
+
+        return incident.id
+
+
 def test_chat_room_and_messages():
     app = create_app()
     user_id, token = _create_chat_test_user(app)
+    incident_id = _create_chat_test_incident(app)
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -73,7 +96,7 @@ def test_chat_room_and_messages():
 
     with app.test_client() as client:
         room_response = client.post(
-            "/incidents/1/chat-room",
+            f"/incidents/{incident_id}/chat-room",
             headers=headers,
         )
         assert room_response.status_code == 200
