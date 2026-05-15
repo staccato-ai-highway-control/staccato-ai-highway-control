@@ -1,5 +1,5 @@
 import { AlertTriangle, Bot, CalendarClock, Database, Layers, ShieldCheck } from "lucide-react";
-import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
@@ -66,7 +66,7 @@ const summaryCards = [
 
 export default function LlmTrainingDataPage() {
   return (
-    <RequireAuth>
+    <RequireSuperAdmin title="LLM 학습데이터">
       <AppLayout title="LLM 학습데이터">
         <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -92,7 +92,7 @@ export default function LlmTrainingDataPage() {
             const Icon = card.icon;
 
             return (
-              <Card key={card.label} className="p-5">
+              <Card key={`${card.label}-${card.value}`} className="p-5">
                 <span className={`grid h-11 w-11 place-items-center rounded-lg ${card.bg}`}>
                   <Icon className={`h-5 w-5 ${card.tone}`} />
                 </span>
@@ -122,7 +122,7 @@ export default function LlmTrainingDataPage() {
                 </thead>
                 <tbody>
                   {mockLlmTrainingDatasets.map((dataset) => (
-                    <tr key={dataset.id} className="border-t border-slate-100">
+                    <tr key={`${dataset.id}-${dataset.version}`} className="border-t border-slate-100">
                       <td className="px-4 py-4 font-black text-slate-950">{dataset.datasetName}</td>
                       <td className="px-4 py-4">
                         <Badge tone="blue">{purposeLabels[dataset.purpose]}</Badge>
@@ -171,6 +171,6 @@ export default function LlmTrainingDataPage() {
           </Card>
         </section>
       </AppLayout>
-    </RequireAuth>
+    </RequireSuperAdmin>
   );
 }

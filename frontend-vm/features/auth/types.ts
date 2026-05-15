@@ -1,6 +1,8 @@
 export type UserRole =
   | "SUPER_ADMIN"
+  | "AUTH_ADMIN"
   | "CONTROL_ADMIN"
+  | "MAINTAINER"
   | "DISPATCH_ADMIN"
   | "VIEWER";
 
