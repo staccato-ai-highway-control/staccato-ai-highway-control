@@ -1,22 +1,29 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Cctv, Flame } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { ExternalMap } from "@/components/map/ExternalMap";
+import type { AuthUser, UserRole } from "@/features/auth/types";
+import { mockIncidents } from "@/features/incidents/mock";
+import type { Incident, RiskLevel } from "@/features/incidents/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 type MarkerType = "CCTV" | "INCIDENT" | "CRITICAL_INCIDENT" | "RESOLVED";
 
 type MapMarker = {
   id: string;
   type: MarkerType;
+  incidentId?: string;
   title: string;
   roadName: string;
   locationName: string;
   status: string;
-  riskLevel?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  riskLevel?: RiskLevel;
   latitude: number;
   longitude: number;
   x: number;
@@ -25,6 +32,8 @@ type MapMarker = {
 };
 
 type MarkerFilter = MarkerType | "ALL";
+type ControlMarkerFilter = "ALL_INCIDENTS" | "IN_PROGRESS" | "ASSIGNED";
+type RiskFilter = "ALL" | RiskLevel;
 
 const markerFilters: Array<{ label: string; value: MarkerFilter }> = [
   { label: "전체", value: "ALL" },
@@ -32,6 +41,20 @@ const markerFilters: Array<{ label: string; value: MarkerFilter }> = [
   { label: "사고", value: "INCIDENT" },
   { label: "긴급 사고", value: "CRITICAL_INCIDENT" },
   { label: "처리 완료", value: "RESOLVED" },
+];
+
+const controlMarkerFilters: Array<{ label: string; value: ControlMarkerFilter }> = [
+  { label: "전체 사고", value: "ALL_INCIDENTS" },
+  { label: "처리 중", value: "IN_PROGRESS" },
+  { label: "출동 배정", value: "ASSIGNED" },
+];
+
+const riskFilters: Array<{ label: string; value: RiskFilter }> = [
+  { label: "전체 위험도", value: "ALL" },
+  { label: "낮음", value: "LOW" },
+  { label: "보통", value: "MEDIUM" },
+  { label: "높음", value: "HIGH" },
+  { label: "긴급", value: "CRITICAL" },
 ];
 
 const mockMarkers: MapMarker[] = [
@@ -64,6 +87,7 @@ const mockMarkers: MapMarker[] = [
   {
     id: "map-inc-001",
     type: "CRITICAL_INCIDENT",
+    incidentId: "inc-001",
     title: "주행차로 정차 긴급",
     roadName: "경부고속도로",
     locationName: "수원IC 123.4K",
@@ -78,6 +102,7 @@ const mockMarkers: MapMarker[] = [
   {
     id: "map-inc-002",
     type: "INCIDENT",
+    incidentId: "inc-002",
     title: "갓길 정차",
     roadName: "영동고속도로",
     locationName: "용인IC 45.1K",
@@ -92,6 +117,7 @@ const mockMarkers: MapMarker[] = [
   {
     id: "map-inc-003",
     type: "RESOLVED",
+    incidentId: "inc-004",
     title: "갓길 정차 처리 완료",
     roadName: "중부고속도로",
     locationName: "대소JC 201.2K",
@@ -148,19 +174,99 @@ function riskTone(riskLevel?: MapMarker["riskLevel"]) {
   return "slate";
 }
 
+function getRole(user: AuthUser | null): UserRole | null {
+  return user?.role ?? null;
+}
+
+function isMaintainerRole(role: UserRole | null) {
+  return role === "MAINTAINER" || role === "DISPATCH_ADMIN";
+}
+
+function isIncidentMarker(marker: MapMarker) {
+  return marker.type === "INCIDENT" || marker.type === "CRITICAL_INCIDENT" || marker.type === "RESOLVED";
+}
+
+function getIncident(marker: MapMarker): Incident | undefined {
+  return marker.incidentId
+    ? mockIncidents.find((incident) => incident.id === marker.incidentId)
+    : undefined;
+}
+
+function isAssignedToUser(incident: Incident | undefined, user: AuthUser | null) {
+  if (!incident) return false;
+
+  const assignee = incident.assignee?.trim();
+  if (!assignee || assignee === "미배정") return false;
+
+  const candidates = [user?.name, user?.login_id, user?.email]
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+
+  return candidates.includes(assignee);
+}
+
+function hasDispatchAssignee(incident: Incident | undefined) {
+  return Boolean(incident?.assignee?.trim() && incident.assignee !== "미배정");
+}
+
+function matchesControlFilter(marker: MapMarker, filter: ControlMarkerFilter) {
+  const incident = getIncident(marker);
+
+  if (!isIncidentMarker(marker)) return false;
+  if (filter === "IN_PROGRESS") return incident?.status === "REVIEWING" || incident?.status === "ASSIGNED";
+  if (filter === "ASSIGNED") return hasDispatchAssignee(incident);
+  return true;
+}
+
+function getMapMarkerKey(marker: MapMarker, role: UserRole | "NO_ROLE") {
+  return `${role}-${marker.type}-${marker.id}`;
+}
+
 export default function MapPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [filter, setFilter] = useState<MarkerFilter>("ALL");
-  const [selectedMarkerId, setSelectedMarkerId] = useState(mockMarkers[0].id);
+  const [controlFilter, setControlFilter] = useState<ControlMarkerFilter>("ALL_INCIDENTS");
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>("ALL");
+  const [selectedMarkerKey, setSelectedMarkerKey] = useState("");
+
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
+  const role = getRole(authUser);
+  const roleKey = role ?? "NO_ROLE";
+  const isSuperAdmin = role === "SUPER_ADMIN";
+  const isControlAdmin = role === "CONTROL_ADMIN";
+  const isMaintainer = isMaintainerRole(role);
 
   const filteredMarkers = useMemo(() => {
-    if (filter === "ALL") return mockMarkers;
-    return mockMarkers.filter((marker) => marker.type === filter);
-  }, [filter]);
+    if (isMaintainer) {
+      return mockMarkers.filter((marker) => isAssignedToUser(getIncident(marker), authUser));
+    }
+
+    if (isControlAdmin) {
+      return mockMarkers.filter((marker) => matchesControlFilter(marker, controlFilter));
+    }
+
+    return mockMarkers.filter((marker) => {
+      const typeMatched = filter === "ALL" || marker.type === filter;
+      const riskMatched = riskFilter === "ALL" || marker.riskLevel === riskFilter;
+      return typeMatched && riskMatched;
+    });
+  }, [authUser, controlFilter, filter, isControlAdmin, isMaintainer, riskFilter]);
 
   const selectedMarker =
-    mockMarkers.find((marker) => marker.id === selectedMarkerId) ??
-    filteredMarkers[0] ??
-    mockMarkers[0];
+    filteredMarkers.find((marker) => getMapMarkerKey(marker, roleKey) === selectedMarkerKey) ??
+    filteredMarkers[0];
+  const selectedIncident = selectedMarker ? getIncident(selectedMarker) : undefined;
+
+  const pageDescription = isMaintainer
+    ? "내게 배정된 사고 위치만 지도에서 확인합니다."
+    : isControlAdmin
+      ? "전체 사고, 처리 중 사고, 출동 배정 사고 위치를 확인합니다."
+      : "전체 사고 위치, 출동 위치, CCTV 위치를 지도 기반으로 확인합니다.";
+
+  const visibleFilters = isControlAdmin ? controlMarkerFilters : markerFilters;
 
   return (
     <RequireAuth>
@@ -169,24 +275,44 @@ export default function MapPage() {
           <div>
             <h2 className="text-2xl font-black text-slate-950">지도 관제</h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              CCTV와 사고 이벤트를 지도 기반으로 확인합니다.
+              {pageDescription}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {markerFilters.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setFilter(item.value)}
-                className={`h-10 rounded-lg border px-4 text-sm font-black transition ${
-                  filter === item.value
-                    ? "border-teal-700 bg-teal-700 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
+            {isMaintainer ? (
+              <Badge tone="amber">내 배정 사고만</Badge>
+            ) : (
+              visibleFilters.map((item) => {
+                const isActive = isControlAdmin
+                  ? controlFilter === item.value
+                  : filter === item.value;
+
+                return (
+                  <button
+                    key={`${roleKey}-${item.value}`}
+                    type="button"
+                    onClick={() => {
+                      if (isControlAdmin) setControlFilter(item.value as ControlMarkerFilter);
+                      else setFilter(item.value as MarkerFilter);
+                    }}
+                    className={`h-10 rounded-lg border px-4 text-sm font-black transition ${
+                      isActive
+                        ? "border-teal-700 bg-teal-700 text-white"
+                        : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })
+            )}
+            {isSuperAdmin ? (
+              <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value as RiskFilter)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700">
+                {riskFilters.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
+            ) : null}
           </div>
         </section>
 
@@ -196,41 +322,27 @@ export default function MapPage() {
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <h3 className="font-black text-slate-950">고속도로 관제 지도</h3>
                 <p className="text-xs font-semibold text-slate-400">
-                  TODO: 지도 SDK 연동 시 Flask 설정을 통해 안전하게 키를 주입합니다. 프론트 코드에 API Key를 직접 포함하지 않습니다.
+                  Flask 지도 설정 API를 통해 SDK 키를 받아 실제 지도를 표시합니다.
                 </p>
               </div>
             </div>
-            <div className="relative min-h-[620px] overflow-hidden bg-slate-100">
-              <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(148,163,184,0.18)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.18)_1px,transparent_1px)] bg-[size:48px_48px]" />
-              <div className="absolute left-[10%] top-[22%] h-[58%] w-[78%] rounded-[45%] border-[18px] border-slate-300/70" />
-              <div className="absolute left-[16%] top-[35%] h-5 w-[70%] -rotate-12 rounded-full bg-slate-400/60" />
-              <div className="absolute left-[20%] top-[58%] h-5 w-[62%] rotate-6 rounded-full bg-slate-400/50" />
-              <div className="absolute left-[46%] top-[16%] h-[70%] w-5 rotate-12 rounded-full bg-slate-400/50" />
-              <div className="absolute inset-0 bg-gradient-to-br from-white/60 via-transparent to-emerald-100/70" />
-
-              {filteredMarkers.map((marker) => {
-                const style = markerStyles[marker.type];
-                const Icon = style.icon;
-                const isSelected = marker.id === selectedMarker.id;
-
-                return (
-                  <button
-                    key={marker.id}
-                    type="button"
-                    onClick={() => setSelectedMarkerId(marker.id)}
-                    className={`absolute grid h-11 w-11 place-items-center rounded-full border-2 shadow-lg transition hover:scale-110 ${style.buttonClass} ${isSelected ? "ring-4 ring-white" : ""}`}
-                    style={{ left: `${marker.x}%`, top: `${marker.y}%` }}
-                    aria-label={marker.title}
-                  >
-                    <Icon className="h-5 w-5" aria-hidden="true" />
-                  </button>
-                );
-              })}
-            </div>
+            <ExternalMap
+              markers={filteredMarkers.map((marker) => ({
+                id: getMapMarkerKey(marker, roleKey),
+                title: marker.title,
+                latitude: marker.latitude,
+                longitude: marker.longitude,
+                type: markerStyles[marker.type].label,
+              }))}
+              selectedMarkerId={selectedMarker ? getMapMarkerKey(selectedMarker, roleKey) : undefined}
+              onMarkerSelect={setSelectedMarkerKey}
+            />
           </Card>
 
           <aside className="grid content-start gap-5">
             <Card className="p-5">
+              {selectedMarker ? (
+                <>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-black text-slate-950">선택 상세</h3>
@@ -272,17 +384,46 @@ export default function MapPage() {
                   <dd className="mt-1 text-sm font-bold text-slate-800">{selectedMarker.updatedAt}</dd>
                 </div>
               </dl>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedIncident ? (
+                  <Link href={`/incidents/${selectedIncident.id}`} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-bold text-white no-underline transition hover:bg-slate-800">
+                    사고 상세
+                  </Link>
+                ) : null}
+                {isControlAdmin && selectedIncident ? (
+                  <Link href="/dispatch" className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">
+                    출동 관리
+                  </Link>
+                ) : null}
+                {isMaintainer && selectedIncident ? (
+                  <Link href={`/dispatch/incidents/${selectedIncident.id}`} className="inline-flex h-10 items-center rounded-lg border border-amber-200 px-4 text-sm font-bold text-amber-700 no-underline transition hover:bg-amber-50">
+                    처리 상태 변경
+                  </Link>
+                ) : null}
+              </div>
+                </>
+              ) : (
+                <div className="py-4 text-center">
+                  <h3 className="text-lg font-black text-slate-950">표시할 위치가 없습니다.</h3>
+                  <p className="mt-2 text-sm font-semibold text-slate-500">
+                    현재 권한과 필터 조건에 맞는 지도 마커가 없습니다.
+                  </p>
+                </div>
+              )}
             </Card>
 
             <Card className="p-5">
               <h3 className="font-black text-slate-950">마커 현황</h3>
               <div className="mt-4 grid gap-3">
                 {Object.entries(markerStyles).map(([type, style]) => {
-                  const count = mockMarkers.filter((marker) => marker.type === type).length;
+                  if (isMaintainer && type === "CCTV") return null;
+                  if (isControlAdmin && type === "CCTV") return null;
+
+                  const count = filteredMarkers.filter((marker) => marker.type === type).length;
                   const Icon = style.icon;
 
                   return (
-                    <div key={type} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
+                    <div key={`${roleKey}-${type}`} className="flex items-center justify-between rounded-lg border border-slate-100 p-3">
                       <span className="flex items-center gap-2 text-sm font-semibold text-slate-600">
                         <Icon className="h-4 w-4" aria-hidden="true" />
                         {style.label}

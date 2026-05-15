@@ -2,13 +2,14 @@
 
 import { Eye, UserCheck, UserX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import type { UserRole } from "@/features/auth/types";
-import { apiClient } from "@/lib/apiClient";
+import type { AuthUser, UserRole } from "@/features/auth/types";
+import { approveSignupRequest, getSignupRequests, rejectSignupRequest } from "@/features/admin/api";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 type SignupRequestStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "CANCELLED";
 
@@ -56,12 +57,15 @@ const statusTone: Record<SignupRequestStatus, "amber" | "green" | "red" | "slate
 
 const roleLabels: Record<UserRole, string> = {
   SUPER_ADMIN: "최고 관리자",
+  AUTH_ADMIN: "인증 관리자",
   CONTROL_ADMIN: "관제 관리자",
+  MAINTAINER: "출동 관리자",
   DISPATCH_ADMIN: "출동 관리자",
   VIEWER: "일반 조회 계정",
 };
 
 export default function SignupRequestsPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [requests, setRequests] = useState<AdminSignupRequest[]>([]);
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,8 +83,8 @@ export default function SignupRequestsPage() {
     setIsLoading(true);
 
     try {
-      const response = await apiClient<SignupRequestsApiResponse>("/auth/signup-requests");
-      const nextRequests = response.data.map(mapSignupRequest);
+      const response = await getSignupRequests("REQUESTED");
+      const nextRequests = response.map(mapSignupRequest);
 
       setRequests(nextRequests);
       setSelectedRequestId((currentId) => {
@@ -105,15 +109,11 @@ export default function SignupRequestsPage() {
     setActionRequestId(id);
 
     try {
-      const path =
-        status === "APPROVED"
-          ? `/auth/signup-requests/${id}/approve`
-          : `/auth/signup-requests/${id}/reject`;
-
-      await apiClient(path, {
-        method: "POST",
-        body: status === "REJECTED" ? { reject_reason: "관리자 거절" } : {},
-      });
+      if (status === "APPROVED") {
+        await approveSignupRequest(id);
+      } else {
+        await rejectSignupRequest(id, "관리자 거절");
+      }
 
       await loadSignupRequests();
     } catch (error) {
@@ -126,11 +126,16 @@ export default function SignupRequestsPage() {
   }
 
   useEffect(() => {
-    loadSignupRequests();
+    setAuthUser(getStoredAuthUser());
   }, []);
 
+  useEffect(() => {
+    if (authUser?.role !== "SUPER_ADMIN") return;
+    loadSignupRequests();
+  }, [authUser?.role]);
+
   return (
-    <RequireAuth>
+    <RequireSuperAdmin title="사용자 승인 관리">
       <AppLayout title="사용자 승인 관리">
         <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -316,7 +321,7 @@ export default function SignupRequestsPage() {
           </div>
         ) : null}
       </AppLayout>
-    </RequireAuth>
+    </RequireSuperAdmin>
   );
 }
 

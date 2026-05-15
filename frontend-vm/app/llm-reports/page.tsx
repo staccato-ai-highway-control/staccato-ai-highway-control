@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { CheckCircle2, Edit3, FilePlus2, RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import type { AuthUser, UserRole } from "@/features/auth/types";
+import { mockIncidents } from "@/features/incidents/mock";
+import type { Incident } from "@/features/incidents/types";
 import { mockLlmReports } from "@/features/llm/mock";
 import type { LlmGenerationStatus, LlmReport, LlmReportType } from "@/features/llm/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 import { cn } from "@/lib/utils";
 
 const reportTypeLabels: Record<LlmReportType, string> = {
@@ -38,30 +42,98 @@ function handleMockAction(message: string) {
   window.alert(message);
 }
 
+function getRole(user: AuthUser | null): UserRole | null {
+  return user?.role ?? null;
+}
+
+function isMaintainerRole(role: UserRole | null) {
+  return role === "MAINTAINER" || role === "DISPATCH_ADMIN";
+}
+
+function isAssignedToUser(incident: Incident | undefined, user: AuthUser | null) {
+  if (!incident) return false;
+
+  const assignee = incident.assignee?.trim();
+  if (!assignee || assignee === "미배정") return false;
+
+  const candidates = [user?.name, user?.login_id, user?.email]
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+
+  return candidates.includes(assignee);
+}
+
+function getIncidentForReport(report: LlmReport) {
+  return mockIncidents.find((incident) => incident.id === report.incidentId);
+}
+
 export default function LlmReportsPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [reports, setReports] = useState<LlmReport[]>(mockLlmReports);
   const [selectedReportId, setSelectedReportId] = useState(mockLlmReports[0].id);
 
-  const selectedReport = useMemo(() => {
-    return mockLlmReports.find((report) => report.id === selectedReportId) ?? mockLlmReports[0];
-  }, [selectedReportId]);
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
 
-  const previewRows: Array<[string, string]> = [
+  const role = getRole(authUser);
+  const isMaintainer = isMaintainerRole(role);
+  const canGenerate = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canEdit = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canConfirm = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canRegenerate = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canDelete = role === "SUPER_ADMIN";
+
+  const visibleReports = useMemo(() => {
+    if (!isMaintainer) return reports;
+
+    return reports.filter((report) =>
+      isAssignedToUser(getIncidentForReport(report), authUser)
+    );
+  }, [authUser, isMaintainer, reports]);
+
+  const selectedReport = useMemo(() => {
+    return visibleReports.find((report) => report.id === selectedReportId) ?? visibleReports[0];
+  }, [selectedReportId, visibleReports]);
+
+  const previewRows: Array<[string, string]> = selectedReport ? [
     ["사고 개요", selectedReport.sections.overview],
     ["발생 위치", selectedReport.sections.location],
     ["AI 탐지 결과", selectedReport.sections.aiDetection],
     ["위험도 판단", selectedReport.sections.riskAssessment],
     ["현재 처리 상태", selectedReport.sections.currentStatus],
     ["조치 필요 사항", selectedReport.sections.requiredActions],
-  ];
+  ] : [];
+
+  const pageDescription = isMaintainer
+    ? "본인 배정 사고와 관련된 LLM 보고서를 조회합니다."
+    : role === "CONTROL_ADMIN"
+      ? "관제 대상 사고 보고서를 생성, 수정, 확정, 재생성합니다."
+      : "전체 LLM 보고서를 조회하고 생성, 수정, 확정, 삭제합니다.";
+
+  function handleMockDelete(report: LlmReport) {
+    const confirmed = window.confirm(`${report.reportTitle} 보고서를 삭제하시겠습니까?`);
+    if (!confirmed) return;
+
+    setReports((current) => current.filter((item) => item.id !== report.id));
+  }
 
   return (
     <RequireAuth>
       <AppLayout title="LLM 보고서">
-        <section className="mb-5">
-          <h2 className="text-2xl font-black text-slate-950">LLM 보고서</h2>
-          <p className="mt-2 text-sm font-semibold text-slate-500">
-            사고 이벤트 기반으로 생성된 LLM 보고서 초안을 조회, 수정, 확정합니다.
-          </p>
+        <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">LLM 보고서</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              {pageDescription}
+            </p>
+          </div>
+          {canGenerate ? (
+            <button type="button" onClick={() => handleMockAction("보고서 생성 API 연결 예정입니다.")} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
+              <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+              보고서 생성
+            </button>
+          ) : null}
         </section>
 
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
@@ -86,7 +158,7 @@ export default function LlmReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {mockLlmReports.map((report) => (
+                  {visibleReports.map((report) => (
                     <tr
                       key={report.id}
                       className={cn(
@@ -113,14 +185,30 @@ export default function LlmReportsPage() {
                           <Link href={`/llm-reports/${report.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">
                             상세 보기
                           </Link>
-                          <button type="button" onClick={() => handleMockAction("재생성 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
-                            <RefreshCw className="h-3 w-3" aria-hidden="true" />
-                            재생성
-                          </button>
-                          <button type="button" onClick={() => handleMockAction("확정 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50">
-                            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                            확정
-                          </button>
+                          {canEdit ? (
+                            <Link href={`/llm-reports/${report.id}`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">
+                              <Edit3 className="h-3 w-3" aria-hidden="true" />
+                              수정
+                            </Link>
+                          ) : null}
+                          {canRegenerate ? (
+                            <button type="button" onClick={() => handleMockAction("재생성 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
+                              <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                              재생성
+                            </button>
+                          ) : null}
+                          {canConfirm ? (
+                            <button type="button" onClick={() => handleMockAction("확정 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50">
+                              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                              확정
+                            </button>
+                          ) : null}
+                          {canDelete ? (
+                            <button type="button" onClick={() => handleMockDelete(report)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50">
+                              <Trash2 className="h-3 w-3" aria-hidden="true" />
+                              삭제
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -128,9 +216,16 @@ export default function LlmReportsPage() {
                 </tbody>
               </table>
             </div>
+            {visibleReports.length === 0 ? (
+              <p className="border-t border-slate-100 p-6 text-center text-sm font-semibold text-slate-500">
+                현재 권한으로 조회 가능한 LLM 보고서가 없습니다.
+              </p>
+            ) : null}
           </Card>
 
           <Card className="p-5">
+            {selectedReport ? (
+              <>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-black text-slate-400">{selectedReport.incidentCode}</p>
@@ -146,6 +241,15 @@ export default function LlmReportsPage() {
                 </section>
               ))}
             </div>
+              </>
+            ) : (
+              <div className="py-6 text-center">
+                <h3 className="text-lg font-black text-slate-950">선택된 보고서가 없습니다.</h3>
+                <p className="mt-2 text-sm font-semibold text-slate-500">
+                  조회 가능한 보고서가 생기면 이 영역에 미리보기가 표시됩니다.
+                </p>
+              </div>
+            )}
           </Card>
         </section>
       </AppLayout>

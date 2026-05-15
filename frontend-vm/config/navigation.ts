@@ -8,11 +8,9 @@ import {
   FileText,
   LayoutDashboard,
   Map,
-  MessageSquare,
   Newspaper,
   ShieldCheck,
   SlidersHorizontal,
-  UserCog,
   UserCircle,
   Users,
 } from "lucide-react";
@@ -21,14 +19,18 @@ import type { AuthUser, UserRole } from "@/features/auth/types";
 
 export const USER_ROLES: UserRole[] = [
   "SUPER_ADMIN",
+  "AUTH_ADMIN",
   "CONTROL_ADMIN",
+  "MAINTAINER",
   "DISPATCH_ADMIN",
   "VIEWER",
 ];
 
 export const roleLabels: Record<UserRole, string> = {
   SUPER_ADMIN: "최고 관리자",
+  AUTH_ADMIN: "인증 관리자",
   CONTROL_ADMIN: "관제 관리자",
+  MAINTAINER: "출동 관리자",
   DISPATCH_ADMIN: "출동 관리자",
   VIEWER: "일반 조회 계정",
 };
@@ -47,11 +49,6 @@ export type NavigationSection = {
 };
 
 const allRoles = USER_ROLES;
-const nonViewerRoles: UserRole[] = [
-  "SUPER_ADMIN",
-  "CONTROL_ADMIN",
-  "DISPATCH_ADMIN",
-];
 
 export const navigationSections: NavigationSection[] = [
   {
@@ -59,29 +56,27 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "대시보드", allowedRoles: allRoles },
       { href: "/mypage", icon: UserCircle, label: "마이페이지", allowedRoles: allRoles },
+      { href: "/notifications", icon: Bell, label: "실시간 알림", allowedRoles: allRoles },
       { href: "/chatbot", icon: Bot, label: "챗봇", allowedRoles: allRoles },
-      { href: "/admin/board", icon: Newspaper, label: "게시판", allowedRoles: allRoles },
+      { href: "/board", icon: Newspaper, label: "게시판", allowedRoles: allRoles },
     ],
   },
   {
     title: "관제",
     items: [
-      { href: "/cctvs", icon: Cctv, label: "CCTV 관제/조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "VIEWER"] },
-      { href: "/map", icon: Map, label: "지도 모니터링", allowedRoles: allRoles },
+      { href: "/cctvs", icon: Cctv, label: "CCTV 관제/조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN"] },
+      { href: "/map", icon: Map, label: "지도 모니터링", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN"] },
       { href: "/reports", icon: ClipboardList, label: "이상상황/신고 관리", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN"] },
-      { href: "/incidents", icon: ShieldCheck, label: "이상상황 조회", allowedRoles: allRoles },
-      { href: "/notifications", icon: Bell, label: "실시간 알림", allowedRoles: nonViewerRoles },
-      { href: "/llm-reports", icon: FileText, label: "LLM 보고서", allowedRoles: allRoles },
-      { href: "/statistics", icon: BarChart3, label: "ITS 연계 조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "VIEWER"] },
+      { href: "/incidents", icon: ShieldCheck, label: "이상상황 조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "MAINTAINER", "DISPATCH_ADMIN"] },
+      { href: "/llm-reports", icon: FileText, label: "LLM 보고서", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN"] },
+      { href: "/its", icon: BarChart3, label: "ITS 연계 조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN"] },
     ],
   },
   {
     title: "출동",
     items: [
-      { href: "/incidents", icon: ShieldCheck, label: "출동 관리", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "DISPATCH_ADMIN"] },
-      { href: "/map", icon: Map, label: "지도/위치 확인", allowedRoles: ["SUPER_ADMIN", "DISPATCH_ADMIN"] },
-      { href: "/reports/create", icon: ClipboardList, label: "현장 조치 보고", allowedRoles: ["SUPER_ADMIN", "DISPATCH_ADMIN"] },
-      { href: "/reports", icon: FileText, label: "출동 결과 작성", allowedRoles: ["SUPER_ADMIN", "DISPATCH_ADMIN"] },
+      { href: "/dispatch", icon: ShieldCheck, label: "출동 관리", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "MAINTAINER", "DISPATCH_ADMIN"] },
+      { href: "/dispatch/map", icon: Map, label: "지도/위치 확인", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "MAINTAINER", "DISPATCH_ADMIN"] },
     ],
   },
   {
@@ -89,9 +84,8 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { href: "/admin/signup-requests", icon: Users, label: "회원가입 신청 관리", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
       { href: "/admin/users", icon: Users, label: "사용자 관리", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/admin/users", icon: UserCog, label: "권한 관리", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
       { href: "/admin/security-logs", icon: ShieldCheck, label: "보안 로그", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/llm-training-data", icon: Database, label: "LLM 학습데이터", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
+      { href: "/admin/llm-training-data", icon: Database, label: "LLM 학습데이터", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
       { href: "/settings", icon: SlidersHorizontal, label: "시스템 설정", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
     ],
   },
