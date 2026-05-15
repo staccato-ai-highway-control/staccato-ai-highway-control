@@ -17,7 +17,7 @@ from app.extensions import init_extensions
 # - 담당: 공통 백엔드
 # - 예: health check
 # ============================================================
-from app.routes.health_routes import health_bp
+from app.modules.health.routes import health_bp
 
 
 
