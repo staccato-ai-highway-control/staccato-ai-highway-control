@@ -260,7 +260,7 @@ export default function SignupPage() {
     }
 
     if (isCodeSent) {
-      router.push("/pending-approval");
+      router.push(`/pending-approval?email=${encodeURIComponent(email.trim())}`);
       return;
     }
 
@@ -278,7 +278,7 @@ export default function SignupPage() {
         agreed,
       });
 
-      router.push("/pending-approval");
+      router.push(`/pending-approval?email=${encodeURIComponent(email.trim())}`);
     } catch (error) {
       if (isEmailAlreadyExistsError(error)) {
         setEmailVerifyMessage("이미 가입 신청된 이메일입니다. 로그인 또는 승인 상태를 확인해주세요.");
