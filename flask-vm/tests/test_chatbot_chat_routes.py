@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from datetime import datetime
 from uuid import uuid4
 
@@ -66,13 +67,43 @@ def test_chatbot_answer_route():
         },
     }
 
-    with app.test_client() as client:
-        response = client.post("/chatbot/answer", json=payload)
+    mock_result = {
+        "success": True,
+        "message": "Chatbot answer generated",
+        "data": {
+            "answer": "차로 정차와 높은 위험도를 기준으로 요약했습니다.",
+        },
+    }
+
+    with patch("app.modules.chatbot.service.generate_chatbot_answer", return_value=mock_result) as mock_generate:
+        with app.test_client() as client:
+            response = client.post("/chatbot/answer", json=payload)
 
     assert response.status_code == 200
     body = response.get_json()
     assert body["success"] is True
-    assert "data" in body
+    assert body["data"]["answer"] == mock_result["data"]["answer"]
+    mock_generate.assert_called_once_with({
+        "message": "이 사고 요약해줘",
+        "incident_context": payload["incident_context"],
+    })
+
+
+def test_chatbot_answer_upstream_failure_returns_502():
+    app = create_app()
+
+    mock_result = {
+        "success": False,
+        "error_code": "LLM_CHATBOT_REQUEST_FAILED",
+        "message": "LLM server timeout",
+    }
+
+    with patch("app.modules.chatbot.service.generate_chatbot_answer", return_value=mock_result):
+        with app.test_client() as client:
+            response = client.post("/chatbot/answer", json={"message": "상황 설명해줘"})
+
+    assert response.status_code == 502
+    assert response.get_json()["error_code"] == "LLM_CHATBOT_REQUEST_FAILED"
 
 
 def test_chat_room_requires_auth():

@@ -5,6 +5,7 @@ from app.models.auth_models import User
 from app.models.chat_models import ChatMessage, ChatMessageRead, ChatRoom
 from app.models.chat_support_models import ChatRoomMember
 
+# 채팅방 상태는 기존 모델 필드(room_status, closed_at)만 사용한다.
 INCIDENT_ROOM_TYPE = "INCIDENT"
 GENERAL_ROOM_TYPES = {"GROUP", "DM"}
 WRITABLE_ROOM_STATUSES = {"OPEN"}
@@ -25,6 +26,7 @@ def _is_super_admin(user) -> bool:
 
 
 def _active_member(room_id: int, user_id: int | None):
+    """left_at이 없는 현재 참여자만 유효 멤버로 본다."""
     if user_id is None:
         return None
 
@@ -40,6 +42,7 @@ def _is_room_member(room_id: int, user_id: int | None) -> bool:
 
 
 def _ensure_room_member(room_id: int, user_id: int | None, member_role: str = "MEMBER"):
+    """멤버를 중복 생성하지 않고 필요할 때만 추가한다. commit은 호출자가 관리한다."""
     if user_id is None:
         return None
 
@@ -75,6 +78,7 @@ def _room_to_dict(room: ChatRoom, include_members: bool = False) -> dict:
 
 
 def _find_incident_room(incident_id: int):
+    """사건 이력 보존을 위해 OPEN/CLOSED INCIDENT 방은 재사용한다."""
     return (
         ChatRoom.query
         .filter_by(incident_id=incident_id, room_type=INCIDENT_ROOM_TYPE)
@@ -90,7 +94,7 @@ def ensure_incident_chat_room(
     responder_user_id: int | None = None,
     admin_user_ids: list[int] | None = None,
 ):
-    """Create/fetch an incident room and add lifecycle members without committing."""
+    """사건 방을 준비하고 lifecycle 멤버를 추가한다. 외부 트랜잭션 결합을 위해 commit하지 않는다."""
     room = _find_incident_room(incident_id)
 
     if room is None:
@@ -115,7 +119,7 @@ def ensure_incident_chat_room(
 
 
 def close_incident_chat_room(incident_id: int):
-    """Close an incident room without committing."""
+    """사건 방을 CLOSED 처리한다. 외부 트랜잭션 결합을 위해 commit하지 않는다."""
     room = _find_incident_room(incident_id)
     if room is None:
         return None
@@ -128,7 +132,7 @@ def close_incident_chat_room(incident_id: int):
 
 
 def sync_incident_chat_room_for_status(incident_id: int, incident_status: str):
-    """Close the incident room when the incident reaches a terminal status."""
+    """사건 상태가 종료 계열이면 연결된 채팅방도 CLOSED로 동기화한다."""
     if incident_status not in CLOSED_INCIDENT_STATUSES:
         return None
     return close_incident_chat_room(incident_id)
@@ -140,6 +144,7 @@ def assign_incident_chat_room(
     responder_user_id: int,
     admin_user_ids: list[int] | None = None,
 ) -> dict:
+    """담당자 배정 API용 래퍼. 방 생성과 멤버 추가를 한 번에 commit한다."""
     if incident_id is None:
         return _response(False, "incident_id is required", None)
     if control_user_id is None:
@@ -179,6 +184,7 @@ def close_incident_chat_room_for_status(incident_id: int, incident_status: str) 
 
 
 def get_or_create_chat_room(incident_id: int, user_id: int | None = None) -> dict:
+    """기존 사고 채팅방 생성 API 호환용 서비스 함수다."""
     if incident_id is None:
         return _response(False, "incident_id is required", None)
 
@@ -195,6 +201,7 @@ def get_or_create_chat_room(incident_id: int, user_id: int | None = None) -> dic
 
 
 def create_general_chat_room(creator_id: int, room_type: str, member_ids: list[int] | None = None) -> dict:
+    """사건과 무관한 GROUP/DM 방을 만들고 생성자를 CREATOR 멤버로 등록한다."""
     if creator_id is None:
         return _response(False, "creator_id is required", None)
 
@@ -237,6 +244,7 @@ def create_general_chat_room(creator_id: int, room_type: str, member_ids: list[i
 
 
 def list_my_chat_rooms(user_id: int) -> dict:
+    """내가 현재 참여 중이고 DELETED가 아닌 채팅방만 반환한다."""
     if user_id is None:
         return _response(False, "user_id is required", None)
 
@@ -310,6 +318,7 @@ def leave_chat_room(room_id: int, user_id: int) -> dict:
 
 
 def delete_chat_room(room_id: int, user) -> dict:
+    """일반 채팅방만 room_status=DELETED로 soft delete한다. INCIDENT 방은 삭제 금지다."""
     try:
         room = ChatRoom.query.get(room_id)
         if room is None or room.room_status == "DELETED":
@@ -333,6 +342,7 @@ def delete_chat_room(room_id: int, user) -> dict:
 
 
 def get_chat_messages(room_id: int, user_id: int | None = None) -> dict:
+    """참여자만 메시지 이력을 조회한다. CLOSED 방도 조회는 허용한다."""
     if room_id is None:
         return _response(False, "room_id is required", None)
 
@@ -362,6 +372,7 @@ def get_chat_messages(room_id: int, user_id: int | None = None) -> dict:
 
 
 def send_chat_message(room_id: int, sender_id: int | None, content: str) -> dict:
+    """참여자만 OPEN 방에 메시지를 저장한다. CLOSED/DELETED 방은 전송 차단한다."""
     if sender_id is None:
         return _response(False, "sender_id is required", None)
 
@@ -399,6 +410,7 @@ def send_chat_message(room_id: int, sender_id: int | None, content: str) -> dict
 
 
 def delete_chat_message(room_id: int, message_id: int, user_id: int) -> dict:
+    """메시지는 실제 삭제하지 않고 기존 deleted_at 필드로 soft delete한다."""
     try:
         room = ChatRoom.query.get(room_id)
         if room is None or room.room_status == "DELETED":
@@ -425,6 +437,7 @@ def delete_chat_message(room_id: int, message_id: int, user_id: int) -> dict:
 
 
 def mark_chat_room_read(room_id: int, user_id: int, message_id: int | None = None) -> dict:
+    """지정 메시지 또는 최신 메시지까지 ChatMessageRead 이력을 생성한다."""
     try:
         room = ChatRoom.query.get(room_id)
         if room is None or room.room_status == "DELETED":
