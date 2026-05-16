@@ -4,7 +4,13 @@ from uuid import uuid4
 
 from app import create_app
 from app.extensions import db
-from app.models.chat_models import ChatMessage, ChatMessageRead, ChatRoom
+from app.models.chat_models import (
+    ChatMessage,
+    ChatMessageRead,
+    ChatRoom,
+    ChatbotConversation,
+    ChatbotMessage,
+)
 from app.models.chat_support_models import ChatRoomMember
 from app.models.auth_models import User
 from app.models.incident_models import Incident
@@ -387,3 +393,266 @@ def test_mark_chat_room_read_api():
         assert read_count >= 1
 
     assert creator_id
+
+
+
+def _create_chatbot_session(client, incident_id, token):
+    response = client.post(
+        f"/incidents/{incident_id}/chatbot-sessions",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200, response.get_json()
+    return response.get_json()["data"]
+
+
+def test_chatbot_session_requires_auth():
+    app = create_app()
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        response = client.post(f"/incidents/{incident_id}/chatbot-sessions")
+
+    assert response.status_code == 401
+
+
+def test_create_incident_chatbot_session_success():
+    app = create_app()
+    user_id, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+
+    assert session["incident_id"] == incident_id
+    assert session["user_id"] == user_id
+    assert session["status"] == "OPEN"
+    assert session["created_at"]
+
+
+def test_open_chatbot_session_is_reused_for_same_user_and_incident():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        first = _create_chatbot_session(client, incident_id, token)
+        second = _create_chatbot_session(client, incident_id, token)
+
+    assert first["id"] == second["id"]
+    with app.app_context():
+        assert ChatbotConversation.query.filter_by(incident_id=incident_id).count() == 1
+
+
+def test_list_incident_chatbot_sessions():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        created = _create_chatbot_session(client, incident_id, token)
+        response = client.get(
+            f"/incidents/{incident_id}/chatbot-sessions",
+            headers=_auth_headers(token),
+        )
+
+    assert response.status_code == 200
+    sessions = response.get_json()["data"]
+    assert any(session["id"] == created["id"] for session in sessions)
+
+
+def test_get_chatbot_session_detail():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+        response = client.get(
+            f"/chatbot-sessions/{session['id']}",
+            headers=_auth_headers(token),
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["data"]["id"] == session["id"]
+    assert body["data"]["incident"]["id"] == incident_id
+
+
+def test_list_chatbot_session_messages():
+    app = create_app()
+    user_id, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+
+    with app.app_context():
+        db.session.add(ChatbotMessage(
+            conversation_id=session["id"],
+            incident_id=incident_id,
+            user_id=user_id,
+            sender_type="USER",
+            message="기존 질문",
+            created_at=datetime.utcnow(),
+        ))
+        db.session.commit()
+
+    with app.test_client() as client:
+        response = client.get(
+            f"/chatbot-sessions/{session['id']}/messages",
+            headers=_auth_headers(token),
+        )
+
+    assert response.status_code == 200
+    messages = response.get_json()["data"]["messages"]
+    assert messages[0]["sender_type"] == "USER"
+    assert messages[0]["message"] == "기존 질문"
+
+
+def test_send_chatbot_session_message_saves_user_and_bot_messages():
+    app = create_app()
+    user_id, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+    mock_result = {
+        "success": True,
+        "data": {
+            "answer": "주행 차로 정차와 감지 신뢰도를 기준으로 HIGH입니다.",
+            "model_name": "test-llm",
+        },
+    }
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+        with patch("app.modules.chatbot.service.generate_chatbot_answer", return_value=mock_result) as mock_generate:
+            response = client.post(
+                f"/chatbot-sessions/{session['id']}/messages",
+                json={"message": "왜 HIGH인가요?"},
+                headers=_auth_headers(token),
+            )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["data"]["answer"] == mock_result["data"]["answer"]
+    assert body["data"]["user_message"]["sender_type"] == "USER"
+    assert body["data"]["bot_message"]["sender_type"] == "BOT"
+    mock_payload = mock_generate.call_args.args[0]
+    assert mock_payload["source_snapshot"]["incident"]["id"] == incident_id
+
+    with app.app_context():
+        messages = ChatbotMessage.query.filter_by(conversation_id=session["id"]).order_by(ChatbotMessage.created_at.asc()).all()
+        assert len(messages) == 2
+        assert messages[0].sender_type == "USER"
+        assert messages[0].user_id == user_id
+        assert messages[1].sender_type == "BOT"
+        assert messages[1].message == mock_result["data"]["answer"]
+        assert messages[1].context_json["generation_status"] == "SUCCEEDED"
+
+
+def test_closed_chatbot_session_blocks_questions():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+        close_response = client.patch(
+            f"/chatbot-sessions/{session['id']}/close",
+            headers=_auth_headers(token),
+        )
+        assert close_response.status_code == 200
+
+        response = client.post(
+            f"/chatbot-sessions/{session['id']}/messages",
+            json={"message": "닫힌 뒤 질문"},
+            headers=_auth_headers(token),
+        )
+
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Chatbot session is closed"
+
+
+def test_close_chatbot_session_api():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+        response = client.patch(
+            f"/chatbot-sessions/{session['id']}/close",
+            headers=_auth_headers(token),
+        )
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["status"] == "CLOSED"
+    with app.app_context():
+        stored = ChatbotConversation.query.get(session["id"])
+        assert stored.conversation_status == "CLOSED"
+        assert stored.closed_at is not None
+
+
+def test_other_user_cannot_access_my_chatbot_session():
+    app = create_app()
+    _, owner_token = _create_chat_test_user(app, role="VIEWER")
+    _, other_token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, owner_token)
+        response = client.get(
+            f"/chatbot-sessions/{session['id']}",
+            headers=_auth_headers(other_token),
+        )
+
+    assert response.status_code == 403
+
+
+def test_chatbot_session_message_upstream_failure_returns_502_and_stores_failed_bot_message():
+    app = create_app()
+    _, token = _create_chat_test_user(app, role="VIEWER")
+    incident_id = _create_chat_test_incident(app)
+    mock_result = {
+        "success": False,
+        "error_code": "LLM_CHATBOT_REQUEST_FAILED",
+        "message": "LLM timeout",
+    }
+
+    with app.test_client() as client:
+        session = _create_chatbot_session(client, incident_id, token)
+        with patch("app.modules.chatbot.service.generate_chatbot_answer", return_value=mock_result):
+            response = client.post(
+                f"/chatbot-sessions/{session['id']}/messages",
+                json={"message": "실패 테스트"},
+                headers=_auth_headers(token),
+            )
+
+    assert response.status_code == 502
+    assert response.get_json()["error_code"] == "LLM_CHATBOT_REQUEST_FAILED"
+    with app.app_context():
+        bot_message = ChatbotMessage.query.filter_by(
+            conversation_id=session["id"],
+            sender_type="BOT",
+        ).first()
+        assert bot_message is not None
+        assert bot_message.context_json["generation_status"] == "FAILED"
+
+
+def test_incident_chatbot_answer_route_still_works():
+    app = create_app()
+    incident_id = _create_chat_test_incident(app)
+    mock_result = {
+        "success": True,
+        "data": {"answer": "사고 기준 답변입니다."},
+    }
+
+    with patch("app.modules.chatbot.service.generate_chatbot_answer", return_value=mock_result) as mock_generate:
+        with app.test_client() as client:
+            response = client.post(
+                f"/incidents/{incident_id}/chatbot/answer",
+                json={"message": "사고 설명해줘", "incident_context": {"risk_level": "HIGH"}},
+            )
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["answer"] == "사고 기준 답변입니다."
+    mock_payload = mock_generate.call_args.args[0]
+    assert mock_payload["incident_context"]["incident_id"] == incident_id
