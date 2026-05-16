@@ -90,6 +90,26 @@ export default function SignupPage() {
     setEmailVerifyMessage("");
   }
 
+  function getSignupValidationMessage() {
+    if (!name || !loginId || !email || !password || !passwordConfirm) {
+      return "인증번호 발송 전 이름, 아이디, 이메일, 비밀번호를 먼저 입력해주세요.";
+    }
+
+    if (!LOGIN_ID_PATTERN.test(loginId)) {
+      return "아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.";
+    }
+
+    if (password !== passwordConfirm) {
+      return "비밀번호가 일치하지 않습니다.";
+    }
+
+    if (!agreed) {
+      return "개인정보 수집 및 이용에 동의해주세요.";
+    }
+
+    return "";
+  }
+
   async function handleSendVerificationCode() {
     if (!email) {
       setEmailVerifyMessage("이메일 주소를 입력해주세요.");
@@ -100,11 +120,42 @@ export default function SignupPage() {
       return;
     }
 
+    const requestVerification = async () => {
+      if (isCodeSent) {
+        return resendEmailVerification({ email });
+      }
+
+      const validationMessage = getSignupValidationMessage();
+
+      if (validationMessage) {
+        throw new Error(validationMessage);
+      }
+
+      try {
+        return await signup({
+          name,
+          login_id: loginId,
+          phone,
+          email,
+          password,
+          requestedRole,
+          reason,
+          agreed,
+        });
+      } catch (error) {
+        if (isEmailAlreadyExistsError(error)) {
+          return resendEmailVerification({ email });
+        }
+
+        throw error;
+      }
+    };
+
     try {
       setIsSendingCode(true);
       setEmailVerifyMessage("");
 
-      const response = await resendEmailVerification({ email }) as {
+      const response = await requestVerification() as {
         retry_after?: number;
         data?: {
           email_verification?: {
@@ -133,7 +184,7 @@ export default function SignupPage() {
           ? error.message
           : "인증번호 전송 중 오류가 발생했습니다.";
 
-      const retryAfterMatch = message.match(/(\d+)초/);
+      const retryAfterMatch = message.match(/(\\d+)초/);
       const retryAfter = retryAfterMatch ? Number(retryAfterMatch[1]) : 60;
 
       setIsEmailVerified(false);
@@ -154,7 +205,6 @@ export default function SignupPage() {
         return;
       }
 
-      setIsCodeSent(false);
       setEmailVerifyMessage(message);
     } finally {
       setIsSendingCode(false);
@@ -206,6 +256,11 @@ export default function SignupPage() {
 
     if (!isEmailVerified) {
       setEmailVerifyMessage("회원가입 신청 전에 이메일 인증을 완료해주세요.");
+      return;
+    }
+
+    if (isCodeSent) {
+      router.push("/pending-approval");
       return;
     }
 
