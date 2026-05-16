@@ -17,10 +17,22 @@ from app.utils.security import create_access_token, hash_password, verify_passwo
 
 
 class AuthError(Exception):
-    def __init__(self, message, status_code=400):
+    def __init__(self, message, status_code=400, code=None, extra=None):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.code = code
+        self.extra = extra or {}
+
+    def to_dict(self):
+        body = {"message": self.message}
+
+        if self.code:
+            body["code"] = self.code
+
+        body.update(self.extra)
+
+        return body
 
 
 class AuthService:
@@ -137,6 +149,21 @@ class AuthService:
     def _get_frontend_base_url():
         return os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
 
+    @staticmethod
+    def _get_email_verification_cooldown_seconds():
+        return int(os.getenv("EMAIL_VERIFICATION_COOLDOWN_SECONDS", "60"))
+
+    @staticmethod
+    def _get_retry_after_seconds(last_sent_at, now=None):
+        if not last_sent_at:
+            return 0
+
+        now = now or datetime.utcnow()
+        cooldown_seconds = AuthService._get_email_verification_cooldown_seconds()
+
+        elapsed_seconds = int((now - last_sent_at).total_seconds())
+        return max(cooldown_seconds - elapsed_seconds, 0)
+
 
     @staticmethod
     def _create_email_verification(user, now=None):
@@ -203,12 +230,20 @@ class AuthService:
         existing_login_id = User.query.filter_by(login_id=login_id).first()
 
         if existing_login_id:
-            raise AuthError("Login ID already exists.", 409)
+            raise AuthError(
+                "이미 사용 중인 아이디입니다.",
+                409,
+                code="LOGIN_ID_ALREADY_IN_USE",
+            )
 
         existing_user = User.query.filter_by(email=email).first()
 
         if existing_user:
-            raise AuthError("Email already exists.", 409)
+            raise AuthError(
+                "이미 사용 중인 이메일입니다.",
+                409,
+                code="EMAIL_ALREADY_IN_USE",
+            )
 
         now = datetime.utcnow()
 
@@ -276,6 +311,7 @@ class AuthService:
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
+                "retry_after": AuthService._get_email_verification_cooldown_seconds(),
                 "email_delivery": {
                     "sent": email_delivery.get("sent", False),
                     "reason": email_delivery.get("reason"),
@@ -372,23 +408,64 @@ class AuthService:
 
     @staticmethod
     def resend_email_verification(data, ip_address=None, user_agent=None):
+        data = data or {}
         email = (data.get("email") or "").strip().lower()
 
         if not email:
-            raise AuthError("Email is required.", 400)
+            raise AuthError(
+                "이메일을 입력해 주세요.",
+                400,
+                code="EMAIL_REQUIRED",
+            )
 
         user = User.query.filter_by(email=email).first()
 
         if not user:
-            raise AuthError("User not found.", 404)
+            raise AuthError(
+                "먼저 회원가입을 진행해 주세요.",
+                404,
+                code="USER_NOT_FOUND",
+            )
 
         if user.account_status == "DELETED":
-            raise AuthError("Account is withdrawn.", 403)
+            raise AuthError(
+                "탈퇴한 계정입니다.",
+                403,
+                code="ACCOUNT_WITHDRAWN",
+            )
 
         if user.is_email_verified:
-            raise AuthError("Email is already verified.", 409)
+            raise AuthError(
+                "이미 인증이 완료된 이메일입니다.",
+                409,
+                code="EMAIL_ALREADY_VERIFIED",
+            )
 
         now = datetime.utcnow()
+
+        latest_pending_verification = (
+            EmailVerification.query.filter_by(
+                user_id=user.id,
+                verification_status="PENDING",
+            )
+            .order_by(EmailVerification.created_at.desc())
+            .first()
+        )
+
+        if latest_pending_verification:
+            retry_after = AuthService._get_retry_after_seconds(
+                latest_pending_verification.created_at,
+                now=now,
+            )
+
+            if retry_after > 0:
+                raise AuthError(
+                    f"인증번호는 {retry_after}초 후 다시 요청할 수 있습니다.",
+                    429,
+                    code="EMAIL_VERIFICATION_COOLDOWN",
+                    extra={"retry_after": retry_after},
+                )
+
         raw_token, verification = AuthService._create_email_verification(user, now=now)
 
         AuthService.create_security_log(
@@ -402,17 +479,20 @@ class AuthService:
         )
 
         db.session.commit()
+
         email_delivery = EmailService.send_verification_email(
             user.email,
             raw_token,
         )
 
         return {
+            "code": "EMAIL_VERIFICATION_RESENT",
             "email": user.email,
             "email_verification": {
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
+                "retry_after": AuthService._get_email_verification_cooldown_seconds(),
                 "email_delivery": {
                     "sent": email_delivery.get("sent", False),
                     "reason": email_delivery.get("reason"),
