@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 from app.extensions import db
@@ -9,6 +10,7 @@ class IncidentService:
     @staticmethod
     def create_incident(data, file_info, user_id):
         now = datetime.now()
+        committed = False
 
         try:
             report = IncidentReport(
@@ -92,18 +94,32 @@ class IncidentService:
             db.session.add(job)
 
             db.session.commit()
+            committed = True
 
             print(f"[*] Report {report.id} 저장 완료. AI 서버에 분석을 요청합니다...")
-            success, res = AIGatewayService.request_analysis(report.id, file_path)
 
-            if success:
-                print("✅ AI 분석 요청 성공 (Job Status: QUEUED)")
-            else:
-                print(f"⚠️ AI 분석 요청 실패: {res}")
+            try:
+                success, res = AIGatewayService.request_analysis(report.id, file_path)
+
+                if success:
+                    print("✅ AI 분석 요청 성공 (Job Status: QUEUED)")
+                else:
+                    print(f"⚠️ AI 분석 요청 실패: {res}")
+
+            except Exception as ai_error:
+                print(f"⚠️ AI 분석 요청 중 예외 발생: {ai_error}")
 
             return {"report_id": report.id, "status": "success"}
 
         except Exception as e:
             db.session.rollback()
+
+            saved_file_path = file_info.get("file_path") if file_info else None
+            if not committed and saved_file_path and os.path.exists(saved_file_path):
+                try:
+                    os.remove(saved_file_path)
+                except OSError as cleanup_error:
+                    print(f"⚠️ 업로드 파일 정리 실패: {cleanup_error}")
+
             print(f"Error detail: {str(e)}")
             raise
