@@ -1,4 +1,5 @@
 import os
+import uuid
 from datetime import datetime
 
 from app.extensions import db
@@ -8,13 +9,19 @@ from app.modules.ai_gateway.service import AIGatewayService
 
 class IncidentService:
     @staticmethod
+    def _generate_report_code(now):
+        timestamp = now.strftime("%Y%m%d%H%M%S")
+        unique_suffix = uuid.uuid4().hex[:8].upper()
+        return f"REP-{timestamp}-{unique_suffix}"
+
+    @staticmethod
     def create_incident(data, file_info, user_id):
         now = datetime.now()
         committed = False
 
         try:
             report = IncidentReport(
-                report_code=f"REP-{int(now.timestamp())}",
+                report_code=IncidentService._generate_report_code(now),
                 report_type=data.get("report_type", "ACCIDENT"),
                 upload_purpose="ANALYSIS",
                 report_source_type="MOBILE_UPLOAD",
