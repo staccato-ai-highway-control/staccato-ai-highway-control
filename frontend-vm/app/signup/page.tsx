@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   resendEmailVerification,
@@ -14,7 +14,13 @@ const LOGIN_ID_PATTERN = /^[a-z0-9_-]{4,20}$/;
 
 function isEmailAlreadyExistsError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  return message.toLowerCase().includes("email already exists");
+  const lowerMessage = message.toLowerCase();
+
+  return (
+    lowerMessage.includes("email already exists") ||
+    lowerMessage.includes("email_already_in_use") ||
+    message.includes("이미 사용 중인 이메일")
+  );
 }
 
 export default function SignupPage() {
@@ -33,6 +39,7 @@ export default function SignupPage() {
   const [isCodeSent, setIsCodeSent] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [emailVerifyMessage, setEmailVerifyMessage] = useState("");
+  const [emailResendCooldown, setEmailResendCooldown] = useState(0);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,10 +56,36 @@ export default function SignupPage() {
     ) &&
     !isSubmitting;
 
+  const isEmailSendDisabled =
+    !email || isSendingCode || isEmailVerified || emailResendCooldown > 0;
+
+  const emailSendButtonLabel = isSendingCode
+    ? "발송 중..."
+    : isEmailVerified
+      ? "인증 완료"
+      : emailResendCooldown > 0
+        ? `재발송 ${emailResendCooldown}초`
+        : isCodeSent
+          ? "인증번호 재발송"
+          : "인증번호 발송";
+
+  useEffect(() => {
+    if (emailResendCooldown <= 0) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setEmailResendCooldown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [emailResendCooldown]);
+
   function handleEmailChange(nextEmail: string) {
     setEmail(nextEmail);
     setIsEmailVerified(false);
     setIsCodeSent(false);
+    setEmailResendCooldown(0);
     setCode("");
     setEmailVerifyMessage("");
   }
@@ -63,22 +96,66 @@ export default function SignupPage() {
       return;
     }
 
+    if (emailResendCooldown > 0) {
+      return;
+    }
+
     try {
       setIsSendingCode(true);
       setEmailVerifyMessage("");
-      await resendEmailVerification({ email });
+
+      const response = await resendEmailVerification({ email }) as {
+        retry_after?: number;
+        data?: {
+          email_verification?: {
+            retry_after?: number;
+          };
+        };
+      };
+
+      const retryAfter =
+        response.retry_after ??
+        response.data?.email_verification?.retry_after ??
+        60;
+
       setIsCodeSent(true);
       setIsEmailVerified(false);
+      setEmailResendCooldown(Math.max(Number(retryAfter) || 60, 1));
       setCode("");
-      setEmailVerifyMessage("인증번호를 다시 전송했습니다. 이메일을 확인해주세요.");
-    } catch (error) {
-      setIsCodeSent(false);
-      setIsEmailVerified(false);
       setEmailVerifyMessage(
+        isCodeSent
+          ? "인증번호를 다시 전송했습니다. 이메일을 확인해주세요."
+          : "인증번호를 전송했습니다. 이메일을 확인해주세요."
+      );
+    } catch (error) {
+      const message =
         error instanceof Error
           ? error.message
-          : "인증번호 전송 중 오류가 발생했습니다."
-      );
+          : "인증번호 전송 중 오류가 발생했습니다.";
+
+      const retryAfterMatch = message.match(/(\d+)초/);
+      const retryAfter = retryAfterMatch ? Number(retryAfterMatch[1]) : 60;
+
+      setIsEmailVerified(false);
+
+      if (
+        message.includes("EMAIL_VERIFICATION_COOLDOWN") ||
+        message.includes("후 다시 요청")
+      ) {
+        setIsCodeSent(true);
+        setEmailResendCooldown(Math.max(retryAfter, 1));
+        setEmailVerifyMessage(message);
+        return;
+      }
+
+      if (isEmailAlreadyExistsError(error)) {
+        setIsCodeSent(false);
+        setEmailVerifyMessage("이미 사용 중인 이메일입니다.");
+        return;
+      }
+
+      setIsCodeSent(false);
+      setEmailVerifyMessage(message);
     } finally {
       setIsSendingCode(false);
     }
@@ -252,16 +329,10 @@ export default function SignupPage() {
               <button
                 type="button"
                 onClick={handleSendVerificationCode}
-                disabled={!email || isSendingCode || isEmailVerified}
+                disabled={isEmailSendDisabled}
                 className="rounded-lg border border-sky-400/60 px-4 py-3 text-sm font-bold text-sky-100 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
               >
-                {isSendingCode
-                  ? "발송 중..."
-                  : isEmailVerified
-                    ? "인증 완료"
-                    : isCodeSent
-                      ? "인증번호 재발송"
-                      : "인증번호 발송"}
+                {emailSendButtonLabel}
               </button>
             </div>
 
