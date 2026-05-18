@@ -33,11 +33,11 @@ def update_post(post_id, data):
                 "message": "삭제된 게시글입니다."
             }, 400
 
-        
+
         # 게시글 제목 수정
         # 값이 없으면 기존값 유지
         post.title = data.get(
-            "title", 
+            "title",
             post.title
         )
 
@@ -72,7 +72,7 @@ def update_post(post_id, data):
         }, 200
 
     except Exception as e:
-        
+
         # 수정 실패 시 롤백
         db.session.rollback()
 
