@@ -105,6 +105,140 @@ Target DB: `staccato_test`
 
 ## 7. 현재 상태
 
-Dry-run 준비 완료.
+`staccato_test`에서 dry-run 검증을 완료했습니다.
 
-검증 결과는 실행 후 기록합니다.
+운영 DB `staccato` 변경은 수행하지 않았습니다.
+
+---
+
+## 8. Dry-run 결과
+
+### 8.1 baseline 테스트
+
+FK 제거 전 baseline 테스트가 통과했습니다.
+
+```text
+64 passed, 374 warnings in 12.40s
+```
+
+### 8.2 사전 확인 결과
+
+`19_check_chat_users_fk.sql`을 `staccato_test`에서 실행했습니다.
+
+실행 DB와 계정은 아래와 같습니다.
+
+```text
+DATABASE: staccato_test
+CURRENT_USER: staccato_test_runner@192.168.0.187
+```
+
+FK 제거 전 대상 FK 4개가 존재함을 확인했습니다.
+
+| table | column | constraint | reference |
+|---|---|---|---|
+| `chat_message_reads` | `user_id` | `chat_message_reads_ibfk_2` | `users.id` |
+| `chat_messages` | `sender_user_id` | `chat_messages_ibfk_3` | `users.id` |
+| `chat_room_members` | `user_id` | `chat_room_members_ibfk_2` | `users.id` |
+| `chat_rooms` | `created_by` | `chat_rooms_ibfk_2` | `users.id` |
+
+orphan 데이터는 모두 없었습니다.
+
+| target | orphan_count |
+|---|---:|
+| `chat_rooms.created_by` | `0` |
+| `chat_room_members.user_id` | `0` |
+| `chat_messages.sender_user_id` | `0` |
+| `chat_message_reads.user_id` | `0` |
+
+### 8.3 FK 제거 결과
+
+`20_drop_chat_users_fk.sql`을 `staccato_test`에서만 실행했습니다.
+
+실행 DB와 계정은 아래와 같습니다.
+
+```text
+DATABASE: staccato_test
+CURRENT_USER: staccato_test_runner@192.168.0.187
+```
+
+아래 FK 4개 제거가 성공했습니다.
+
+- `chat_message_reads_ibfk_2`
+- `chat_messages_ibfk_3`
+- `chat_room_members_ibfk_2`
+- `chat_rooms_ibfk_2`
+
+제거 후 FK 확인 결과는 아래와 같이 대상 FK가 없었습니다.
+
+```text
+(none)
+```
+
+### 8.4 FK 제거 후 테스트
+
+FK 제거 후 자동화 테스트가 통과했습니다.
+
+```text
+64 passed, 374 warnings in 11.34s
+```
+
+### 8.5 rollback 결과
+
+`21_rollback_chat_users_fk.sql`을 `staccato_test`에서만 실행했습니다.
+
+실행 DB와 계정은 아래와 같습니다.
+
+```text
+DATABASE: staccato_test
+CURRENT_USER: staccato_test_runner@192.168.0.187
+```
+
+rollback 전 orphan 데이터는 모두 없었습니다.
+
+| target | orphan_count |
+|---|---:|
+| `chat_rooms.created_by` | `0` |
+| `chat_room_members.user_id` | `0` |
+| `chat_messages.sender_user_id` | `0` |
+| `chat_message_reads.user_id` | `0` |
+
+아래 FK 4개 복구가 성공했습니다.
+
+- `chat_rooms_ibfk_2`
+- `chat_room_members_ibfk_2`
+- `chat_messages_ibfk_3`
+- `chat_message_reads_ibfk_2`
+
+복구 후 대상 FK 4개가 다시 존재함을 확인했습니다.
+
+| table | column | constraint | reference |
+|---|---|---|---|
+| `chat_message_reads` | `user_id` | `chat_message_reads_ibfk_2` | `users.id` |
+| `chat_messages` | `sender_user_id` | `chat_messages_ibfk_3` | `users.id` |
+| `chat_room_members` | `user_id` | `chat_room_members_ibfk_2` | `users.id` |
+| `chat_rooms` | `created_by` | `chat_rooms_ibfk_2` | `users.id` |
+
+### 8.6 rollback 후 테스트
+
+rollback 후 자동화 테스트가 통과했습니다.
+
+```text
+64 passed, 374 warnings in 11.50s
+```
+
+---
+
+## 9. 결론
+
+`chat -> users` FK dry-run은 `staccato_test`에서 성공적으로 완료되었습니다.
+
+이번 dry-run에서는 아래 FK 제약조건을 제거하고 다시 복구해도 현재 자동화 테스트가 깨지지 않음을 확인했습니다.
+
+- `chat_rooms.created_by -> users.id`
+- `chat_room_members.user_id -> users.id`
+- `chat_messages.sender_user_id -> users.id`
+- `chat_message_reads.user_id -> users.id`
+
+이 문서는 운영 반영 승인이 아닙니다.
+
+운영 DB 반영 전에는 별도의 migration 계획, 백업 계획, 승인 절차, 점검 시간이 필요합니다.
