@@ -91,3 +91,60 @@ The next valid candidate group is the notification domain because both `staccato
 Prepared for dry-run.
 
 Execution result will be recorded after validation.
+
+---
+
+## 8. Dry-run execution result
+
+Date: 2026-05-18
+Target DB: `staccato_test`
+Execution account: `staccato_test_runner@192.168.0.187`
+Production DB touched: No
+
+### Baseline
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Pre-drop check
+
+Target notifications -> users foreign keys were found:
+
+- `notifications.user_id -> users.id` / `notifications_ibfk_1`
+- `notification_deliveries.user_id -> users.id` / `notification_deliveries_ibfk_2`
+
+All orphan checks returned `0`.
+
+### Drop dry-run
+
+Executed on `staccato_test` only:
+
+- `ALTER TABLE notification_deliveries DROP FOREIGN KEY notification_deliveries_ibfk_2`
+- `ALTER TABLE notifications DROP FOREIGN KEY notifications_ibfk_1`
+
+Post-drop check confirmed no remaining target notifications -> users FKs.
+
+### Post-drop test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Rollback verification
+
+Rollback SQL restored the 2 target notifications -> users FKs:
+
+- `notification_deliveries.user_id -> users.id` / `notification_deliveries_ibfk_2`
+- `notifications.user_id -> users.id` / `notifications_ibfk_1`
+
+### Post-rollback test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Result
+
+Notifications -> users FK removal dry-run passed on `staccato_test`.
+
+This result means the target FK removal is structurally reversible and does not currently break the existing automated test suite.
+
+This does not approve production execution by itself. Production migration still requires a separate migration plan, DB backup plan, approval, and maintenance window decision.
