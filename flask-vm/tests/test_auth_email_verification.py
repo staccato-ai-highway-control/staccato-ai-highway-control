@@ -1,3 +1,4 @@
+from db_cleanup import cleanup_database
 import os
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -38,13 +39,13 @@ def app_context():
 
     with app.app_context():
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
         db.create_all()
 
         yield app
 
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
 
 
 @pytest.fixture()
