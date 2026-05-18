@@ -10,7 +10,7 @@ class ChatRoom(db.Model):
     incident_id = db.Column(db.BigInteger, db.ForeignKey("incidents.id"), nullable=True)
     room_type = db.Column(db.String(50), nullable=False)
     room_status = db.Column(db.String(50), nullable=False)
-    created_by = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    created_by = db.Column(db.BigInteger, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False)
     closed_at = db.Column(db.DateTime, nullable=True)
 
@@ -32,7 +32,7 @@ class ChatMessage(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
     room_id = db.Column(db.BigInteger, db.ForeignKey("chat_rooms.id"), nullable=False)
     incident_id = db.Column(db.BigInteger, db.ForeignKey("incidents.id"), nullable=True)
-    sender_user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    sender_user_id = db.Column(db.BigInteger, nullable=True)
     message_type = db.Column(db.String(50), nullable=False)
     message = db.Column(db.Text, nullable=False)
     attachment_id = db.Column(db.BigInteger, db.ForeignKey("board_attachments.id"), nullable=True)
@@ -56,7 +56,7 @@ class ChatMessageRead(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
     message_id = db.Column(db.BigInteger, db.ForeignKey("chat_messages.id"), nullable=False)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.BigInteger, nullable=False)
     read_at = db.Column(db.DateTime, nullable=False)
 
     def to_dict(self):
@@ -75,7 +75,7 @@ class ChatbotConversation(db.Model):
     __tablename__ = "chatbot_conversations"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    user_id = db.Column(db.BigInteger, nullable=True)
     incident_id = db.Column(db.BigInteger, db.ForeignKey("incidents.id"), nullable=True)
     conversation_status = db.Column(db.String(50), nullable=False)
     title = db.Column(db.String(200), nullable=True)
@@ -101,7 +101,7 @@ class ChatbotMessage(db.Model):
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
     conversation_id = db.Column(db.BigInteger, db.ForeignKey("chatbot_conversations.id"), nullable=False)
     incident_id = db.Column(db.BigInteger, db.ForeignKey("incidents.id"), nullable=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    user_id = db.Column(db.BigInteger, nullable=True)
     sender_type = db.Column(db.String(50), nullable=False)
     message = db.Column(db.Text, nullable=False)
     llm_model_name = db.Column(db.String(100), nullable=True)

@@ -8,7 +8,7 @@ class ChatRoomMember(db.Model):
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
     room_id = db.Column(db.BigInteger, db.ForeignKey("chat_rooms.id"), nullable=False)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.BigInteger, nullable=False)
     member_role = db.Column(db.String(50), nullable=False)
     joined_at = db.Column(db.DateTime, nullable=False)
     left_at = db.Column(db.DateTime, nullable=True)

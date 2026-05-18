@@ -46,7 +46,7 @@ class SignupRequest(db.Model):
     __tablename__ = "signup_requests"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.BigInteger, nullable=False)
     request_status = db.Column(db.String(50), nullable=False, default="REQUESTED")
     requested_role = db.Column(db.String(50), nullable=False, default="VIEWER")
     request_memo = db.Column(db.Text, nullable=True)
@@ -76,7 +76,7 @@ class EmailVerification(db.Model):
     __tablename__ = "email_verifications"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
+    user_id = db.Column(db.BigInteger, nullable=False)
     email = db.Column(db.String(255), nullable=False)
     verification_token = db.Column(db.String(255), nullable=False, unique=True)
     verification_status = db.Column(db.String(50), nullable=False, default="PENDING")

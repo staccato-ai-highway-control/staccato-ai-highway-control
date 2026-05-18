@@ -40,5 +40,5 @@ def create_report():
         }), 201
 
     except Exception as e:
-        logger.error(f"리포트 생성 중 오류 발생: {str(e)}")
-        return jsonify({"error": "서버 내부 오류가 발생했습니다.", "details": str(e)}), 500
+        logger.exception("리포트 생성 중 오류 발생")
+        return jsonify({"error": "서버 내부 오류가 발생했습니다."}), 500
