@@ -6,4 +6,6 @@ export const MVP_DESCRIPTION =
 export const SERVICE_SUBTITLE = "AI Traffic Safety Control System";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_PROXY_PATH ?? "/backend-api";
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_PROXY_PATH ??
+  "/backend-api";

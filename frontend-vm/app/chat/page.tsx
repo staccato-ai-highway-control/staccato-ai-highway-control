@@ -181,8 +181,8 @@ function mapApiMessage(message: ChatMessageDto): ChatMessage {
   return {
     id: `api-msg-${message.id}`,
     roomId: String(message.room_id),
-    senderName: isSystem ? "시스템" : message.sender_id === 1 ? "김관제" : `사용자 ${message.sender_id}`,
-    senderRole: isSystem ? message.message_type : message.sender_id === 1 ? "최고관리자" : "담당자",
+    senderName: isSystem ? "시스템" : message.sender_name ?? `사용자 ${message.sender_id ?? message.sender_user_id ?? ""}`.trim(),
+    senderRole: isSystem ? message.message_type : message.sender_id === 1 || message.sender_user_id === 1 ? "최고관리자" : "담당자",
     messageType: message.message_type,
     content: message.content,
     createdAt: formatDateTime(message.created_at),
@@ -268,7 +268,7 @@ export default function ChatPage() {
       const roomId =
         activeBackendRoomId ??
         (await getOrCreateChatRoom(selectedRoom.incidentId)).data.id;
-      const response = await sendChatMessage(roomId, 1, content);
+      const response = await sendChatMessage(roomId, content);
       const savedMessage = mapApiMessage(response.data);
 
       setBackendRoomIds((current) => ({ ...current, [selectedRoom.id]: roomId }));

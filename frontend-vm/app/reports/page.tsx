@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Search, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FileCheck2, Search, Sparkles, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
+import type { AuthUser, UserRole } from "@/features/auth/types";
+import { mockIncidents } from "@/features/incidents/mock";
+import type { Incident } from "@/features/incidents/types";
 import { mockReports } from "@/features/reports/mock";
 import type {
   Report,
@@ -13,6 +16,7 @@ import type {
   ReportProcessingStatus,
   ReportType,
 } from "@/features/reports/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 type StatusFilter = "ALL" | ReportProcessingStatus;
 type TypeFilter = "ALL" | ReportType;
@@ -89,14 +93,67 @@ function matchesSearch(report: Report, keyword: string) {
     .includes(normalizedKeyword);
 }
 
+function getRole(user: AuthUser | null): UserRole | null {
+  return user?.role ?? null;
+}
+
+function isMaintainerRole(role: UserRole | null) {
+  return role === "MAINTAINER" || role === "DISPATCH_ADMIN";
+}
+
+function isAssignedToUser(incident: Incident, user: AuthUser | null) {
+  const assignee = incident.assignee?.trim();
+  if (!assignee || assignee === "미배정") return false;
+
+  const candidates = [user?.name, user?.login_id, user?.email]
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+
+  return candidates.includes(assignee);
+}
+
+function isReportConnectedToIncident(report: Report, incident: Incident) {
+  return (
+    report.convertedIncidentCode === incident.code ||
+    report.cctvId === incident.cctvId ||
+    report.location.includes(incident.roadName)
+  );
+}
+
 export default function ReportsPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [reports, setReports] = useState<Report[]>(mockReports);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("ALL");
   const [searchKeyword, setSearchKeyword] = useState("");
 
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
+  const role = getRole(authUser);
+  const isMaintainer = isMaintainerRole(role);
+  const canRegisterReport = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canRequestAnalysis = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canChangeStatus = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canDeleteReport = role === "SUPER_ADMIN";
+  const canControlReview = role === "CONTROL_ADMIN";
+
+  const visibleReports = useMemo(() => {
+    if (!isMaintainer) return reports;
+
+    const assignedIncidents = mockIncidents.filter((incident) =>
+      isAssignedToUser(incident, authUser)
+    );
+
+    return reports.filter((report) =>
+      assignedIncidents.some((incident) => isReportConnectedToIncident(report, incident))
+    );
+  }, [authUser, isMaintainer, reports]);
+
   const filteredReports = useMemo(() => {
-    return mockReports.filter((report) => {
+    return visibleReports.filter((report) => {
       const statusMatched = statusFilter === "ALL" || report.status === statusFilter;
       const typeMatched = typeFilter === "ALL" || report.reportType === typeFilter;
       const priorityMatched = priorityFilter === "ALL" || report.priority === priorityFilter;
@@ -108,7 +165,24 @@ export default function ReportsPage() {
         matchesSearch(report, searchKeyword)
       );
     });
-  }, [priorityFilter, searchKeyword, statusFilter, typeFilter]);
+  }, [priorityFilter, searchKeyword, statusFilter, typeFilter, visibleReports]);
+
+  const pageDescription = isMaintainer
+    ? "내 배정 사고와 연결된 신고만 조회합니다. 등록, 분석 요청, 상태 변경은 제한됩니다."
+    : role === "CONTROL_ADMIN"
+      ? "신고 등록, AI 분석 요청, 사고 전환 결과와 검토 상태를 관리합니다."
+      : "전체 신고 목록과 AI 분석, 사고 전환, 삭제/관리 액션을 처리합니다.";
+
+  function handleMockAction(action: string, reportCode: string) {
+    window.alert(`${reportCode} ${action} 기능은 API 확정 후 연결 예정입니다.`);
+  }
+
+  function handleMockDelete(report: Report) {
+    const confirmed = window.confirm(`${report.reportCode} 신고를 목록에서 삭제하시겠습니까?`);
+    if (!confirmed) return;
+
+    setReports((current) => current.filter((item) => item.id !== report.id));
+  }
 
   return (
     <RequireAuth>
@@ -117,16 +191,18 @@ export default function ReportsPage() {
           <div>
             <h2 className="text-2xl font-black text-slate-950">이상상황 등록/처리</h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              이상상황 영상/이미지 등록 목록과 AI 분석 상태를 확인합니다.
+              {pageDescription}
             </p>
           </div>
-          <Link
-            href="/reports/create"
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white no-underline transition hover:bg-staccato-dark"
-          >
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            이상상황 등록
-          </Link>
+          {canRegisterReport ? (
+            <Link
+              href="/reports/create"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white no-underline transition hover:bg-staccato-dark"
+            >
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              이상상황 등록
+            </Link>
+          ) : null}
         </section>
 
         <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
@@ -157,13 +233,15 @@ export default function ReportsPage() {
             </select>
           </div>
           <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-            파일 업로드 UI는 상세 구현 전입니다. 상단의 이상상황 등록 버튼에서 업로드 화면으로 이동합니다.
+            {isMaintainer
+              ? "출동관리자는 배정 사고와 연결된 신고를 조회만 할 수 있습니다."
+              : "상단의 이상상황 등록 버튼에서 영상/이미지를 업로드하고 AI 분석 상태를 확인합니다."}
           </div>
         </section>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="overflow-auto">
-            <table className="w-full min-w-[1120px] text-sm">
+            <table className="w-full min-w-[1280px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3">report_code</th>
@@ -174,7 +252,7 @@ export default function ReportsPage() {
                   <th className="px-4 py-3">상태</th>
                   <th className="px-4 py-3">우선순위</th>
                   <th className="px-4 py-3">등록일</th>
-                  <th className="px-4 py-3">상세</th>
+                  <th className="px-4 py-3">액션</th>
                 </tr>
               </thead>
               <tbody>
@@ -196,9 +274,34 @@ export default function ReportsPage() {
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-500">{report.createdAt}</td>
                     <td className="px-4 py-4">
-                      <Link href={`/reports/${report.id}`} className="font-bold text-staccato">
-                        상세
-                      </Link>
+                      <div className="flex flex-wrap gap-2">
+                        <Link href={`/reports/${report.id}`} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">
+                          상세
+                        </Link>
+                        {canRequestAnalysis ? (
+                          <button type="button" onClick={() => handleMockAction("AI 분석 요청", report.reportCode)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800">
+                            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                            분석
+                          </button>
+                        ) : null}
+                        {canChangeStatus ? (
+                          <button type="button" onClick={() => handleMockAction("상태 변경", report.reportCode)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                            <FileCheck2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            상태
+                          </button>
+                        ) : null}
+                        {canControlReview ? (
+                          <button type="button" onClick={() => handleMockAction("오탐/검토 완료 처리", report.reportCode)} className="inline-flex h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
+                            검토완료
+                          </button>
+                        ) : null}
+                        {canDeleteReport ? (
+                          <button type="button" onClick={() => handleMockDelete(report)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50">
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            삭제
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -1,31 +1,22 @@
 import { apiClient } from "./apiClient";
-import type { LoginRequest, LoginResponse } from "@/features/auth/types";
 import type { IncidentStatus } from "@/features/incidents/types";
-import type { CreateReportPayload } from "@/features/reports/api";
+import type { LoginRequest, LoginResponse } from "@/features/auth/types";
+import { login } from "@/features/auth/api";
+import { uploadReport, type UploadReportPayload } from "@/features/reports/api";
 
-export { apiClient };
+export { apiClient, login };
 
-/*
- * Frontend -> Flask Server
- * Flask Server -> AI Server
- * Flask Server -> ITS Server
- * Flask Server -> External LLM API
- * Flask Server -> DB Server
- */
+export type ReportPayload = UploadReportPayload;
 
-export function login(payload: LoginRequest) {
-  return apiClient<LoginResponse>("/api/auth/login", { method: "POST", body: payload });
-}
-
-export function getDashboardSummary() {
+export function fetchDashboardSummary() {
   return apiClient("/api/dashboard/summary");
 }
 
-export function getIncidents() {
+export function fetchIncidents() {
   return apiClient("/api/incidents");
 }
 
-export function getIncidentDetail(id: string) {
+export function fetchIncident(id: string) {
   return apiClient(`/api/incidents/${id}`);
 }
 
@@ -33,8 +24,8 @@ export function updateIncidentStatus(id: string, status: IncidentStatus) {
   return apiClient<{ ok: boolean }>(`/api/incidents/${id}/status`, { method: "PUT", body: { status } });
 }
 
-export function createReport(payload: CreateReportPayload) {
-  return apiClient<{ id: string }>("/api/reports", { method: "POST", body: payload });
+export function createReport(payload: UploadReportPayload) {
+  return uploadReport(payload);
 }
 
 export function uploadReportAttachment(id: string, file: File) {
@@ -51,10 +42,12 @@ export function generateLlmReport(id: string) {
   return apiClient<{ reportId: string }>(`/api/incidents/${id}/llm-report`, { method: "POST" });
 }
 
-export function getLlmReport(id: string) {
+export function fetchLlmReport(id: string) {
   return apiClient(`/api/llm-reports/${id}`);
 }
 
 export function verifyLlmReport(id: string) {
   return apiClient<{ ok: boolean }>(`/api/llm-reports/${id}/verify`, { method: "POST" });
 }
+
+export type { LoginRequest, LoginResponse };

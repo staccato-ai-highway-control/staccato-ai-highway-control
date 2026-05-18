@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -9,18 +9,44 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { categoryLabels, getBoardPost, type BoardCategory } from "../../data";
+import type { AuthUser } from "@/features/auth/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
+import {
+  canEditPost,
+  categoryLabels,
+  getBoardPost,
+  getWritableCategories,
+  type BoardCategory,
+} from "../../data";
 
 export default function AdminBoardEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const post = getBoardPost(id);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [category, setCategory] = useState<BoardCategory>(post?.category ?? "NOTICE");
   const [title, setTitle] = useState(post?.title ?? "");
   const [content, setContent] = useState(post?.content ?? "");
 
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
+  const editable = post ? canEditPost(post, authUser) : false;
+  const writableCategories = useMemo(() => getWritableCategories(authUser), [authUser]);
+  const editableCategories = post
+    ? writableCategories.includes(post.category)
+      ? writableCategories
+      : [post.category]
+    : writableCategories;
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!editable) {
+      alert("현재 권한으로 수정할 수 없는 게시글입니다.");
+      return;
+    }
 
     if (!title.trim() || !content.trim()) {
       alert("제목과 내용을 입력해주세요.");
@@ -61,16 +87,22 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
         </section>
 
         <Card className="p-6">
+          {!editable ? (
+            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+              현재 권한으로 수정할 수 없는 게시글입니다.
+            </div>
+          ) : null}
           <form onSubmit={handleSubmit} className="grid gap-5">
             <label className="grid gap-2">
               <span className="text-xs font-black text-slate-500">카테고리</span>
               <select
                 value={category}
                 onChange={(event) => setCategory(event.target.value as BoardCategory)}
-                className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                disabled={!editable}
+                className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-400"
               >
-                {Object.entries(categoryLabels).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
+                {editableCategories.map((value) => (
+                  <option key={value} value={value}>{categoryLabels[value]}</option>
                 ))}
               </select>
             </label>
@@ -79,7 +111,8 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                disabled={!editable}
+                className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-400"
               />
             </label>
             <label className="grid gap-2">
@@ -87,12 +120,13 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
               <textarea
                 value={content}
                 onChange={(event) => setContent(event.target.value)}
+                disabled={!editable}
                 rows={12}
-                className="resize-none rounded-lg border border-slate-200 p-3 text-sm font-semibold leading-7 text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+                className="resize-none rounded-lg border border-slate-200 p-3 text-sm font-semibold leading-7 text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-400"
               />
             </label>
             <div className="flex flex-wrap gap-2">
-              <Button type="submit">저장</Button>
+              <Button type="submit" disabled={!editable}>저장</Button>
               <Link
                 href={`/admin/board/${id}`}
                 className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50"

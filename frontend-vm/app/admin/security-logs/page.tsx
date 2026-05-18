@@ -2,7 +2,7 @@
 
 import { Search, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
-import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
@@ -139,7 +139,7 @@ export default function SecurityLogsPage() {
   }, [eventTypeFilter, resultFilter, query]);
 
   return (
-    <RequireAuth>
+    <RequireSuperAdmin title="보안 로그">
       <AppLayout title="보안 로그">
         <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -232,7 +232,7 @@ export default function SecurityLogsPage() {
               </thead>
               <tbody>
                 {filteredLogs.map((log) => (
-                  <tr key={log.id} className="border-t border-slate-100 align-top">
+                  <tr key={`${log.id}-${log.eventType}-${log.createdAt}`} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-4 font-semibold text-slate-500">{log.createdAt}</td>
                     <td className="px-4 py-4 font-semibold text-slate-700">{eventTypeLabels[log.eventType]}</td>
                     <td className="px-4 py-4">
@@ -251,6 +251,6 @@ export default function SecurityLogsPage() {
           </div>
         </Card>
       </AppLayout>
-    </RequireAuth>
+    </RequireSuperAdmin>
   );
 }
