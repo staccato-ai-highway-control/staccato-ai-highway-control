@@ -89,3 +89,57 @@ This dry-run focuses only on the FK constraint. It does not remove the `owner_us
 Prepared for dry-run.
 
 Execution result will be recorded after validation.
+
+---
+
+## 8. Dry-run execution result
+
+Date: 2026-05-18
+Target DB: `staccato_test`
+Execution account: `staccato_test_runner@192.168.0.187`
+Production DB touched: No
+
+### Baseline
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Pre-drop check
+
+Target ai_models -> users foreign key was found:
+
+- `ai_models.owner_user_id -> users.id` / `ai_models_ibfk_1`
+
+The orphan check returned `0`.
+
+### Drop dry-run
+
+Executed on `staccato_test` only:
+
+- `ALTER TABLE ai_models DROP FOREIGN KEY ai_models_ibfk_1`
+
+Post-drop check confirmed no remaining target ai_models -> users FK.
+
+### Post-drop test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: `64 passed, 374 warnings in 11.50s`
+
+### Rollback verification
+
+Rollback SQL restored the target ai_models -> users FK:
+
+- `ai_models.owner_user_id -> users.id` / `ai_models_ibfk_1`
+
+### Post-rollback test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Result
+
+AI models -> users FK removal dry-run passed on `staccato_test`.
+
+This result means the target FK removal is structurally reversible and does not currently break the existing automated test suite.
+
+This does not approve production execution by itself. Production migration still requires a separate migration plan, DB backup plan, approval, and maintenance window decision.
