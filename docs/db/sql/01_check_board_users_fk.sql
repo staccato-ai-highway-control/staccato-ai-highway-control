@@ -5,7 +5,7 @@
 USE staccato_test;
 
 SELECT DATABASE() AS current_database;
-SELECT CURRENT_USER() AS current_user;
+SELECT CURRENT_USER() AS current_db_user;
 
 -- 제거 대상 FK 존재 확인
 SELECT

@@ -8,7 +8,7 @@
 USE staccato_test;
 
 SELECT DATABASE() AS current_database;
-SELECT CURRENT_USER() AS current_user;
+SELECT CURRENT_USER() AS current_db_user;
 
 -- rollback 전 orphan 데이터 확인
 SELECT 'board_posts.author_id' AS target, COUNT(*) AS orphan_count

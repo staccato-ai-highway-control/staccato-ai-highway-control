@@ -9,7 +9,7 @@
 USE staccato_test;
 
 SELECT DATABASE() AS current_database;
-SELECT CURRENT_USER() AS current_user;
+SELECT CURRENT_USER() AS current_db_user;
 
 ALTER TABLE board_posts
   DROP FOREIGN KEY board_posts_ibfk_1;
