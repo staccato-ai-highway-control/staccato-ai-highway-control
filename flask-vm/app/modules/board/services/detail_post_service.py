@@ -1,10 +1,17 @@
+# DB 객체 import
+from app.extensions import db
+
+# 게시글 모델 import
+from app.models.board_models import BoardPost
+
 # -----------------------
 # 게시글 상세 조회 함수
 # -----------------------
 def get_post(post_id):
 
     try:
-        # 게시글 id로 조회
+        
+    # 게시글 id로 조회
     post = BoarPost.query.get(post_id)
 
     # 게시글이 없는 경우

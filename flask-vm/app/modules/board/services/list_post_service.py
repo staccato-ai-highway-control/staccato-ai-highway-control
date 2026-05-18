@@ -1,20 +1,90 @@
+# 게시글 모델 import
+from app.models.board_models import BoardPost
+
 # -----------------------
 # 게시글 목록 조회 함수
+# 
+# 기능:
+# - 키워드 검색
+# - 카테고리 필터
+# - 페이징 처리
 # -----------------------
-def get_posts():
+def get_posts(
+    keyword
+    board_type,
+    page,
+    size
+):
 
     try:
-        # 삭제 되지 않은 게시글만 조회
-        posts = BoarPost.query.filter(
+
+        # ---------------------------
+        # 기본 Query 생성
+        # 
+        # 삭제되지 않은 게시글만 조회
+`       # ---------------------------
+        query = BoarPost.query.filter(
             BoarPost.post_status != "deleted"
-        ).order_by(
+        )
 
-            # 최신순 정렬
+        # ---------------------------
+        # 키워드 검색
+        # 
+        # 제목 or 내용 검색
+        # ---------------------------
+        if keyword:
+
+            query = query.filter(
+                or_(
+
+                    # 제목 LIKE 검색
+                    BoarPost.title.ilike(
+                        f"%{keyword}%"
+                    ),
+
+                    # 내용 LIKE 검색
+                    BoarPost.content.ilike(
+                        f"%{keyword}%"
+                    )
+                )
+            )
+        
+        # ----------------------------
+        # 카테고리(board_type) 검색
+        # ----------------------------
+        if board_type:
+
+            query = query.filter(
+                BoarPost.board_type == board_type
+            )
+
+        # ----------------------------
+        # 최신순 정렬
+        # ----------------------------
+        query = query.order_by(
             BoarPost.created_at.desc()
+        )
 
-        ).all()
+        # -----------------------------------
+        # pagination 처리
+        # 
+        # page:
+        # 현재 페이지 번호
+        # 
+        # per_page:
+        # 페이지당 게시글 개수
+        # ------------------------------------
+        pagination = query.paginate(
+            page=page,
+            per_page=size,
+            error_out=False
+        )
 
-        #json 형태로 변환하여 반환
+        # 현재 페이지 게시글 목록
+        posts = pagination.items
+        
+
+        # json 형태로 변환하여 반환
         post_list = [
             post.to_dict() for post in posts
         ]

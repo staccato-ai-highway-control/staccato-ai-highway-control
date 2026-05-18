@@ -1,3 +1,12 @@
+# 현재 시간 import
+from datetime import datetime
+
+# DB 객체 import
+from app.extensions import db
+
+# 게시글 모델 import
+from app.models.board_models import BoardPost
+
 # -----------------------
 # 게시글 삭제 함수
 # -----------------------

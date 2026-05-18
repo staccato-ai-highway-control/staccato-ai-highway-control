@@ -41,8 +41,8 @@ from app.modules.board.services.delete_post_service import delete_post
 # "/board/posts"
 # =========================================
 board_bp = Blueprint(
-    "board", 
-    __name__, 
+    "board",
+    __name__,
     url_prefix="/board"
 )
 
@@ -56,7 +56,7 @@ board_bp = Blueprint(
 # =========================================
 @board_bp.route("/posts", methods=["POST"])
 def create():
-   
+
    try:
 
         # 프론트에서 보낸 JSON 데이터 받기
@@ -88,11 +88,52 @@ def create():
 # 게시글 목록 조회 API
 #
 # GET /board/posts
+
+# 검색 / 필터 / 페이징 지원
 # =========================================
 @board_bp.route("/posts", methods=["GET"])
 def get_posts_list():
 
     try:
+
+        # =====================================
+        # Query Parameter 받기
+        #
+        # 예:
+        # /board/posts?keyword=공지
+        # =====================================
+
+        # 검색 키워드
+        keyword = request.args.get("keyword")
+
+        # 게시판 종류
+        board_type = request.args.get("board_type")
+
+        # 현재 페이지 번호
+        # 
+        # 기본값: 1
+        page = request.args.get(
+            "page", 
+            default=1, 
+            type=int
+        )
+
+        # 페이지당 게시글 개수
+        # 
+        # 기본값: 10
+        size = request.args.get(
+            "size", 
+            default=10, 
+            type=int
+        )
+
+        # 게시글 목록 조회 서비스 실행
+        result, status_code = list_posts(
+            keyword,
+            board_type,
+            page,
+            size
+        )
 
         # 게시글 목록 조회 서비스 실행
         result, status_code = list_posts()
