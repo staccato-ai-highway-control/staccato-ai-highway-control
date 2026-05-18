@@ -235,13 +235,11 @@ export default function ChatbotPage() {
     setIsAsking(true);
 
     try {
-      // TODO: 실제 사고 상세 화면에서는 incident_id 기반 API를 사용하고, 일반 챗봇 화면은 mock context로 /chatbot/answer를 호출합니다.
-      const response = await askChatbot(
-        trimmedQuestion,
-        createIncidentContext(selectedIncident, role, authUser)
-      );
+      const backendIncidentId = getBackendIncidentId(selectedIncident);
+      const response = role === "SUPER_ADMIN"
+        ? await askChatbot(trimmedQuestion, createIncidentContext(selectedIncident, role, authUser))
+        : await askIncidentChatbot(backendIncidentId, trimmedQuestion, createIncidentContext(selectedIncident, role, authUser));
 
-      // TODO: 챗봇 응답 저장 API가 확정되면 로컬 messages state 대신 서버 이력과 동기화합니다.
       setMessages((current) => [
         ...current,
         {

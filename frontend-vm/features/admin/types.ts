@@ -1,4 +1,4 @@
-import type { UserRole } from "@/features/auth/types";
+import type { UserAccountStatus, UserRole, SignupRequestStatus } from "@/features/auth/types";
 
 export type AdminUser = {
   id?: string | number;
@@ -7,12 +7,12 @@ export type AdminUser = {
   name?: string;
   role?: UserRole;
   department?: string;
-  account_status?: string;
+  account_status?: UserAccountStatus | string;
   is_email_verified?: boolean;
   created_at?: string;
 };
 
-export type SignupRequestStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "CANCELLED";
+export type { SignupRequestStatus };
 
 export type SignupRequestApiItem = {
   id: number;

@@ -216,7 +216,8 @@ export default function ChatPage() {
         const roomResponse = await getOrCreateChatRoom(selectedRoom.incidentId);
         const backendRoomId = roomResponse.data.id;
         const messagesResponse = await getChatMessages(backendRoomId);
-        const apiMessages = messagesResponse.data.messages.map(mapApiMessage);
+        const responseMessages = "data" in messagesResponse ? messagesResponse.data.messages : messagesResponse.messages;
+        const apiMessages = responseMessages.map(mapApiMessage);
 
         if (ignore) return;
 

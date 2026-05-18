@@ -1,5 +1,5 @@
-export type ReportType = "LANE_STOP_REPORT" | "SHOULDER_STOP_REPORT" | "UNKNOWN_REPORT";
-export type UploadPurpose = "REPORT" | "NORMAL_REFERENCE" | "TEST_DEMO";
+export type ReportType = "GENERAL" | "ACCIDENT" | "LANE_STOP_REPORT" | "SHOULDER_STOP_REPORT" | "UNKNOWN_REPORT";
+export type UploadPurpose = "ANALYSIS" | "REPORT" | "NORMAL_REFERENCE" | "TEST_DEMO";
 export type AnalysisStatus = "WAITING" | "REQUESTED" | "ANALYZING" | "COMPLETED" | "FAILED";
 export type ReportProcessingStatus =
   | "SUBMITTED"
@@ -7,7 +7,7 @@ export type ReportProcessingStatus =
   | "ANALYZING"
   | "CONVERTED_TO_INCIDENT"
   | "REJECTED";
-export type ReportPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type ReportPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "URGENT";
 
 export type Report = {
   id: string;
@@ -29,4 +29,11 @@ export type Report = {
   locationName?: string;
   convertedIncidentCode?: string;
   analysisSummary?: string;
+};
+
+export type ReportUploadResponse = {
+  message?: string;
+  report_code?: string;
+  report_id?: number;
+  id?: string | number;
 };

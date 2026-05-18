@@ -31,6 +31,8 @@ const statusLabels: Record<ReportProcessingStatus, string> = {
 };
 
 const typeLabels: Record<ReportType, string> = {
+  GENERAL: "일반",
+  ACCIDENT: "사고",
   LANE_STOP_REPORT: "주행차로 정차",
   SHOULDER_STOP_REPORT: "갓길 정차",
   UNKNOWN_REPORT: "유형 미확인",
@@ -38,7 +40,8 @@ const typeLabels: Record<ReportType, string> = {
 
 const priorityLabels: Record<ReportPriority, string> = {
   LOW: "낮음",
-  MEDIUM: "보통",
+  NORMAL: "보통",
+  MEDIUM: "중간",
   HIGH: "높음",
   URGENT: "긴급",
 };
@@ -53,6 +56,7 @@ const statusTone: Record<ReportProcessingStatus, "slate" | "blue" | "green" | "a
 
 const priorityTone: Record<ReportPriority, "slate" | "blue" | "green" | "amber" | "red"> = {
   LOW: "slate",
+  NORMAL: "blue",
   MEDIUM: "blue",
   HIGH: "amber",
   URGENT: "red",
@@ -69,6 +73,8 @@ const statusOptions: Array<{ label: string; value: StatusFilter }> = [
 
 const typeOptions: Array<{ label: string; value: TypeFilter }> = [
   { label: "전체 유형", value: "ALL" },
+  { label: "일반", value: "GENERAL" },
+  { label: "사고", value: "ACCIDENT" },
   { label: "주행차로 정차", value: "LANE_STOP_REPORT" },
   { label: "갓길 정차", value: "SHOULDER_STOP_REPORT" },
   { label: "유형 미확인", value: "UNKNOWN_REPORT" },
@@ -77,7 +83,8 @@ const typeOptions: Array<{ label: string; value: TypeFilter }> = [
 const priorityOptions: Array<{ label: string; value: PriorityFilter }> = [
   { label: "전체 우선순위", value: "ALL" },
   { label: "낮음", value: "LOW" },
-  { label: "보통", value: "MEDIUM" },
+  { label: "보통", value: "NORMAL" },
+  { label: "중간", value: "MEDIUM" },
   { label: "높음", value: "HIGH" },
   { label: "긴급", value: "URGENT" },
 ];
