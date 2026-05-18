@@ -130,26 +130,21 @@ def create_board_post(request):
             "file"
         )
 
+
         # =====================================
-        # 로그인 사용자 정보
-        #
-        # 현재는 테스트용 임시 데이터
-        #
-        # 추후 JWT 로그인 연동 예정
+        # 현재 로그인 사용자
         # =====================================
+        current_user = request.current_user
 
         # 로그인 사용자 ID
-        current_user_id = 1
+        current_user_id = current_user.id
 
         # 로그인 사용자 이름
-        current_user_name = "최고관리자"
+        current_user_name = current_user.name
 
         # 로그인 사용자 권한
-        #
-        # SUPER_ADMIN
-        # ADMIN
-        # VIEWER
-        current_user_role = "SUPER_ADMIN"
+        current_user_role = current_user.role
+
 
         # =====================================
         # 필수값 검증
@@ -197,8 +192,6 @@ def create_board_post(request):
             content=content,
 
             # 작성자 ID
-            #
-            # 로그인 사용자 기준
             author_id=current_user_id,
 
             # 게시글 상태

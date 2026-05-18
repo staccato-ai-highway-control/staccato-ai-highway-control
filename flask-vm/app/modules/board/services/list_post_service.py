@@ -1,5 +1,6 @@
 # 게시글 모델 import
 from app.models.board_models import BoardPost
+from sqlalchemy import or_
 
 # -----------------------
 # 게시글 목록 조회 함수
@@ -26,8 +27,8 @@ def list_posts(
         # 
         # 삭제되지 않은 게시글만 조회
         # ---------------------------
-        query = BoarPost.query.filter(
-            BoarPost.post_status != "deleted"
+        query = BoardPost.query.filter(
+            BoardPost.post_status != "deleted"
         )
 
         # ---------------------------
@@ -41,12 +42,12 @@ def list_posts(
                 or_(
 
                     # 제목 LIKE 검색
-                    BoarPost.title.ilike(
+                    BoardPost.title.ilike(
                         f"%{keyword}%"
                     ),
 
                     # 내용 LIKE 검색
-                    BoarPost.content.ilike(
+                    BoardPost.content.ilike(
                         f"%{keyword}%"
                     )
                 )
@@ -58,7 +59,7 @@ def list_posts(
         if board_type:
 
             query = query.filter(
-                BoarPost.board_type == board_type
+                BoardPost.board_type == board_type
             )
 
 
@@ -98,7 +99,7 @@ def list_posts(
         # 최신순 정렬
         # ----------------------------
         query = query.order_by(
-            BoarPost.created_at.desc()
+            BoardPost.created_at.desc()
         )
 
         # -----------------------------------

@@ -10,6 +10,8 @@
 # flask 기능 import
 from flask import Blueprint, request, jsonify
 
+from app.utils.security import require_auth
+
 # 게시글 생성 서비스 import
 from app.modules.board.services.create_post_service import create_board_post
 
@@ -55,7 +57,8 @@ board_bp = Blueprint(
 # 프론트에서 게시글 작성 요청 시 실행
 # =========================================
 @board_bp.route("/posts", methods=["POST"])
-def create():
+@require_auth
+def create_post():
 
 
     try:
@@ -202,7 +205,8 @@ def get_post_detail(post_id):
 # PUT /board/posts/1
 # =========================================
 @board_bp.route("/posts/<int:post_id>", methods=["PUT"])
-def update(post_id):
+@require_auth
+def update_post_api(post_id):
 
     try:
 
@@ -234,8 +238,9 @@ def update(post_id):
 # DELETE /board/posts/1
 # =========================================
 @board_bp.route("/posts/<int:post_id>", methods=["DELETE"])
-def delete(post_id):
-    
+@require_auth
+def delete_post_api(post_id):
+
     try:
 
         # 게시글 삭제 서비스 실행

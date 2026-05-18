@@ -15,7 +15,7 @@ def update_post(post_id, data):
     try:
 
         # 수정할 게시글 조회
-        post = BoarPost.query.get(post_id)
+        post = BoardPost.query.get(post_id)
 
         # 게시글이 없는 경우
         if not post:
