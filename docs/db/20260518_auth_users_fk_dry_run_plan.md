@@ -94,3 +94,60 @@ This dry-run focuses only on FK constraints. It does not remove `user_id` column
 Prepared for dry-run.
 
 Execution result will be recorded after validation.
+
+---
+
+## 8. Dry-run execution result
+
+Date: 2026-05-18
+Target DB: `staccato_test`
+Execution account: `staccato_test_runner@192.168.0.187`
+Production DB touched: No
+
+### Baseline
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Pre-drop check
+
+Target auth/signup -> users foreign keys were found:
+
+- `email_verifications.user_id -> users.id` / `email_verifications_ibfk_1`
+- `signup_requests.user_id -> users.id` / `signup_requests_ibfk_1`
+
+All orphan checks returned `0`.
+
+### Drop dry-run
+
+Executed on `staccato_test` only:
+
+- `ALTER TABLE email_verifications DROP FOREIGN KEY email_verifications_ibfk_1`
+- `ALTER TABLE signup_requests DROP FOREIGN KEY signup_requests_ibfk_1`
+
+Post-drop check confirmed no remaining target auth/signup -> users FKs.
+
+### Post-drop test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Rollback verification
+
+Rollback SQL restored the 2 target auth/signup -> users FKs:
+
+- `email_verifications.user_id -> users.id` / `email_verifications_ibfk_1`
+- `signup_requests.user_id -> users.id` / `signup_requests_ibfk_1`
+
+### Post-rollback test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: passed
+
+### Result
+
+Auth/signup -> users FK removal dry-run passed on `staccato_test`.
+
+This result means the target FK removal is structurally reversible and does not currently break the existing automated test suite.
+
+This does not approve production execution by itself. Production migration still requires a separate migration plan, DB backup plan, approval, and maintenance window decision.
