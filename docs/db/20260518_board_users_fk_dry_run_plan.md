@@ -63,3 +63,68 @@ board 도메인이 users 테이블을 FK로 직접 참조하는 구조를 제거
 이번 작업은 운영 DB 변경이 아니다.
 
 운영 DB 적용 전에는 SQLAlchemy 모델의 ForeignKey 제거, 서비스 코드 영향도 확인, migration 방식 확정, rollback 절차 확정이 필요하다.
+
+---
+
+## Dry-run execution result
+
+Date: 2026-05-18
+Target DB: `staccato_test`
+Execution account: `staccato_test_runner@192.168.0.187`
+Production DB touched: No
+
+### Baseline
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: `64 passed, 374 warnings`
+
+### Pre-drop check
+
+Target board -> users foreign keys were found:
+
+- `board_posts.author_id -> users.id` / `board_posts_ibfk_1`
+- `board_comments.author_id -> users.id` / `board_comments_ibfk_3`
+- `board_attachments.uploaded_by -> users.id` / `board_attachments_ibfk_3`
+- `board_reactions.user_id -> users.id` / `board_reactions_ibfk_2`
+
+All orphan checks returned `0`.
+
+### Drop dry-run
+
+Executed on `staccato_test` only:
+
+- `ALTER TABLE board_posts DROP FOREIGN KEY board_posts_ibfk_1`
+- `ALTER TABLE board_comments DROP FOREIGN KEY board_comments_ibfk_3`
+- `ALTER TABLE board_attachments DROP FOREIGN KEY board_attachments_ibfk_3`
+- `ALTER TABLE board_reactions DROP FOREIGN KEY board_reactions_ibfk_2`
+
+Post-drop check confirmed no remaining target board -> users FKs.
+
+Remaining board FKs were board-internal relationships only.
+
+### Post-drop test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: `64 passed, 374 warnings in 12.22s`
+
+### Rollback verification
+
+Rollback SQL restored the 4 target board -> users FKs:
+
+- `board_posts.author_id -> users.id` / `board_posts_ibfk_1`
+- `board_comments.author_id -> users.id` / `board_comments_ibfk_3`
+- `board_attachments.uploaded_by -> users.id` / `board_attachments_ibfk_3`
+- `board_reactions.user_id -> users.id` / `board_reactions_ibfk_2`
+
+### Post-rollback test
+
+- `python -m compileall app tests`: passed
+- `PYTHONPATH=. pytest -q`: `64 passed, 374 warnings in 12.10s`
+
+### Result
+
+Board -> users FK removal dry-run passed on `staccato_test`.
+
+This result means the target FK removal is structurally reversible and does not currently break the existing automated test suite.
+
+This does not approve production execution by itself. Production migration still requires a separate migration plan, DB backup plan, approval, and maintenance window decision.
