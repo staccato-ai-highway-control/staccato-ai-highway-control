@@ -14,7 +14,7 @@ from flask import Blueprint, request, jsonify
 from app.modules.board.services.create_post_service import create_board_post
 
 # 게시글 목록 조회 서비스 import
-from app,modules.board.services.list_posts_service import list_posts
+from app.modules.board.services.list_post_service import list_posts
 
 # 게시글 상세 조회 서비스 import
 from app.modules.board.services.detail_post_service import detail_post
@@ -57,19 +57,15 @@ board_bp = Blueprint(
 @board_bp.route("/posts", methods=["POST"])
 def create():
 
-   try:
 
-        # 프론트에서 보낸 JSON 데이터 받기
+    try:
+
+        # request 전체 전달
         #
-        # 예:
-        # {
-        #   "title": "공지사항",
-        #   "content": "내용"
-        # }
-        data = request.json
-
-        # 게시글 생성 서비스 실행
-        result, status_code = create_board_post(data)
+        # form-data / files 처리 목적
+        result, status_code = create_board_post(
+            request
+        )
 
         # JSON 응답 반환
         return jsonify(result), status_code
@@ -109,6 +105,26 @@ def get_posts_list():
         # 게시판 종류
         board_type = request.args.get("board_type")
 
+        # 작성자 ID 검색
+        author_id = request.args.get(
+            "author_id",
+            type=int
+        )
+
+        # 시작 날짜 검색
+        #
+        # 예:
+        # 2026-05-01
+        start_date = request.args.get(
+            "start_date"
+        )
+
+        # 종료 날짜 검색
+        end_date = request.args.get(
+            "end_date"
+        )
+
+
         # 현재 페이지 번호
         # 
         # 기본값: 1
@@ -131,6 +147,9 @@ def get_posts_list():
         result, status_code = list_posts(
             keyword,
             board_type,
+            author_id,
+            start_date,
+            end_date,
             page,
             size
         )

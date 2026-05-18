@@ -7,39 +7,39 @@ from app.models.board_models import BoardPost
 # -----------------------
 # 게시글 상세 조회 함수
 # -----------------------
-def get_post(post_id):
+def detail_post(post_id):
 
     try:
-        
-    # 게시글 id로 조회
-    post = BoarPost.query.get(post_id)
 
-    # 게시글이 없는 경우
-    if not post:
+        # 게시글 id로 조회
+        post = BoardPost.query.get(post_id)
 
-        return {
-            "success": False,
-            "message": "게시글이 존재하지 않습니다."
-        }, 404
-
-        # 삭제된 게시글 접근 방지
-        if post.post_status == "deleted":
+        # 게시글이 없는 경우
+        if not post:
 
             return {
                 "success": False,
-                "message": "삭제된 게시글입니다."
+                "message": "게시글이 존재하지 않습니다."
             }, 404
 
-        # 조회수 증가
-        post.view_count += 1
+            # 삭제된 게시글 접근 방지
+            if post.post_status == "deleted":
 
-        # db에 변경 사항 저장
-        db.session.commit()
+                return {
+                    "success": False,
+                    "message": "삭제된 게시글입니다."
+                }, 404
 
-        return {
-            "success": True,
-            "data": post.to_dict()
-        }, 200
+            # 조회수 증가
+            post.view_count += 1
+
+            # db에 변경 사항 저장
+            db.session.commit()
+
+            return {
+                "success": True,
+                "data": post.to_dict()
+            }, 200
 
     except Exception as e:
 
