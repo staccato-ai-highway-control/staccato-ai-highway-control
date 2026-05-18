@@ -91,6 +91,17 @@ from app.modules.frontend_config.routes import frontend_config_bp
 
 
 
+# ============================================================
+# Board Module
+# - 담당: 관리자 게시판
+# - 파일 위치: app/modules/board/
+# ============================================================
+from app.modules.board.routes import board_bp
+
+
+
+
+
 def register_blueprints(app):
     """Register Flask blueprints by module.
 
@@ -162,7 +173,7 @@ def register_blueprints(app):
     # ========================================================
     # board
     # ========================================================
-
+    app.register_blueprint(board_bp)
 
 
 
@@ -181,6 +192,7 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     init_extensions(app)
+
     register_blueprints(app)
 
     return app
