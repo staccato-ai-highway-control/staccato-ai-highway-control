@@ -28,7 +28,7 @@ def list_posts(
         # 삭제되지 않은 게시글만 조회
         # ---------------------------
         query = BoardPost.query.filter(
-            BoardPost.post_status != "deleted"
+            BoardPost.post_status != "DELETED"
         )
 
         # ---------------------------

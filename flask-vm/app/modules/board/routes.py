@@ -208,12 +208,13 @@ def update_post_api(post_id):
     try:
 
         # 프론트에서 수정 데이터 받기
-        data = request.json
+        data = request.get_json(silent=True) or {}
 
         # 게시글 수정 서비스 실행
         result, status_code = update_post(
             post_id,
-            data
+            data,
+            request.current_user
         )
 
         # JSON 응답 반환
@@ -241,7 +242,10 @@ def delete_post_api(post_id):
     try:
 
         # 게시글 삭제 서비스 실행
-        result, status_code = delete_post(post_id)
+        result, status_code = delete_post(
+            post_id,
+            request.current_user
+        )
 
         # JSON 응답 반환
         return jsonify(result), status_code

@@ -12,6 +12,8 @@ import uuid
 # =========================================
 import os
 
+from flask import current_app
+
 # =========================================
 # datetime
 #
@@ -276,9 +278,12 @@ def create_board_post(request):
             #
             # 팀 공통 규칙 적용
             # =================================
-            upload_folder = (
+            upload_folder = current_app.config.get(
+                "BOARD_UPLOAD_FOLDER",
                 "storage/uploads/board"
             )
+
+            os.makedirs(upload_folder, exist_ok=True)
 
             # =================================
             # 최종 저장 경로 생성

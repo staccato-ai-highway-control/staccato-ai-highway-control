@@ -23,7 +23,7 @@ def detail_post(post_id):
             }, 404
 
         # 삭제된 게시글 접근 방지
-        if post.post_status == "deleted":
+        if post.post_status == "DELETED":
 
             return {
                 "success": False,
