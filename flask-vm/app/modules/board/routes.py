@@ -157,9 +157,6 @@ def get_posts_list():
             size
         )
 
-        # 게시글 목록 조회 서비스 실행
-        result, status_code = list_posts()
-
         # JSON 응답 반환
         return jsonify(result), status_code
 
