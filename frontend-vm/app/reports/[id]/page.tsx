@@ -22,12 +22,15 @@ import type {
 import { getStoredAuthUser } from "@/lib/authStorage";
 
 const reportTypeLabels: Record<ReportType, string> = {
+  GENERAL: "일반",
+  ACCIDENT: "사고",
   LANE_STOP_REPORT: "주행차로 정차",
   SHOULDER_STOP_REPORT: "갓길 정차",
   UNKNOWN_REPORT: "유형 미확인",
 };
 
 const purposeLabels: Record<UploadPurpose, string> = {
+  ANALYSIS: "분석",
   REPORT: "신고",
   NORMAL_REFERENCE: "정상 참고",
   TEST_DEMO: "테스트 데모",
@@ -43,7 +46,8 @@ const statusLabels: Record<ReportProcessingStatus, string> = {
 
 const priorityLabels: Record<ReportPriority, string> = {
   LOW: "낮음",
-  MEDIUM: "보통",
+  NORMAL: "보통",
+  MEDIUM: "중간",
   HIGH: "높음",
   URGENT: "긴급",
 };
@@ -66,6 +70,7 @@ const statusTone: Record<ReportProcessingStatus, "slate" | "blue" | "green" | "a
 
 const priorityTone: Record<ReportPriority, "slate" | "blue" | "green" | "amber" | "red"> = {
   LOW: "slate",
+  NORMAL: "blue",
   MEDIUM: "blue",
   HIGH: "amber",
   URGENT: "red",

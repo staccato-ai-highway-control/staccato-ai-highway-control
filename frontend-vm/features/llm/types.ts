@@ -1,5 +1,6 @@
 export type LlmReportType = "INCIDENT_SUMMARY" | "INCIDENT_REPORT";
-export type LlmGenerationStatus = "PENDING" | "GENERATING" | "DRAFT" | "EDITED" | "CONFIRMED" | "FAILED";
+export type LlmGenerationStatus = "PENDING" | "GENERATING" | "DRAFT" | "EDITED" | "CONFIRMED" | "FAILED" | "DELETED";
+export type LlmReportStatus = "PENDING" | "GENERATING" | "DRAFT" | "EDITED" | "CONFIRMED" | "FAILED" | "DELETED";
 export type LlmTrainingPurpose = "REPORT" | "CHATBOT" | "RISK_SUMMARY" | "ALERT";
 export type LlmTrainingDatasetStatus = "READY" | "BUILDING" | "VALIDATING" | "ARCHIVED" | "FAILED";
 
@@ -34,11 +35,14 @@ export type LlmReport = {
   reportTitle: string;
   reportType: LlmReportType;
   generationStatus: LlmGenerationStatus;
+  reportStatus?: LlmReportStatus;
   llmProvider: string;
   llmModel: string;
   generatedBy: string;
   generatedAt: string;
   draft: string;
+  summary?: string;
+  reportContent?: string;
   verified: boolean;
   updatedAt: string;
   sections: {
@@ -49,4 +53,16 @@ export type LlmReport = {
     currentStatus: string;
     requiredActions: string;
   };
+};
+
+export type GenerateLlmReportRequest = {
+  report_type?: LlmReportType;
+  prompt_version?: string;
+  llm_provider?: string;
+};
+
+export type UpdateLlmReportRequest = {
+  report_title?: string;
+  summary?: string;
+  report_content?: string;
 };

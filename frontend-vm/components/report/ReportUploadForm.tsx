@@ -42,10 +42,10 @@ export function ReportUploadForm() {
     const payload: UploadReportPayload = {
       files,
       title: String(formData.get("title") || "정차 이벤트 신고"),
-      reportType: formData.get("reportType") as ReportType,
-      uploadPurpose: formData.get("purpose") as UploadPurpose,
+      reportType: (formData.get("reportType") || "GENERAL") as ReportType,
+      uploadPurpose: (formData.get("purpose") || "ANALYSIS") as UploadPurpose,
       description: String(formData.get("description") || ""),
-      priority: formData.get("priority") as ReportPriority,
+      priority: (formData.get("priority") || "NORMAL") as ReportPriority,
       latitude,
       longitude,
       isDemoData: formData.get("isDemoData") === "on",
@@ -53,8 +53,9 @@ export function ReportUploadForm() {
 
     try {
       setStatusMessage("신고 파일을 업로드하고 사고 신고를 생성하는 중입니다.");
-      await uploadReport(payload);
-      setStatusMessage("신고 영상/이미지 업로드 및 신고 생성이 완료되었습니다.");
+      const response = await uploadReport(payload);
+      const reportCode = response.report_code ? " (" + response.report_code + ")" : "";
+      setStatusMessage(response.message ?? "신고 영상/이미지 업로드가 완료되었습니다." + reportCode);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "신고 처리 중 오류가 발생했습니다.");
     } finally {
@@ -68,14 +69,16 @@ export function ReportUploadForm() {
         <label className="grid gap-2 text-sm font-semibold">
           신고 유형
           <select name="reportType" className="h-11 rounded-lg border border-slate-200 px-3">
+            <option value="GENERAL">일반 리포트</option>
+            <option value="ACCIDENT">사고 리포트</option>
             <option value="LANE_STOP_REPORT">주행차로 정차 신고</option>
             <option value="SHOULDER_STOP_REPORT">갓길 정차 신고</option>
-            <option value="UNKNOWN_REPORT">유형 미확인 신고</option>
           </select>
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           업로드 목적
           <select name="purpose" className="h-11 rounded-lg border border-slate-200 px-3">
+            <option value="ANALYSIS">분석</option>
             <option value="REPORT">신고</option>
             <option value="NORMAL_REFERENCE">정상 참고 영상</option>
             <option value="TEST_DEMO">테스트 데모</option>
@@ -88,8 +91,9 @@ export function ReportUploadForm() {
         <label className="grid gap-2 text-sm font-semibold">
           우선순위
           <select name="priority" className="h-11 rounded-lg border border-slate-200 px-3">
+            <option value="NORMAL">보통</option>
             <option value="LOW">낮음</option>
-            <option value="MEDIUM">보통</option>
+            <option value="MEDIUM">중간</option>
             <option value="HIGH">높음</option>
             <option value="URGENT">긴급</option>
           </select>

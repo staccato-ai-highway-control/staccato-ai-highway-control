@@ -2,12 +2,14 @@ import type {
   AuthResponse,
   GoogleIdentityStartResponse,
   LoginRequest,
+  PasswordUpdateRequest,
+  ProfileUpdateRequest,
   SendEmailVerificationRequest,
   SignupApiRequest,
   SignupRequest,
+  VerifyEmailRequest,
 } from "./types";
 import { apiClient } from "@/lib/apiClient";
-
 
 export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   return {
@@ -22,11 +24,12 @@ export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   };
 }
 
-export function signup(payload: SignupRequest) {
+export function signup(payload: SignupRequest | SignupApiRequest) {
+  const body = "requestedRole" in payload ? mapSignupRequest(payload) : payload;
   return apiClient<AuthResponse>("/auth/signup", {
     method: "POST",
     auth: false,
-    body: mapSignupRequest(payload),
+    body,
   });
 }
 
@@ -42,7 +45,14 @@ export function getMe(_accessToken?: string) {
   return apiClient<AuthResponse>("/auth/me", { method: "GET" });
 }
 
-export function changeMyPassword(payload: { current_password: string; new_password: string }) {
+export function updateMyProfile(payload: ProfileUpdateRequest) {
+  return apiClient<AuthResponse>("/auth/me/profile", {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function changeMyPassword(payload: PasswordUpdateRequest) {
   return apiClient<AuthResponse>("/auth/me/password", {
     method: "PATCH",
     body: payload,
@@ -65,12 +75,16 @@ export function resendEmailVerification(payload: SendEmailVerificationRequest) {
   return sendEmailVerificationCode(payload.email);
 }
 
-export function verifyEmailCode(email: string, code: string) {
+export function verifyEmail(payload: VerifyEmailRequest) {
   return apiClient<AuthResponse>("/auth/verify-email", {
     method: "POST",
     auth: false,
-    body: { email, code },
+    body: payload,
   });
+}
+
+export function verifyEmailCode(email: string, code: string) {
+  return verifyEmail({ email, code });
 }
 
 export function startGoogleIdentityVerification(email: string) {
@@ -79,4 +93,8 @@ export function startGoogleIdentityVerification(email: string) {
     auth: false,
     body: { email },
   });
+}
+
+export function getAuthHealth() {
+  return apiClient("/auth/health", { auth: false });
 }

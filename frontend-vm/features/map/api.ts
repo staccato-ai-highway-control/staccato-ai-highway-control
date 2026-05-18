@@ -82,5 +82,5 @@ function normalizeMapConfig(response: MapConfigResponse): MapConfig {
 }
 
 export async function getMapConfig() {
-  return normalizeMapConfig(await apiClient<MapConfigResponse>("/api/config/public"));
+  return normalizeMapConfig(await apiClient<MapConfigResponse>("/api/config/public", { auth: false }));
 }

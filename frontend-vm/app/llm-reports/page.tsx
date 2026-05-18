@@ -8,9 +8,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
 import type { AuthUser, UserRole } from "@/features/auth/types";
-import { mockIncidents } from "@/features/incidents/mock";
 import type { Incident } from "@/features/incidents/types";
-import { mockLlmReports } from "@/features/llm/mock";
+import { confirmLlmReport, deleteLlmReport, getLlmReports, regenerateLlmReport } from "@/features/llm/api";
 import type { LlmGenerationStatus, LlmReport, LlmReportType } from "@/features/llm/types";
 import { getStoredAuthUser } from "@/lib/authStorage";
 import { cn } from "@/lib/utils";
@@ -27,6 +26,7 @@ const statusLabels: Record<LlmGenerationStatus, string> = {
   EDITED: "수정됨",
   CONFIRMED: "확정",
   FAILED: "실패",
+  DELETED: "삭제됨",
 };
 
 const statusTone: Record<LlmGenerationStatus, "slate" | "blue" | "green" | "amber" | "red"> = {
@@ -36,11 +36,8 @@ const statusTone: Record<LlmGenerationStatus, "slate" | "blue" | "green" | "ambe
   EDITED: "blue",
   CONFIRMED: "green",
   FAILED: "red",
+  DELETED: "slate",
 };
-
-function handleMockAction(message: string) {
-  window.alert(message);
-}
 
 function getRole(user: AuthUser | null): UserRole | null {
   return user?.role ?? null;
@@ -64,16 +61,39 @@ function isAssignedToUser(incident: Incident | undefined, user: AuthUser | null)
 }
 
 function getIncidentForReport(report: LlmReport) {
-  return mockIncidents.find((incident) => incident.id === report.incidentId);
+  return undefined;
 }
 
 export default function LlmReportsPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [reports, setReports] = useState<LlmReport[]>(mockLlmReports);
-  const [selectedReportId, setSelectedReportId] = useState(mockLlmReports[0].id);
+  const [reports, setReports] = useState<LlmReport[]>([]);
+  const [selectedReportId, setSelectedReportId] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setAuthUser(getStoredAuthUser());
+
+    let ignore = false;
+    async function loadReports() {
+      try {
+        setIsLoading(true);
+        const nextReports = await getLlmReports();
+        if (ignore) return;
+        setReports(nextReports);
+        setSelectedReportId(nextReports[0]?.id ?? "");
+        setErrorMessage("");
+      } catch (error) {
+        if (!ignore) setErrorMessage(error instanceof Error ? error.message : "LLM 보고서를 불러오지 못했습니다.");
+      } finally {
+        if (!ignore) setIsLoading(false);
+      }
+    }
+
+    loadReports();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const role = getRole(authUser);
@@ -85,11 +105,7 @@ export default function LlmReportsPage() {
   const canDelete = role === "SUPER_ADMIN";
 
   const visibleReports = useMemo(() => {
-    if (!isMaintainer) return reports;
-
-    return reports.filter((report) =>
-      isAssignedToUser(getIncidentForReport(report), authUser)
-    );
+    return reports;
   }, [authUser, isMaintainer, reports]);
 
   const selectedReport = useMemo(() => {
@@ -111,11 +127,22 @@ export default function LlmReportsPage() {
       ? "관제 대상 사고 보고서를 생성, 수정, 확정, 재생성합니다."
       : "전체 LLM 보고서를 조회하고 생성, 수정, 확정, 삭제합니다.";
 
-  function handleMockDelete(report: LlmReport) {
-    const confirmed = window.confirm(`${report.reportTitle} 보고서를 삭제하시겠습니까?`);
+  async function handleDelete(report: LlmReport) {
+    const confirmed = window.confirm(report.reportTitle + " 보고서를 삭제하시겠습니까?");
     if (!confirmed) return;
 
+    await deleteLlmReport(report.id);
     setReports((current) => current.filter((item) => item.id !== report.id));
+  }
+
+  async function handleConfirm(report: LlmReport) {
+    await confirmLlmReport(report.id);
+    setReports((current) => current.map((item) => item.id === report.id ? { ...item, generationStatus: "CONFIRMED", reportStatus: "CONFIRMED", verified: true } : item));
+  }
+
+  async function handleRegenerate(report: LlmReport) {
+    const regenerated = await regenerateLlmReport(report.id);
+    setReports((current) => current.map((item) => item.id === report.id ? regenerated : item));
   }
 
   return (
@@ -129,7 +156,7 @@ export default function LlmReportsPage() {
             </p>
           </div>
           {canGenerate ? (
-            <button type="button" onClick={() => handleMockAction("보고서 생성 API 연결 예정입니다.")} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
+            <button type="button" onClick={() => setErrorMessage("사고 상세 화면에서 사고별 보고서를 생성해주세요.")} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
               <FilePlus2 className="h-4 w-4" aria-hidden="true" />
               보고서 생성
             </button>
@@ -139,6 +166,14 @@ export default function LlmReportsPage() {
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
           LLM 결과는 최종 판단이 아니라 관리자 검토용 초안입니다. 확정 전 반드시 사고 정보와 현장 대응 내용을 확인하세요.
         </div>
+
+        {errorMessage ? (
+          <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div>
+        ) : null}
+
+        {isLoading ? (
+          <Card className="p-8 text-center text-sm font-semibold text-slate-500">LLM 보고서를 불러오는 중입니다.</Card>
+        ) : null}
 
         <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
           <Card className="overflow-hidden">
@@ -192,19 +227,19 @@ export default function LlmReportsPage() {
                             </Link>
                           ) : null}
                           {canRegenerate ? (
-                            <button type="button" onClick={() => handleMockAction("재생성 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
+                            <button type="button" onClick={() => handleRegenerate(report)} className="inline-flex items-center gap-1 rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
                               <RefreshCw className="h-3 w-3" aria-hidden="true" />
                               재생성
                             </button>
                           ) : null}
                           {canConfirm ? (
-                            <button type="button" onClick={() => handleMockAction("확정 API 연결 예정입니다.")} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50">
+                            <button type="button" onClick={() => handleConfirm(report)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50">
                               <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                               확정
                             </button>
                           ) : null}
                           {canDelete ? (
-                            <button type="button" onClick={() => handleMockDelete(report)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50">
+                            <button type="button" onClick={() => handleDelete(report)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50">
                               <Trash2 className="h-3 w-3" aria-hidden="true" />
                               삭제
                             </button>
