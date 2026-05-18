@@ -129,20 +129,20 @@ def get_posts_list():
 
 
         # 현재 페이지 번호
-        # 
+        #
         # 기본값: 1
         page = request.args.get(
-            "page", 
-            default=1, 
+            "page",
+            default=1,
             type=int
         )
 
         # 페이지당 게시글 개수
-        # 
+        #
         # 기본값: 10
         size = request.args.get(
-            "size", 
-            default=10, 
+            "size",
+            default=10,
             type=int
         )
 
@@ -215,7 +215,7 @@ def update_post_api(post_id):
 
         # 게시글 수정 서비스 실행
         result, status_code = update_post(
-            post_id, 
+            post_id,
             data
         )
 
