@@ -1,3 +1,5 @@
+from db_cleanup import cleanup_database
+import os
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -11,6 +13,22 @@ from app.modules.auth.service import AuthError, AuthService
 from app.utils.security import hash_password
 
 
+
+
+def _get_test_database_url():
+    test_database_url = os.environ.get("TEST_DATABASE_URL")
+
+    if not test_database_url:
+        pytest.fail("TEST_DATABASE_URL is required for pytest.")
+
+    if "staccato_test" not in test_database_url:
+        pytest.fail("TEST_DATABASE_URL must point to staccato_test.")
+
+    if "staccato_test_runner" not in test_database_url:
+        pytest.fail("TEST_DATABASE_URL must use staccato_test_runner.")
+
+    return test_database_url
+
 @pytest.fixture()
 def app_context(monkeypatch):
     monkeypatch.setenv("GOOGLE_IDENTITY_ENABLED", "true")
@@ -22,11 +40,26 @@ def app_context(monkeypatch):
     )
     monkeypatch.setenv("FRONTEND_BASE_URL", "http://localhost:3000")
 
-    app = create_app()
+    test_database_url = _get_test_database_url()
+    monkeypatch.setenv("DATABASE_URL", test_database_url)
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": test_database_url,
+        }
+    )
     app.config["TESTING"] = True
 
     with app.app_context():
+        db.session.remove()
+        cleanup_database(db)
+        db.create_all()
+
         yield app
+
+        db.session.remove()
+        cleanup_database(db)
 
 
 def _make_test_user(email: str, is_email_verified: bool = False) -> User:

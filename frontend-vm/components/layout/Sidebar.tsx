@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import type { AuthUser } from "@/features/auth/types";
-import { getVisibleNavigationSections } from "@/config/navigation";
+import { getUserRole, getVisibleNavigationSections } from "@/config/navigation";
 import { getStoredAuthUser } from "@/lib/authStorage";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,7 @@ export function Sidebar({
   }, []);
 
   const visibleSections = getVisibleNavigationSections(authUser);
+  const role = getUserRole(authUser) ?? "NO_ROLE";
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === href;
@@ -73,7 +74,7 @@ export function Sidebar({
 
         <nav className="h-[calc(100vh-4rem)] overflow-y-auto px-3 py-4">
           {visibleSections.map((section) => (
-            <div key={section.title} className="mb-5 last:mb-0">
+            <div key={`${role}-${section.title}`} className="mb-5 last:mb-0">
               <p className="mb-2 px-2 text-xs font-black tracking-[0.18em] text-slate-500">
                 {section.title}
               </p>
@@ -84,7 +85,7 @@ export function Sidebar({
 
                   return (
                     <Link
-                      key={item.href}
+                      key={`${role}-${section.title}-${item.href}-${item.label}`}
                       href={item.href}
                       onClick={onMobileClose}
                       className={cn(

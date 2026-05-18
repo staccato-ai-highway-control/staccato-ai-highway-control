@@ -2,54 +2,14 @@ import type {
   AuthResponse,
   GoogleIdentityStartResponse,
   LoginRequest,
+  PasswordUpdateRequest,
+  ProfileUpdateRequest,
   SendEmailVerificationRequest,
   SignupApiRequest,
   SignupRequest,
+  VerifyEmailRequest,
 } from "./types";
 import { apiClient } from "@/lib/apiClient";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_PROXY_PATH ?? "/backend-api";
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {}
-): Promise<T> {
-  let response: Response;
-
-  try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...(options.headers ?? {}),
-      },
-    });
-  } catch {
-    throw new Error(
-      `API 서버에 연결할 수 없습니다. 서버 주소를 확인해주세요: ${API_BASE_URL}`
-    );
-  }
-
-  const responseText = await response.text().catch(() => "");
-  const data = responseText
-    ? (() => {
-        try {
-          return JSON.parse(responseText);
-        } catch {
-          return null;
-        }
-      })()
-    : null;
-
-  if (!response.ok) {
-    throw new Error(
-      data?.message ?? responseText ?? `API 요청 실패: ${response.status}`
-    );
-  }
-
-  return data as T;
-}
 
 export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   return {
@@ -64,33 +24,50 @@ export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
   };
 }
 
-export function signup(payload: SignupRequest) {
-  return request<AuthResponse>("/auth/signup", {
+export function signup(payload: SignupRequest | SignupApiRequest) {
+  const body = "requestedRole" in payload ? mapSignupRequest(payload) : payload;
+  return apiClient<AuthResponse>("/auth/signup", {
     method: "POST",
-    body: JSON.stringify(mapSignupRequest(payload)),
+    auth: false,
+    body,
   });
 }
 
 export function login(payload: LoginRequest) {
-  return request<AuthResponse>("/auth/login", {
+  return apiClient<AuthResponse>("/auth/login", {
     method: "POST",
-    body: JSON.stringify(payload),
+    auth: false,
+    body: payload,
   });
 }
 
-export function getMe(accessToken: string) {
-  return request<AuthResponse>("/auth/me", {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+export function getMe(_accessToken?: string) {
+  return apiClient<AuthResponse>("/auth/me", { method: "GET" });
+}
+
+export function updateMyProfile(payload: ProfileUpdateRequest) {
+  return apiClient<AuthResponse>("/auth/me/profile", {
+    method: "PATCH",
+    body: payload,
   });
+}
+
+export function changeMyPassword(payload: PasswordUpdateRequest) {
+  return apiClient<AuthResponse>("/auth/me/password", {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export function deleteMyAccount() {
+  return apiClient<AuthResponse>("/auth/me", { method: "DELETE" });
 }
 
 export function sendEmailVerificationCode(email: string) {
-  return request<AuthResponse>("/auth/verify-email/resend", {
+  return apiClient<AuthResponse>("/auth/verify-email/resend", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    auth: false,
+    body: { email },
   });
 }
 
@@ -98,16 +75,26 @@ export function resendEmailVerification(payload: SendEmailVerificationRequest) {
   return sendEmailVerificationCode(payload.email);
 }
 
-export function verifyEmailCode(email: string, code: string) {
-  return request<AuthResponse>("/auth/verify-email", {
+export function verifyEmail(payload: VerifyEmailRequest) {
+  return apiClient<AuthResponse>("/auth/verify-email", {
     method: "POST",
-    body: JSON.stringify({ email, code }),
+    auth: false,
+    body: payload,
   });
+}
+
+export function verifyEmailCode(email: string, code: string) {
+  return verifyEmail({ email, code });
 }
 
 export function startGoogleIdentityVerification(email: string) {
   return apiClient<GoogleIdentityStartResponse>("/auth/identity/google/start", {
     method: "POST",
+    auth: false,
     body: { email },
   });
+}
+
+export function getAuthHealth() {
+  return apiClient("/auth/health", { auth: false });
 }

@@ -62,6 +62,7 @@ from app.modules.report_upload.routes import report_upload_bp
 # - 파일 위치: app/modules/llm_gateway/
 # ============================================================
 from app.modules.llm_gateway.routes import llm_gateway_bp
+from app.modules.llm_report.routes import llm_report_bp
 
 
 
@@ -153,6 +154,7 @@ def register_blueprints(app):
     # LLM / Chatbot / Chat
     # ========================================================
     app.register_blueprint(llm_gateway_bp)
+    app.register_blueprint(llm_report_bp)
     app.register_blueprint(chatbot_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(frontend_config_bp)
@@ -182,9 +184,12 @@ def register_blueprints(app):
 
 
 
-def create_app():
+def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    if test_config is not None:
+        app.config.update(test_config)
 
     init_extensions(app)
 

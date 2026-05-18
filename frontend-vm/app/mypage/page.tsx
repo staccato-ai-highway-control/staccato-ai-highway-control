@@ -21,7 +21,7 @@ function RoleContent({ user }: { user: AuthUser | null }) {
 
   if (user?.role === "SUPER_ADMIN") return <SuperAdminMyPage />;
   if (user?.role === "CONTROL_ADMIN") return <ControlAdminMyPage />;
-  if (user?.role === "DISPATCH_ADMIN") return <DispatchAdminMyPage />;
+  if (user?.role === "MAINTAINER" || user?.role === "DISPATCH_ADMIN") return <DispatchAdminMyPage />;
   if (user?.role === "VIEWER") return <ViewerMyPage />;
 
   return (

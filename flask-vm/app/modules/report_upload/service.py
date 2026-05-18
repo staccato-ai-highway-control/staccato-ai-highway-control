@@ -117,18 +117,66 @@ class ReportUploadService:
 
     @staticmethod
     def process_file_upload(file):
-        """Single file upload helper used by incident routes."""
+        """Persist a single uploaded file and return attachment metadata.
+
+        This helper is used by incident routes. It performs the same core
+        persistence steps as create_report(): filename sanitization, file type
+        detection, size validation, hash calculation, local save, and metadata
+        generation for ReportAttachment.
+        """
         if file is None or not getattr(file, "filename", ""):
             raise ValueError("파일이 업로드되지 않았습니다.")
 
-        filename = file.filename
-        file_type = ReportUploadService._get_file_type(filename)
+        original_filename = secure_filename(file.filename)
+        if not original_filename:
+            raise ValueError("유효하지 않은 파일명입니다.")
+
+        file_type = ReportUploadService._get_file_type(original_filename)
+        if file_type == "UNKNOWN":
+            raise ValueError("지원하지 않는 파일 형식입니다.")
+
+        upload_path = current_app.config.get("UPLOAD_BASE_PATH")
+        if not upload_path:
+            raise RuntimeError("UPLOAD_BASE_PATH 설정이 없습니다.")
+
+        os.makedirs(upload_path, exist_ok=True)
+
+        file.seek(0, os.SEEK_END)
+        file_length = file.tell()
+        file.seek(0)
+
+        if file_type == "IMAGE":
+            max_mb = current_app.config.get("UPLOAD_MAX_IMAGE_SIZE_MB", 20)
+            if file_length > max_mb * 1024 * 1024:
+                raise ValueError(f"이미지 크기가 너무 큽니다. (최대 {max_mb}MB)")
+
+        elif file_type == "VIDEO":
+            max_mb = current_app.config.get("UPLOAD_MAX_VIDEO_SIZE_MB", 500)
+            if file_length > max_mb * 1024 * 1024:
+                raise ValueError(f"영상 크기가 너무 큽니다. (최대 {max_mb}MB)")
+
+        file.seek(0)
+        file_hash = hashlib.md5(file.read()).hexdigest()
+        file.seek(0)
+
+        stored_filename = f"{uuid.uuid4().hex}_{original_filename}"
+        file_full_path = os.path.join(upload_path, stored_filename)
+
+        file.save(file_full_path)
 
         return {
-            "filename": filename,
-            "original_filename": filename,
+            "filename": original_filename,
+            "original_filename": original_filename,
+            "stored_filename": stored_filename,
             "file_type": file_type,
             "content_type": getattr(file, "content_type", None),
+            "mime_type": getattr(file, "content_type", None) or "application/octet-stream",
+            "storage_type": "LOCAL",
+            "file_path": file_full_path,
+            "file_size": file_length,
+            "file_hash": file_hash,
+            "scan_status": "PENDING",
+            "is_private": 1,
         }
 
     @staticmethod

@@ -1,8 +1,13 @@
 export type UserRole =
   | "SUPER_ADMIN"
+  | "AUTH_ADMIN"
   | "CONTROL_ADMIN"
+  | "MAINTAINER"
   | "DISPATCH_ADMIN"
   | "VIEWER";
+
+export type UserAccountStatus = "PENDING" | "ACTIVE" | "REJECTED" | "DELETED";
+export type SignupRequestStatus = "REQUESTED" | "APPROVED" | "REJECTED";
 
 export type SignupRequest = {
   login_id: string;
@@ -23,16 +28,33 @@ export type SignupApiRequest = {
   phone?: string;
   requested_role: UserRole;
   request_memo?: string;
-  agreed: boolean;
+  agreed?: boolean;
 };
 
 export type SendEmailVerificationRequest = {
   email: string;
 };
 
+export type VerifyEmailRequest = {
+  email: string;
+  code?: string;
+  token?: string;
+};
+
 export type LoginRequest = {
   login_id: string;
   password: string;
+};
+
+export type ProfileUpdateRequest = {
+  name?: string;
+  phone?: string | null;
+  email?: string;
+};
+
+export type PasswordUpdateRequest = {
+  current_password: string;
+  new_password: string;
 };
 
 export type AuthUser = {
@@ -43,7 +65,7 @@ export type AuthUser = {
   role?: UserRole;
   requested_role?: UserRole;
   phone?: string | null;
-  account_status?: string;
+  account_status?: UserAccountStatus | string;
   is_email_verified?: boolean;
   email_verified_at?: string | null;
 };

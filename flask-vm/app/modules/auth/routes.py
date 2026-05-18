@@ -36,7 +36,7 @@ def signup():
         ), 201
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.post("/verify-email")
@@ -58,7 +58,7 @@ def verify_email():
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.post("/verify-email/resend")
@@ -74,13 +74,18 @@ def resend_email_verification():
 
         return jsonify(
             {
-                "message": "Email verification resent.",
+                "code": "EMAIL_VERIFICATION_RESENT",
+                "message": "인증번호가 다시 발송되었습니다.",
                 "data": result,
+                "retry_after": result.get("email_verification", {}).get(
+                    "retry_after",
+                    AuthService._get_email_verification_cooldown_seconds(),
+                ),
             }
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.post("/login")
@@ -97,7 +102,7 @@ def login():
         return jsonify(result), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.get("/me")
@@ -137,7 +142,7 @@ def update_my_profile():
             }
         ), 200
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.patch("/me/password")
@@ -161,7 +166,7 @@ def change_my_password():
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.delete("/me")
@@ -185,7 +190,7 @@ def withdraw_my_account():
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.get("/users")
@@ -229,7 +234,7 @@ def approve_signup_request(signup_request_id):
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 
 @auth_bp.post("/signup-requests/<int:signup_request_id>/reject")
@@ -254,7 +259,7 @@ def reject_signup_request(signup_request_id):
         ), 200
 
     except AuthError as error:
-        return jsonify({"message": error.message}), error.status_code
+        return jsonify(error.to_dict()), error.status_code
 
 @auth_bp.post("/identity/google/start")
 @require_auth

@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { ArrowLeft, FileVideo, MapPinned, RotateCcw, Save, Sparkles } from "lucide-react";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import type { AuthUser, UserRole } from "@/features/auth/types";
+import { mockIncidents } from "@/features/incidents/mock";
+import type { Incident } from "@/features/incidents/types";
 import { mockReports } from "@/features/reports/mock";
 import type {
   AnalysisStatus,
@@ -16,14 +19,18 @@ import type {
   ReportType,
   UploadPurpose,
 } from "@/features/reports/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 const reportTypeLabels: Record<ReportType, string> = {
+  GENERAL: "일반",
+  ACCIDENT: "사고",
   LANE_STOP_REPORT: "주행차로 정차",
   SHOULDER_STOP_REPORT: "갓길 정차",
   UNKNOWN_REPORT: "유형 미확인",
 };
 
 const purposeLabels: Record<UploadPurpose, string> = {
+  ANALYSIS: "분석",
   REPORT: "신고",
   NORMAL_REFERENCE: "정상 참고",
   TEST_DEMO: "테스트 데모",
@@ -39,7 +46,8 @@ const statusLabels: Record<ReportProcessingStatus, string> = {
 
 const priorityLabels: Record<ReportPriority, string> = {
   LOW: "낮음",
-  MEDIUM: "보통",
+  NORMAL: "보통",
+  MEDIUM: "중간",
   HIGH: "높음",
   URGENT: "긴급",
 };
@@ -62,6 +70,7 @@ const statusTone: Record<ReportProcessingStatus, "slate" | "blue" | "green" | "a
 
 const priorityTone: Record<ReportPriority, "slate" | "blue" | "green" | "amber" | "red"> = {
   LOW: "slate",
+  NORMAL: "blue",
   MEDIUM: "blue",
   HIGH: "amber",
   URGENT: "red",
@@ -79,6 +88,39 @@ function findReport(id: string): Report {
   return mockReports.find((report) => report.id === id) ?? mockReports[0];
 }
 
+function getRole(user: AuthUser | null): UserRole | null {
+  return user?.role ?? null;
+}
+
+function isMaintainerRole(role: UserRole | null) {
+  return role === "MAINTAINER" || role === "DISPATCH_ADMIN";
+}
+
+function isAssignedToUser(incident: Incident, user: AuthUser | null) {
+  const assignee = incident.assignee?.trim();
+  if (!assignee || assignee === "미배정") return false;
+
+  const candidates = [user?.name, user?.login_id, user?.email]
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+
+  return candidates.includes(assignee);
+}
+
+function isReportConnectedToIncident(report: Report, incident: Incident) {
+  return (
+    report.convertedIncidentCode === incident.code ||
+    report.cctvId === incident.cctvId ||
+    report.location.includes(incident.roadName)
+  );
+}
+
+function canMaintainerViewReport(report: Report, user: AuthUser | null) {
+  return mockIncidents
+    .filter((incident) => isAssignedToUser(incident, user))
+    .some((incident) => isReportConnectedToIncident(report, incident));
+}
+
 function InfoRow({ label, value }: { label: string; value: string | undefined }) {
   return (
     <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -91,8 +133,20 @@ function InfoRow({ label, value }: { label: string; value: string | undefined })
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const report = findReport(id);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [reviewMemo, setReviewMemo] = useState("");
   const [savedMemos, setSavedMemos] = useState<string[]>([]);
+
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
+  const role = getRole(authUser);
+  const isMaintainer = isMaintainerRole(role);
+  const canManageReport = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canRequestAnalysis = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
+  const canDeleteReport = role === "SUPER_ADMIN";
+  const canViewReport = !isMaintainer || canMaintainerViewReport(report, authUser);
 
   function handleMockAction(message: string) {
     window.alert(message);
@@ -111,6 +165,19 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   return (
     <RequireAuth>
       <AppLayout title="이상상황 상세">
+        {!canViewReport ? (
+          <Card className="p-6">
+            <Link href="/reports" className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-slate-900">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              목록으로
+            </Link>
+            <h2 className="text-xl font-black text-slate-950">조회 권한이 없습니다.</h2>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              출동관리자는 본인에게 배정된 사고와 연결된 신고만 조회할 수 있습니다.
+            </p>
+          </Card>
+        ) : (
+          <>
         <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <Link href="/reports" className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-slate-900">
@@ -124,6 +191,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             <Badge tone={statusTone[report.status]}>{statusLabels[report.status]}</Badge>
             <Badge tone={priorityTone[report.priority]}>{priorityLabels[report.priority]}</Badge>
             <Badge tone={analysisTone[report.analysisStatus]}>{analysisLabels[report.analysisStatus]}</Badge>
+            {isMaintainer ? <Badge tone="slate">조회 전용</Badge> : null}
           </div>
         </section>
 
@@ -176,14 +244,22 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 <Badge tone={analysisTone[report.analysisStatus]}>{analysisLabels[report.analysisStatus]}</Badge>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => handleMockAction("분석 요청 API 연결 예정입니다.")} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800">
-                  <Sparkles className="h-4 w-4" aria-hidden="true" />
-                  분석 요청
-                </button>
-                <button type="button" onClick={() => handleMockAction("재분석 API 연결 예정입니다.")} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                  재분석
-                </button>
+                {canRequestAnalysis ? (
+                  <>
+                    <button type="button" onClick={() => handleMockAction("분석 요청 API 연결 예정입니다.")} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800">
+                      <Sparkles className="h-4 w-4" aria-hidden="true" />
+                      분석 요청
+                    </button>
+                    <button type="button" onClick={() => handleMockAction("재분석 API 연결 예정입니다.")} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      재분석
+                    </button>
+                  </>
+                ) : (
+                  <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">
+                    출동관리자는 AI 분석 결과를 조회만 할 수 있습니다.
+                  </p>
+                )}
               </div>
             </Card>
           </div>
@@ -204,24 +280,41 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               </dl>
             </Card>
 
-            <Card className="p-5">
-              <h3 className="text-lg font-black text-slate-950">관리자 검토</h3>
-              <textarea
-                value={reviewMemo}
-                onChange={(event) => setReviewMemo(event.target.value)}
-                className="mt-4 min-h-32 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-sky-400"
-                placeholder="검토 메모를 입력하세요."
-              />
-              <button type="button" onClick={handleSaveMemo} className="mt-3 inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
-                <Save className="h-4 w-4" aria-hidden="true" />
-                저장
-              </button>
-              <div className="mt-4 grid gap-2">
-                {savedMemos.map((memo, index) => (
-                  <p key={`${memo}-${index}`} className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600">{memo}</p>
-                ))}
-              </div>
-            </Card>
+            {canManageReport ? (
+              <Card className="p-5">
+                <h3 className="text-lg font-black text-slate-950">관리자 검토</h3>
+                <textarea
+                  value={reviewMemo}
+                  onChange={(event) => setReviewMemo(event.target.value)}
+                  className="mt-4 min-h-32 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-sky-400"
+                  placeholder="검토 메모를 입력하세요."
+                />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" onClick={handleSaveMemo} className="inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
+                    <Save className="h-4 w-4" aria-hidden="true" />
+                    저장
+                  </button>
+                  <button type="button" onClick={() => handleMockAction("신고 상태 변경 API 연결 예정입니다.")} className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                    상태 변경
+                  </button>
+                  {role === "CONTROL_ADMIN" ? (
+                    <button type="button" onClick={() => handleMockAction("오탐/검토 완료 API 연결 예정입니다.")} className="inline-flex h-10 items-center rounded-lg border border-sky-200 px-4 text-sm font-bold text-sky-700 transition hover:bg-sky-50">
+                      오탐/검토 완료
+                    </button>
+                  ) : null}
+                  {canDeleteReport ? (
+                    <button type="button" onClick={() => handleMockAction("신고 삭제 API 연결 예정입니다.")} className="inline-flex h-10 items-center rounded-lg border border-red-200 px-4 text-sm font-bold text-red-700 transition hover:bg-red-50">
+                      신고 삭제
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 grid gap-2">
+                  {savedMemos.map((memo, index) => (
+                    <p key={`${memo}-${index}`} className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600">{memo}</p>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
 
             <Card className="p-5">
               <h3 className="text-lg font-black text-slate-950">사고 전환 결과</h3>
@@ -238,6 +331,8 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             </Card>
           </aside>
         </section>
+          </>
+        )}
       </AppLayout>
     </RequireAuth>
   );

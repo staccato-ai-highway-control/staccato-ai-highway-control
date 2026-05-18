@@ -1,5 +1,5 @@
 import { Bell, Bot, Cable, CheckCircle2, KeyRound, MonitorCheck, ServerCog, Settings } from "lucide-react";
-import { RequireAuth } from "@/components/auth/RequireAuth";
+import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
@@ -39,7 +39,7 @@ export default function SettingsPage() {
   const settings = mockSystemSettings;
 
   return (
-    <RequireAuth>
+    <RequireSuperAdmin title="시스템 설정">
       <AppLayout title="시스템 설정">
         <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -91,7 +91,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid gap-3">
                 {settings.apiConnections.map((item) => (
-                  <StatusRow key={item.id} item={item} />
+                  <StatusRow key={`${item.id}-${item.status}`} item={item} />
                 ))}
               </div>
             </Card>
@@ -121,7 +121,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid gap-3">
                 {settings.llmSettings.map((item) => (
-                  <StatusRow key={item.id} item={item} />
+                  <StatusRow key={`${item.id}-${item.status}`} item={item} />
                 ))}
               </div>
             </Card>
@@ -133,7 +133,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid gap-3">
                 {settings.notificationSettings.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
+                  <div key={`${item.id}-${item.channel}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 p-4">
                     <div>
                       <p className="font-black text-slate-950">{item.label}</p>
                       <p className="mt-1 text-xs font-semibold text-slate-500">{item.channel}</p>
@@ -158,6 +158,6 @@ export default function SettingsPage() {
           </div>
         </section>
       </AppLayout>
-    </RequireAuth>
+    </RequireSuperAdmin>
   );
 }

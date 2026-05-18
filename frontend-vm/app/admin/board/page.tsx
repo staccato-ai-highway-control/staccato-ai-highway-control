@@ -1,15 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { FilePlus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { EyeOff, FilePlus, MessageSquare, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import type { AuthUser } from "@/features/auth/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 import {
   boardPosts,
+  canCreatePost,
+  canDeletePost,
+  canEditPost,
+  canHidePost,
+  canManageComments,
   categoryLabels,
   categoryTone,
   type AdminBoardPost,
@@ -19,14 +26,19 @@ import {
 const categoryOptions: Array<BoardCategory | "ALL"> = [
   "ALL",
   "NOTICE",
-  "RESOURCE",
+  "REFERENCE",
   "DISCUSSION",
 ];
 
 export default function AdminBoardPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [posts, setPosts] = useState<AdminBoardPost[]>(boardPosts);
   const [categoryFilter, setCategoryFilter] = useState<BoardCategory | "ALL">("ALL");
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
 
   const filteredPosts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -50,6 +62,18 @@ export default function AdminBoardPage() {
     setPosts((current) => current.filter((post) => post.id !== id));
   }
 
+  function handleToggleHidden(id: string) {
+    setPosts((current) =>
+      current.map((post) =>
+        post.id === id ? { ...post, isHidden: !post.isHidden } : post
+      )
+    );
+  }
+
+  const canWritePost = canCreatePost(authUser);
+  const canUseHiddenControl = canHidePost(authUser);
+  const canUseCommentManagement = canManageComments(authUser);
+
   return (
     <RequireAuth>
       <AppLayout title="관리자 게시판">
@@ -57,15 +81,17 @@ export default function AdminBoardPage() {
           <div>
             <h2 className="text-2xl font-black text-slate-950">관리자 게시판</h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              공지, 자료, 토론 게시글을 관리합니다.
+              권한에 따라 공지, 자료, 토론 게시글을 조회하고 관리합니다.
             </p>
           </div>
-          <Link href="/admin/board/new" className="no-underline">
-            <Button type="button" className="gap-2">
-              <FilePlus className="h-4 w-4" />
-              게시글 작성
-            </Button>
-          </Link>
+          {canWritePost ? (
+            <Link href="/admin/board/new" className="no-underline">
+              <Button type="button" className="gap-2">
+                <FilePlus className="h-4 w-4" />
+                게시글 작성
+              </Button>
+            </Link>
+          ) : null}
         </section>
 
         <Card className="mb-5 p-5">
@@ -117,45 +143,76 @@ export default function AdminBoardPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPosts.map((post) => (
-                  <tr key={post.id} className="border-t border-slate-100">
-                    <td className="px-4 py-4">
-                      <Badge tone={categoryTone[post.category]}>{categoryLabels[post.category]}</Badge>
-                    </td>
-                    <td className="truncate px-4 py-4 font-black text-slate-950">
-                      <Link href={`/admin/board/${post.id}`} className="text-slate-950 no-underline hover:text-sky-700">
-                        {post.title}
-                      </Link>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{post.author}</td>
-                    <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.createdAt}</td>
-                    <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.views}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-nowrap gap-2 whitespace-nowrap">
-                        <Link
-                          href={`/admin/board/${post.id}`}
-                          className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50"
-                        >
-                          상세
+                {filteredPosts.map((post) => {
+                  const editable = canEditPost(post, authUser);
+                  const deletable = canDeletePost(post, authUser);
+
+                  return (
+                    <tr key={post.id} className="border-t border-slate-100">
+                      <td className="px-4 py-4">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge tone={categoryTone[post.category]}>{categoryLabels[post.category]}</Badge>
+                          {post.isHidden ? <Badge tone="amber">숨김</Badge> : null}
+                        </div>
+                      </td>
+                      <td className="truncate px-4 py-4 font-black text-slate-950">
+                        <Link href={`/admin/board/${post.id}`} className="text-slate-950 no-underline hover:text-sky-700">
+                          {post.title}
                         </Link>
-                        <Link
-                          href={`/admin/board/${post.id}/edit`}
-                          className="inline-flex min-h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
-                        >
-                          수정
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(post.id)}
-                          className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          삭제
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{post.author}</td>
+                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.createdAt}</td>
+                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.views}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex flex-nowrap gap-2 whitespace-nowrap">
+                          <Link
+                            href={`/admin/board/${post.id}`}
+                            className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50"
+                          >
+                            상세
+                          </Link>
+                          {editable ? (
+                            <Link
+                              href={`/admin/board/${post.id}/edit`}
+                              className="inline-flex min-h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
+                            >
+                              수정
+                            </Link>
+                          ) : null}
+                          {canUseCommentManagement ? (
+                            <button
+                              type="button"
+                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" />
+                              댓글 {post.commentsCount}
+                            </button>
+                          ) : null}
+                          {canUseHiddenControl ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleHidden(post.id)}
+                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-amber-200 px-3 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
+                            >
+                              <EyeOff className="h-3.5 w-3.5" />
+                              {post.isHidden ? "해제" : "숨김"}
+                            </button>
+                          ) : null}
+                          {deletable ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(post.id)}
+                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              삭제
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
