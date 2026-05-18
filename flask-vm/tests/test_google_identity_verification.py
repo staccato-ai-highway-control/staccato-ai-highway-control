@@ -1,3 +1,4 @@
+from db_cleanup import cleanup_database
 import os
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
@@ -52,13 +53,13 @@ def app_context(monkeypatch):
 
     with app.app_context():
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
         db.create_all()
 
         yield app
 
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
 
 
 def _make_test_user(email: str, is_email_verified: bool = False) -> User:
