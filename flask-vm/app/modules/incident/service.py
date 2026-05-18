@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -5,6 +6,9 @@ from datetime import datetime
 from app.extensions import db
 from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
 from app.modules.ai_gateway.service import AIGatewayService
+
+
+logger = logging.getLogger(__name__)
 
 
 class IncidentService:
@@ -103,30 +107,44 @@ class IncidentService:
             db.session.commit()
             committed = True
 
-            print(f"[*] Report {report.id} 저장 완료. AI 서버에 분석을 요청합니다...")
+            logger.info("Incident report saved; requesting AI analysis", extra={
+                "report_id": report.id,
+                "attachment_id": attachment.id,
+                "job_id": job.id,
+            })
 
             try:
                 success, res = AIGatewayService.request_analysis(report.id, file_path)
 
                 if success:
-                    print("✅ AI 분석 요청 성공 (Job Status: QUEUED)")
+                    logger.info("AI analysis request accepted", extra={
+                        "report_id": report.id,
+                        "job_status": "QUEUED",
+                    })
                 else:
-                    print(f"⚠️ AI 분석 요청 실패: {res}")
+                    logger.warning("AI analysis request failed", extra={
+                        "report_id": report.id,
+                        "response": res,
+                    })
 
-            except Exception as ai_error:
-                print(f"⚠️ AI 분석 요청 중 예외 발생: {ai_error}")
+            except Exception:
+                logger.exception("AI analysis request raised exception", extra={
+                    "report_id": report.id,
+                })
 
             return {"report_id": report.id, "status": "success"}
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
 
             saved_file_path = file_info.get("file_path") if file_info else None
             if not committed and saved_file_path and os.path.exists(saved_file_path):
                 try:
                     os.remove(saved_file_path)
-                except OSError as cleanup_error:
-                    print(f"⚠️ 업로드 파일 정리 실패: {cleanup_error}")
+                except OSError:
+                    logger.exception("Uploaded file cleanup failed", extra={
+                        "file_path": saved_file_path
+                    })
 
-            print(f"Error detail: {str(e)}")
+            logger.exception("Incident creation failed")
             raise

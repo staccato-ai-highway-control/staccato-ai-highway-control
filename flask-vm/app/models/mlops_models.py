@@ -38,7 +38,7 @@ class TrainingDataset(db.Model):
     positive_count = db.Column(db.Integer, nullable=True)
     negative_count = db.Column(db.Integer, nullable=True)
     label_schema_json = db.Column(db.JSON, nullable=True)
-    created_by = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    created_by = db.Column(db.BigInteger, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False)
 
     def to_dict(self):

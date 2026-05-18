@@ -41,14 +41,18 @@ class ReportUploadService:
             # 2. 첨부 파일 처리 및 크기 검증
             if files:
                 upload_path = current_app.config.get("UPLOAD_BASE_PATH")
-                if not os.path.exists(upload_path):
-                    os.makedirs(upload_path, exist_ok=True)
+                if not upload_path:
+                    raise RuntimeError("UPLOAD_BASE_PATH 설정이 없습니다.")
+
+                os.makedirs(upload_path, exist_ok=True)
 
                 for file in files:
                     if not file or file.filename == "":
                         continue
 
                     file_type = ReportUploadService._get_file_type(file.filename)
+                    if file_type == "UNKNOWN":
+                        raise ValueError("지원하지 않는 파일 형식입니다.")
 
                     file.seek(0, os.SEEK_END)
                     file_length = file.tell()

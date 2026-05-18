@@ -10,7 +10,7 @@ class BoardPost(db.Model):
     board_type = db.Column(db.String(50), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    author_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    author_id = db.Column(db.BigInteger, nullable=True)
     post_status = db.Column(db.String(50), nullable=False)
     is_pinned = db.Column(db.Integer, nullable=False)
     view_count = db.Column(db.Integer, nullable=False)
