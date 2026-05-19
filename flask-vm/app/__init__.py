@@ -51,6 +51,7 @@ from app.modules.incident.routes import incident_bp
 # - 파일 위치: app/modules/report_upload/
 # ============================================================
 from app.modules.report_upload.routes import report_upload_bp
+from app.modules.location_search.routes import location_search_bp
 
 
 
@@ -141,6 +142,7 @@ def register_blueprints(app):
     # ========================================================
     app.register_blueprint(incident_bp)
     app.register_blueprint(report_upload_bp)
+    app.register_blueprint(location_search_bp)
 
 
 
