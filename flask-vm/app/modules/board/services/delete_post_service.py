@@ -5,13 +5,12 @@ from datetime import datetime
 from app.extensions import db
 
 # 게시글 모델 import
-from app.models.board_models import (
-    BoardPost,
-    BoardAttachment
-)
+from app.models.board_models import BoardPost, BoardAttachment
+
 
 DELETED_STATUS = "DELETED"
 SUPER_ADMIN_ROLE = "SUPER_ADMIN"
+
 
 
 # -----------------------
@@ -54,3 +53,45 @@ def delete_post(post_id, current_user):
                 "success": False,
                 "message": "게시글 삭제 권한이 없습니다."
             }, 403
+
+
+        # soft delete 처리(숨김 처리)
+        # 실제 삭제 대신 상태 변경
+        post.post_status = DELETED_STATUS
+
+        # 삭제 시간 저장
+        post.deleted_at = datetime.utcnow()
+
+        # =====================================
+        # 게시글에 연결된 첨부파일 조회
+        # =====================================
+        attachments = BoardAttachment.query.filter_by(
+            post_id=post.id
+        ).all()
+
+        # =====================================
+        # 첨부파일 soft delete 처리
+        # =====================================
+        for attachment in attachments:
+
+            attachment.deleted_at = datetime.utcnow()
+
+        # db에 변경 사항 저장
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "게시글이 성공적으로 삭제되었습니다."
+        }, 200
+
+    except Exception as e:
+
+        # 삭제 실패 시 롤백
+        db.session.rollback()
+
+        print(f"[게시글 삭제 오류] {e}")
+
+        return {
+            "success": False,
+            "message": "게시글 삭제에 실패했습니다."
+        }, 500

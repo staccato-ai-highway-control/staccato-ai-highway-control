@@ -297,11 +297,24 @@ def create_board_post(request):
                 stored_filename
             )
 
+
+            # =================================
+            # 파일 크기 계산
+            # =================================
+            file_size = len(file.read())
+
+            # 파일 포인터 초기화
+            #
+            # read() 후 save() 가능하도록 복원
+            file.seek(0)
+
+
             # =================================
             # 파일 저장
             # =================================
             file.save(file_path)
 
+        
             # =================================
             # 첨부파일 DB 저장
             # =================================
@@ -322,10 +335,8 @@ def create_board_post(request):
                 # 저장 경로
                 file_path=file_path,
 
-                # 파일 크기
-                #
-                # 추후 확장 가능
-                file_size=0,
+                # 파일 크기(bytes)
+                file_size=file_size,
 
                 # MIME TYPE
                 mime_type=file.mimetype,
@@ -336,6 +347,7 @@ def create_board_post(request):
                 # 생성 시간
                 created_at=datetime.utcnow()
             )
+
 
             # DB session 추가
             db.session.add(attachment)

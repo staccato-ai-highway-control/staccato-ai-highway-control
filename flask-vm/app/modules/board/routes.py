@@ -157,7 +157,6 @@ def get_posts_list():
             size
         )
 
-
         # JSON 응답 반환
         return jsonify(result), status_code
 

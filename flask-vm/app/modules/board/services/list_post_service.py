@@ -101,6 +101,23 @@ def list_posts(
             BoardPost.created_at.desc()
         )
 
+
+        # =====================================
+        # 페이지 기본값 처리
+        # =====================================
+        page = max(page, 1)
+
+        # =====================================
+        # 페이지 크기 기본값 처리
+        # =====================================
+        size = max(size, 1)
+
+        # =====================================
+        # 최대 페이지 크기 제한
+        # =====================================
+        size = min(size, 100)
+
+
         # -----------------------------------
         # pagination 처리
         #
@@ -126,7 +143,13 @@ def list_posts(
 
         return {
             "success": True,
-            "data": post_list
+            "data": post_list,
+            "pagination": {
+                "page": pagination.page,
+                "size": pagination.per_page,
+                "total_count": pagination.total,
+                "total_pages": pagination.pages
+            }
         }, 200
 
     except Exception as e:

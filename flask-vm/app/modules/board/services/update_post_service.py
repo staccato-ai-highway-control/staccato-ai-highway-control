@@ -4,12 +4,20 @@ from datetime import datetime
 # DB 객체 import
 from app.extensions import db
 
+import uuid
+import os
+
+from werkzeug.utils import secure_filename
+
+from flask import current_app
+
 # 게시글 모델 import
 from app.models.board_models import BoardPost, BoardAttachment
 
 
 DELETED_STATUS = "DELETED"
 SUPER_ADMIN_ROLE = "SUPER_ADMIN"
+
 
 # -----------------------
 # 게시글 수정 함수
@@ -137,6 +145,63 @@ def update_post(post_id, data, file, current_user):
 
         if file:
 
+            # =================================
+            # 원본 파일명 보안 처리
+            # =================================
+            original_filename = secure_filename(
+                file.filename
+            )
+
+            # =================================
+            # 파일 확장자 추출
+            # =================================
+            extension = original_filename.split(".")[-1]
+
+            # =================================
+            # UUID 기반 저장 파일명 생성
+            # =================================
+            stored_filename = (
+                f"{uuid.uuid4()}.{extension}"
+            )
+
+            # =================================
+            # 업로드 폴더 경로
+            # =================================
+            upload_folder = current_app.config.get(
+                "BOARD_UPLOAD_FOLDER",
+                "storage/uploads/board"
+            )
+
+            # 업로드 폴더 없으면 생성
+            os.makedirs(
+                upload_folder,
+                exist_ok=True
+            )
+
+            # =================================
+            # 최종 저장 경로 생성
+            # =================================
+            file_path = os.path.join(
+                upload_folder,
+                stored_filename
+            )
+
+            # =================================
+            # 파일 크기 계산
+            # =================================
+            file_size = len(file.read())
+
+            # 파일 포인터 초기화
+            file.seek(0)
+
+            # =================================
+            # 파일 저장
+            # =================================
+            file.save(file_path)
+
+            # =================================
+            # 첨부파일 DB 저장
+            # =================================
             attachment = BoardAttachment(
 
                 # 게시글 id 연결
@@ -146,19 +211,19 @@ def update_post(post_id, data, file, current_user):
                 uploaded_by=current_user_id,
 
                 # 원본 파일명
-                original_filename=file.filename,
+                original_filename=original_filename,
 
                 # 저장 파일명
-                stored_filename=file.filename,
+                stored_filename=stored_filename,
 
                 # 파일 저장 경로
-                file_path=f"/uploads/{file.filename}",
+                file_path=file_path,
 
                 # MIME 타입
                 mime_type=file.content_type,
 
                 # 파일 크기
-                file_size=0,
+                file_size=file_size,
 
                 # 다운로드 수 초기값
                 download_count=0,
@@ -168,9 +233,7 @@ def update_post(post_id, data, file, current_user):
             )
 
             # DB 저장
-            db.session.add(
-                attachment
-            )
+            db.session.add(attachment)
 
 
         # db에 변경 사항 저장
@@ -183,7 +246,7 @@ def update_post(post_id, data, file, current_user):
         }, 200
 
     except Exception as e:
-        
+
         # 수정 실패 시 롤백
         db.session.rollback()
 

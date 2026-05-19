@@ -4,6 +4,9 @@ from app.extensions import db
 # 게시글 모델 import
 from app.models.board_models import BoardPost, BoardAttachment
 
+
+DELETED_STATUS = "DELETED"
+
 # -----------------------
 # 게시글 상세 조회 함수
 # -----------------------
@@ -23,7 +26,7 @@ def detail_post(post_id):
             }, 404
 
         # 삭제된 게시글 접근 방지
-        if post.post_status == "DELETED":
+        if post.post_status == DELETED_STATUS:
 
             return {
                 "success": False,
@@ -31,7 +34,9 @@ def detail_post(post_id):
             }, 404
 
         # 조회수 증가
-        post.view_count += 1
+        post.view_count = (
+            post.view_count or 0
+        ) + 1
 
         # DB 반영
         db.session.commit()
