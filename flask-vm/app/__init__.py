@@ -197,4 +197,7 @@ def create_app(test_config=None):
 
     register_blueprints(app)
 
+    # Register Socket.IO event handlers.
+    from app.modules import socketio as socketio_module  # noqa: F401
+
     return app
