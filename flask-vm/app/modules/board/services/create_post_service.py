@@ -19,6 +19,8 @@ import os
 # =========================================
 from datetime import datetime
 
+from flask import current_app
+
 # =========================================
 # secure_filename
 #
@@ -276,8 +278,15 @@ def create_board_post(request):
             #
             # 팀 공통 규칙 적용
             # =================================
-            upload_folder = (
+            upload_folder = current_app.config.get(
+                "BOARD_UPLOAD_FOLDER",
                 "storage/uploads/board"
+            )
+
+            # 업로드 폴더 없으면 생성
+            os.makedirs(
+                upload_folder,
+                exist_ok=True
             )
 
             # =================================

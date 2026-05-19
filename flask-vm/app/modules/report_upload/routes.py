@@ -1,13 +1,14 @@
-from flask import Blueprint, request, jsonify
-from app.utils.security import require_auth
 import logging
 
-from app.modules.report_upload.service import ReportUploadService
+from flask import Blueprint, jsonify, request
 
-# 로깅 설정 (에러 추적용)
+from app.modules.report_upload.service import ReportUploadService
+from app.utils.security import require_auth
+
+
 logger = logging.getLogger(__name__)
 
-report_upload_bp = Blueprint('report_upload', __name__, url_prefix='/api/reports')
+report_upload_bp = Blueprint("report_upload", __name__, url_prefix="/api/reports")
 
 
 @report_upload_bp.route("/health", methods=["GET"])
@@ -15,30 +16,69 @@ def health():
     return {"status": "report upload module ok"}, 200
 
 
-@report_upload_bp.route('', methods=['POST'])
+@report_upload_bp.route("", methods=["GET"])
+@require_auth
+def list_reports():
+    try:
+        result, status_code = ReportUploadService.list_reports(request.args)
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 목록 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/<int:report_id>", methods=["GET"])
+@require_auth
+def get_report(report_id):
+    try:
+        result, status_code = ReportUploadService.get_report(report_id)
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 상세 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("", methods=["POST"])
 @require_auth
 def create_report():
     try:
         user_id = request.current_user.id
-
-        # multipart/form-data에서 텍스트 데이터 추출
         data = request.form.to_dict()
-
-        # 업로드된 파일 목록 추출 ('files'라는 이름으로 여러 개 보낼 때)
-        files = request.files.getlist('files')
+        files = request.files.getlist("files")
 
         if not files:
-            return jsonify({"error": "파일이 업로드되지 않았습니다."}), 400
+            return jsonify({"success": False, "error": "파일이 업로드되지 않았습니다."}), 400
 
-        # 서비스 로직 호출
         report = ReportUploadService.create_report(user_id, data, files)
 
         return jsonify({
+            "success": True,
             "message": "리포트가 성공적으로 접수되었습니다.",
             "report_code": report.report_code,
-            "report_id": report.id
+            "report_id": report.id,
         }), 201
 
-    except Exception as e:
-        logger.error(f"리포트 생성 중 오류 발생: {str(e)}")
-        return jsonify({"error": "서버 내부 오류가 발생했습니다.", "details": str(e)}), 500
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+    except Exception:
+        logger.exception("리포트 생성 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/<int:report_id>/analyze", methods=["POST"])
+@require_auth
+def request_report_analysis(report_id):
+    try:
+        user_id = request.current_user.id
+        result, status_code = ReportUploadService.request_report_analysis(
+            report_id=report_id,
+            user_id=user_id,
+        )
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 분석 요청 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500

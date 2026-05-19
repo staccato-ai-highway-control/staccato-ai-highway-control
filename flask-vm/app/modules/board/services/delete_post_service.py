@@ -5,11 +5,19 @@ from datetime import datetime
 from app.extensions import db
 
 # 게시글 모델 import
-from app.models.board_models import BoardPost, BoardAttachment
+from app.models.board_models import (
+    BoardPost,
+    BoardAttachment
+)
+
+DELETED_STATUS = "DELETED"
+SUPER_ADMIN_ROLE = "SUPER_ADMIN"
+
+
 # -----------------------
 # 게시글 삭제 함수
 # -----------------------
-def delete_post(post_id):
+def delete_post(post_id, current_user):
 
     try:
 
@@ -25,62 +33,24 @@ def delete_post(post_id):
             }, 404
 
         # 이미 삭제된 게시글인 경우
-        if post.post_status == "deleted":
+        if post.post_status == DELETED_STATUS:
 
             return {
                 "success": False,
                 "message": "이미 삭제된 게시글입니다."
             }, 400
 
-        # soft delete 처리(숨김 처리)
-        # 실제 삭제 대신 상태 변경
-        post.post_status = "deleted"
+        current_user_id = current_user.id
+        current_user_role = current_user.role
 
-        # 삭제 시간 저장
-        post.deleted_at = datetime.utcnow()
+        # 작성자 또는 SUPER_ADMIN만 삭제 가능
+        if (
+            post.author_id != current_user_id
+            and
+            current_user_role != SUPER_ADMIN_ROLE
+        ):
 
-
-        # =====================================
-        # 게시글에 연결된 첨부파일 조회
-        #
-        # 조건:
-        # - 현재 게시글(post.id)에 연결된 파일 조회
-        # =====================================
-        attachments = BoardAttachment.query.filter_by(
-            post_id=post.id
-        ).all()
-
-
-        # =====================================
-        # 첨부파일 soft delete 처리
-        #
-        # 실제 파일 삭제 대신:
-        # - deleted_at 시간 저장
-        #
-        # 목적:
-        # - 첨부파일 복구 가능
-        # - 삭제된 게시글의 첨부파일 접근 방지
-        # =====================================
-        for attachment in attachments:
-            attachment.deleted_at = datetime.utcnow()
-
-
-        # db에 변경 사항 저장
-        db.session.commit()
-
-        return {
-            "success": True,
-            "message": "게시글이 성공적으로 삭제되었습니다."
-        }, 200
-
-    except Exception as e:
-
-        # 삭제 실패 시 롤백
-        db.session.rollback()
-
-        print(f"[게시글 삭제 오류] {e}")
-
-        return {
-            "success": False,
-            "message": "게시글 삭제에 실패했습니다."
-        }, 500
+            return {
+                "success": False,
+                "message": "게시글 삭제 권한이 없습니다."
+            }, 403

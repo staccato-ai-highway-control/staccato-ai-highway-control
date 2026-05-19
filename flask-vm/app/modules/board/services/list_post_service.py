@@ -4,7 +4,7 @@ from sqlalchemy import or_
 
 # -----------------------
 # 게시글 목록 조회 함수
-# 
+#
 # 기능:
 # - 키워드 검색
 # - 카테고리 필터
@@ -24,16 +24,16 @@ def list_posts(
 
         # ---------------------------
         # 기본 Query 생성
-        # 
+        #
         # 삭제되지 않은 게시글만 조회
         # ---------------------------
         query = BoardPost.query.filter(
-            BoardPost.post_status != "deleted"
+            BoardPost.post_status != "DELETED"
         )
 
         # ---------------------------
         # 키워드 검색
-        # 
+        #
         # 제목 or 내용 검색
         # ---------------------------
         if keyword:
@@ -52,7 +52,6 @@ def list_posts(
                     )
                 )
             )
-        
         # ----------------------------
         # 카테고리(board_type) 검색
         # ----------------------------
@@ -93,7 +92,7 @@ def list_posts(
 
             query = query.filter(
                 BoardPost.created_at <= end_date
-            )                
+            )
 
         # ----------------------------
         # 최신순 정렬
@@ -104,10 +103,10 @@ def list_posts(
 
         # -----------------------------------
         # pagination 처리
-        # 
+        #
         # page:
         # 현재 페이지 번호
-        # 
+        #
         # per_page:
         # 페이지당 게시글 개수
         # ------------------------------------
@@ -119,7 +118,6 @@ def list_posts(
 
         # 현재 페이지 게시글 목록
         posts = pagination.items
-        
 
         # json 형태로 변환하여 반환
         post_list = [

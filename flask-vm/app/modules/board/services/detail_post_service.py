@@ -23,7 +23,7 @@ def detail_post(post_id):
             }, 404
 
         # 삭제된 게시글 접근 방지
-        if post.post_status == "deleted":
+        if post.post_status == "DELETED":
 
             return {
                 "success": False,
@@ -39,7 +39,8 @@ def detail_post(post_id):
 
         # 첨부파일 조회
         attachments = BoardAttachment.query.filter_by(
-            post_id=post.id
+            post_id=post.id,
+            deleted_at=None
         ).all()
 
 

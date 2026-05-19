@@ -129,20 +129,20 @@ def get_posts_list():
 
 
         # 현재 페이지 번호
-        # 
+        #
         # 기본값: 1
         page = request.args.get(
-            "page", 
-            default=1, 
+            "page",
+            default=1,
             type=int
         )
 
         # 페이지당 게시글 개수
-        # 
+        #
         # 기본값: 10
         size = request.args.get(
-            "size", 
-            default=10, 
+            "size",
+            default=10,
             type=int
         )
 
@@ -157,8 +157,6 @@ def get_posts_list():
             size
         )
 
-        # 게시글 목록 조회 서비스 실행
-        result, status_code = list_posts()
 
         # JSON 응답 반환
         return jsonify(result), status_code
@@ -206,21 +204,12 @@ def get_post_detail(post_id):
 # =========================================
 @board_bp.route("/posts/<int:post_id>", methods=["PUT"])
 @require_auth
-def update_post(post_id, data, file):
+def update_post_api(post_id):
 
     try:
 
         # =====================================
         # multipart/form-data 데이터 받기
-        #
-        # form 데이터:
-        # - title
-        # - content
-        # - board_type
-        # - delete_attachment_ids
-        #
-        # file 데이터:
-        # - file
         # =====================================
         data = request.form
 
@@ -233,7 +222,8 @@ def update_post(post_id, data, file):
         result, status_code = update_post(
             post_id,
             data,
-            file
+            file,
+            request.current_user
         )
 
         # JSON 응답 반환
@@ -241,7 +231,6 @@ def update_post(post_id, data, file):
 
     except Exception as e:
 
-        # 서버 로그 출력
         print(f"[게시글 수정 API 오류] {e}")
 
         return jsonify({
@@ -261,7 +250,10 @@ def delete_post_api(post_id):
     try:
 
         # 게시글 삭제 서비스 실행
-        result, status_code = delete_post(post_id)
+        result, status_code = delete_post(
+            post_id,
+            request.current_user
+        )
 
         # JSON 응답 반환
         return jsonify(result), status_code
