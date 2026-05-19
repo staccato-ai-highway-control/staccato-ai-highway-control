@@ -5,8 +5,7 @@ from datetime import datetime
 from app.extensions import db
 
 # 게시글 모델 import
-from app.models.board_models import BoardPost
-
+from app.models.board_models import BoardPost, BoardAttachment
 # -----------------------
 # 게시글 삭제 함수
 # -----------------------
@@ -39,6 +38,32 @@ def delete_post(post_id):
 
         # 삭제 시간 저장
         post.deleted_at = datetime.utcnow()
+
+
+        # =====================================
+        # 게시글에 연결된 첨부파일 조회
+        #
+        # 조건:
+        # - 현재 게시글(post.id)에 연결된 파일 조회
+        # =====================================
+        attachments = BoardAttachment.query.filter_by(
+            post_id=post.id
+        ).all()
+
+
+        # =====================================
+        # 첨부파일 soft delete 처리
+        #
+        # 실제 파일 삭제 대신:
+        # - deleted_at 시간 저장
+        #
+        # 목적:
+        # - 첨부파일 복구 가능
+        # - 삭제된 게시글의 첨부파일 접근 방지
+        # =====================================
+        for attachment in attachments:
+            attachment.deleted_at = datetime.utcnow()
+
 
         # db에 변경 사항 저장
         db.session.commit()

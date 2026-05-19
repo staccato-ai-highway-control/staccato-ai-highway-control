@@ -2,7 +2,7 @@
 from app.extensions import db
 
 # 게시글 모델 import
-from app.models.board_models import BoardPost
+from app.models.board_models import BoardPost, BoardAttachment
 
 # -----------------------
 # 게시글 상세 조회 함수
@@ -36,9 +36,22 @@ def detail_post(post_id):
         # DB 반영
         db.session.commit()
 
+
+        # 첨부파일 조회
+        attachments = BoardAttachment.query.filter_by(
+            post_id=post.id
+        ).all()
+
+
         return {
             "success": True,
-            "data": post.to_dict()
+            "data": {
+                "post": post.to_dict(),
+                "attachments": [
+                    attachment.to_dict()
+                    for attachment in attachments
+                ]
+            }
         }, 200
 
     except Exception as e:

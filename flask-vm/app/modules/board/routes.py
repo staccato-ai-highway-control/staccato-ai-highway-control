@@ -206,17 +206,34 @@ def get_post_detail(post_id):
 # =========================================
 @board_bp.route("/posts/<int:post_id>", methods=["PUT"])
 @require_auth
-def update_post_api(post_id):
+def update_post(post_id, data, file):
 
     try:
 
-        # 프론트에서 수정 데이터 받기
-        data = request.json
+        # =====================================
+        # multipart/form-data 데이터 받기
+        #
+        # form 데이터:
+        # - title
+        # - content
+        # - board_type
+        # - delete_attachment_ids
+        #
+        # file 데이터:
+        # - file
+        # =====================================
+        data = request.form
+
+        # 첨부파일 받기
+        file = request.files.get(
+            "file"
+        )
 
         # 게시글 수정 서비스 실행
         result, status_code = update_post(
-            post_id, 
-            data
+            post_id,
+            data,
+            file
         )
 
         # JSON 응답 반환
