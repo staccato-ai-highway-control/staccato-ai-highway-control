@@ -287,6 +287,7 @@ class ReportUploadService:
         from app.extensions import db
         from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
         from app.modules.ai_gateway.service import AIGatewayService
+        from app.modules.socketio.emitters import emit_report_analysis_updated
 
         now = ReportUploadService._now()
 
@@ -349,6 +350,9 @@ class ReportUploadService:
             created_jobs.append((job, attachment))
 
         db.session.commit()
+
+        for job in jobs:
+            emit_report_analysis_updated(job)
 
         for job, attachment in created_jobs:
             try:
