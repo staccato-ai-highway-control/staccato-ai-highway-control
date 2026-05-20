@@ -36,6 +36,9 @@ from app.modules.board.services.list_board_comments_service import list_board_co
 # 댓글 삭제 import
 from app.modules.board.services.delete_board_comment_service import delete_board_comment
 
+# 파일 다운로드 import
+from app.modules.board.services.download_attachment_service import download_attachment
+
 
 
 # =========================================
@@ -326,4 +329,21 @@ def delete_comment_route(comment_id):
     return delete_board_comment(
         comment_id,
         request.current_user
+    )
+
+
+# -------------------------------------
+# 파일 다운로드
+# -------------------------------------
+@board_bp.route(
+    "/attachments/<int:attachment_id>/download",
+    methods=["GET"]
+)
+@require_auth
+def download_attachment_route(
+    attachment_id
+):
+
+    return download_attachment(
+        attachment_id
     )

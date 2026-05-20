@@ -98,6 +98,11 @@ def list_posts(
         # 최신순 정렬
         # ----------------------------
         query = query.order_by(
+
+            # 고정글 우선
+            BoardPost.is_pinned.desc(),
+
+            # 최신글 우선
             BoardPost.created_at.desc()
         )
 

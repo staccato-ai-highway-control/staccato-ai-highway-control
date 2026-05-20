@@ -255,9 +255,9 @@ def test_create_post_with_file_auth():
         "title": "파일 테스트",
         "content": "첨부파일 포함",
         "board_type": "NOTICE",
-        "files": (
+        "file": (
             io.BytesIO(b"test file"),
-            "test.txt"
+            "test.pdf"
         )
     }
 
@@ -269,3 +269,68 @@ def test_create_post_with_file_auth():
     )
 
     assert response.status_code == 201
+
+
+def test_download_attachment_with_auth():
+
+    app = setup_app()
+
+    client = app.test_client()
+
+    headers = get_auth_headers(
+        client
+    )
+
+    # =====================================
+    # 먼저 파일 첨부 게시글 생성
+    # =====================================
+    data = {
+        "title": "다운로드 테스트",
+        "content": "파일 포함 게시글",
+        "board_type": "NOTICE",
+        "file": (
+            io.BytesIO(b"download test"),
+            "download.pdf"
+        )
+    }
+
+    create_response = client.post(
+        "/board/posts",
+        data=data,
+        headers=headers,
+        content_type="multipart/form-data"
+    )
+
+    print(create_response.json)
+
+    # =====================================
+    # 생성된 게시글 id
+    # =====================================
+    post_id = create_response.json[
+        "data"
+    ]["post_id"]
+
+    # =====================================
+    # 첨부파일 조회
+    # =====================================
+    from app.models.board_models import (
+        BoardAttachment
+    )
+
+    with app.app_context():
+
+        attachment = BoardAttachment.query.filter_by(
+            post_id=post_id
+        ).first()
+
+    # =====================================
+    # 다운로드 요청
+    # =====================================
+    response = client.get(
+        f"/board/attachments/{attachment.id}/download",
+        headers=headers
+    )
+
+    print(response.status_code)
+
+    assert response.status_code == 200
