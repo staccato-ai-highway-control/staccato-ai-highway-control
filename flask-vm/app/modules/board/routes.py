@@ -27,6 +27,17 @@ from app.modules.board.services.update_post_service import update_post
 # 게시글 삭제 서비스 import
 from app.modules.board.services.delete_post_service import delete_post
 
+# 댓글 작성 import
+from app.modules.board.services.create_board_comment_service import create_board_comment
+
+# 댓글 목록 import
+from app.modules.board.services.list_board_comments_service import list_board_comments
+
+# 댓글 삭제 import
+from app.modules.board.services.delete_board_comment_service import delete_board_comment
+
+
+
 # =========================================
 # Blueprint 생성
 #
@@ -91,7 +102,8 @@ def create_post():
 # 검색 / 필터 / 페이징 지원
 # =========================================
 @board_bp.route("/posts", methods=["GET"])
-def get_posts_list():
+@require_auth
+def list_posts_route():
 
     try:
 
@@ -176,7 +188,8 @@ def get_posts_list():
 # GET /board/posts/1
 # =========================================
 @board_bp.route("/posts/<int:post_id>", methods=["GET"])
-def get_post_detail(post_id):
+@require_auth
+def detail_post_route(post_id):
 
     try:
 
@@ -266,3 +279,51 @@ def delete_post_api(post_id):
             "success": False,
             "message": "서버 오류 발생"
         }), 500
+
+
+# -----------------------
+# 댓글 작성 API
+# -----------------------
+@board_bp.route(
+    "/posts/<int:post_id>/comments",
+    methods=["POST"]
+)
+@require_auth
+def create_comment_route(post_id):
+
+    data = request.get_json()
+
+    return create_board_comment(
+        post_id,
+        data,
+        request.current_user
+    )
+
+# -----------------------
+# 댓글 목록 조회 API
+# -----------------------
+@board_bp.route(
+    "/posts/<int:post_id>/comments",
+    methods=["GET"]
+)
+@require_auth
+def list_comments_route(post_id):
+
+    return list_board_comments(
+        post_id
+    )
+
+# -----------------------
+# 댓글 삭제 API
+# -----------------------
+@board_bp.route(
+    "/comments/<int:comment_id>",
+    methods=["DELETE"]
+)
+@require_auth
+def delete_comment_route(comment_id):
+
+    return delete_board_comment(
+        comment_id,
+        request.current_user
+    )
