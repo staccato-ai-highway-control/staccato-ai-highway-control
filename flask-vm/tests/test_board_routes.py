@@ -129,13 +129,8 @@ def test_create_post_with_file():
     assert response.status_code == 401
 
 
-def test_create_comment_with_auth():
+def get_auth_headers(client):
 
-    app = setup_app()
-
-    client = app.test_client()
-
-    # 로그인 요청
     login_response = client.post(
         "/auth/login",
         json={
@@ -144,25 +139,133 @@ def test_create_comment_with_auth():
         }
     )
 
-    print(login_response.json)
-
-    # 토큰 추출
     token = login_response.json[
         "access_token"
     ]
 
-    # 인증 헤더
-    headers = {
+    return {
         "Authorization": f"Bearer {token}"
     }
 
-    # 댓글 생성 테스트
+
+def test_create_comment_with_auth():
+
+    app = setup_app()
+
+    client = app.test_client()
+
+    headers = get_auth_headers(
+        client
+    )
+
     response = client.post(
         "/board/posts/1/comments",
         json={
-            "content": "테스트 댓글"
+            "content": "로그인 댓글"
         },
         headers=headers
+    )
+
+    assert response.status_code == 201
+
+
+def test_create_reply_comment_with_auth():
+
+    app = setup_app()
+
+    client = app.test_client()
+
+    headers = get_auth_headers(
+        client
+    )
+
+    # 부모 댓글 생성
+    parent_response = client.post(
+        "/board/posts/1/comments",
+        json={
+            "content": "부모 댓글"
+        },
+        headers=headers
+    )
+
+    parent_comment_id = parent_response.json[
+        "data"
+    ]["id"]
+
+    # 대댓글 생성
+    response = client.post(
+        "/board/posts/1/comments",
+        json={
+            "content": "로그인 대댓글",
+            "parent_comment_id": parent_comment_id
+        },
+        headers=headers
+    )
+
+    print(response.json)
+
+    assert response.status_code == 201
+
+
+def test_delete_comment_with_auth():
+
+    app = setup_app()
+
+    client = app.test_client()
+
+    headers = get_auth_headers(
+        client
+    )
+
+    # 삭제용 댓글 생성
+    create_response = client.post(
+        "/board/posts/1/comments",
+        json={
+            "content": "삭제 테스트 댓글"
+        },
+        headers=headers
+    )
+
+    comment_id = create_response.json[
+        "data"
+    ]["id"]
+
+    # 댓글 삭제
+    response = client.delete(
+        f"/board/comments/{comment_id}",
+        headers=headers
+    )
+
+    print(response.json)
+
+    assert response.status_code == 200
+
+
+def test_create_post_with_file_auth():
+
+    app = setup_app()
+
+    client = app.test_client()
+
+    headers = get_auth_headers(
+        client
+    )
+
+    data = {
+        "title": "파일 테스트",
+        "content": "첨부파일 포함",
+        "board_type": "NOTICE",
+        "files": (
+            io.BytesIO(b"test file"),
+            "test.txt"
+        )
+    }
+
+    response = client.post(
+        "/board/posts",
+        data=data,
+        headers=headers,
+        content_type="multipart/form-data"
     )
 
     assert response.status_code == 201
