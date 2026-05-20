@@ -16,6 +16,7 @@ export type UploadReportPayload = {
   uploadPurpose?: UploadPurpose;
   title: string;
   description?: string;
+  location?: string;
   priority?: ReportPriority;
   latitude?: number;
   longitude?: number;
@@ -31,6 +32,25 @@ export type CreateIncidentReportPayload = CreateReportPayload & {
 };
 
 type ListResponse = FlexibleApiResponse<Report[]> | { reports?: Report[] };
+
+export type LocationSearchItem = {
+  id?: string | number;
+  location?: string;
+  name?: string;
+  title?: string;
+  address?: string;
+  road_name?: string;
+  roadName?: string;
+  location_name?: string;
+  locationName?: string;
+  latitude?: number | string;
+  longitude?: number | string;
+};
+
+type LocationSearchResponse =
+  | FlexibleApiResponse<{ items?: LocationSearchItem[] }>
+  | { items?: LocationSearchItem[] }
+  | LocationSearchItem[];
 
 function appendOptional(formData: FormData, key: string, value: string | number | boolean | null | undefined) {
   if (value !== null && value !== undefined && value !== "") formData.append(key, String(value));
@@ -53,7 +73,7 @@ export async function getReport(id: string) {
 }
 
 export async function createReport(payload: CreateReportPayload) {
-  return apiClient<ReportUploadResponse>("/api/reports", {
+  const response = await apiClient<FlexibleApiResponse<ReportUploadResponse>>("/api/reports", {
     method: "POST",
     body: {
       report_type: payload.reportType ?? "GENERAL",
@@ -66,6 +86,8 @@ export async function createReport(payload: CreateReportPayload) {
       priority: "NORMAL",
     },
   });
+
+  return getEnvelopeData<ReportUploadResponse>(response);
 }
 
 export async function uploadReport(payload: UploadReportPayload) {
@@ -77,15 +99,29 @@ export async function uploadReport(payload: UploadReportPayload) {
   formData.append("title", payload.title);
   formData.append("subject", payload.title);
   appendOptional(formData, "description", payload.description);
+  appendOptional(formData, "location", payload.location);
   formData.append("priority", payload.priority ?? "NORMAL");
   appendOptional(formData, "latitude", payload.latitude);
   appendOptional(formData, "longitude", payload.longitude);
   formData.append("is_demo_data", String(Boolean(payload.isDemoData)));
 
-  return apiClient<ReportUploadResponse>("/api/reports", {
+  const response = await apiClient<FlexibleApiResponse<ReportUploadResponse>>("/api/reports", {
     method: "POST",
     formData,
   });
+
+  return getEnvelopeData<ReportUploadResponse>(response);
+}
+
+export async function searchLocations(keyword: string, size = 5) {
+  const params = new URLSearchParams({
+    keyword,
+    size: String(size),
+  });
+  const response = await apiClient<LocationSearchResponse>(`/api/locations/search?${params.toString()}`);
+  const data = Array.isArray(response) ? { items: response } : getEnvelopeData<{ items?: LocationSearchItem[] }>(response);
+
+  return data.items ?? [];
 }
 
 export async function createIncidentReport(payload: CreateIncidentReportPayload) {
@@ -95,6 +131,7 @@ export async function createIncidentReport(payload: CreateIncidentReportPayload)
     uploadPurpose: payload.purpose ?? "ANALYSIS",
     title: payload.title,
     description: payload.description,
+    location: payload.location,
     priority: payload.priority ?? "NORMAL",
     latitude: payload.latitude,
     longitude: payload.longitude,

@@ -130,16 +130,16 @@ export default function AdminBoardPage() {
             <h3 className="text-base font-black text-slate-950">게시글 목록</h3>
             <span className="text-sm font-semibold text-slate-500">{filteredPosts.length}건</span>
           </div>
-          <div className="overflow-auto">
-            <table className="w-full min-w-[980px] table-fixed text-sm">
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-24 px-4 py-3">카테고리</th>
-                  <th className="px-4 py-3">제목</th>
-                  <th className="w-40 px-4 py-3">작성자</th>
-                  <th className="w-40 px-4 py-3">작성일</th>
-                  <th className="w-20 px-4 py-3">조회</th>
-                  <th className="w-56 px-4 py-3">관리</th>
+                  <th className="w-20 px-3 py-3">카테고리</th>
+                  <th className="px-3 py-3">제목</th>
+                  <th className="w-32 px-3 py-3">작성자</th>
+                  <th className="w-[8.5rem] px-3 py-3">작성일</th>
+                  <th className="w-16 px-3 py-3">조회</th>
+                  <th className="w-[24rem] px-3 py-3">관리</th>
                 </tr>
               </thead>
               <tbody>
@@ -149,32 +149,32 @@ export default function AdminBoardPage() {
 
                   return (
                     <tr key={post.id} className="border-t border-slate-100">
-                      <td className="px-4 py-4">
+                      <td className="px-3 py-4">
                         <div className="flex flex-wrap gap-2">
                           <Badge tone={categoryTone[post.category]}>{categoryLabels[post.category]}</Badge>
                           {post.isHidden ? <Badge tone="amber">숨김</Badge> : null}
                         </div>
                       </td>
-                      <td className="truncate px-4 py-4 font-black text-slate-950">
-                        <Link href={`/admin/board/${post.id}`} className="text-slate-950 no-underline hover:text-sky-700">
+                      <td className="px-3 py-4 font-black text-slate-950">
+                        <Link href={`/admin/board/${post.id}`} className="block truncate text-slate-950 no-underline hover:text-sky-700">
                           {post.title}
                         </Link>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{post.author}</td>
-                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.createdAt}</td>
-                      <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{post.views}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-nowrap gap-2 whitespace-nowrap">
+                      <td className="truncate px-3 py-4 font-semibold text-slate-600">{post.author}</td>
+                      <td className="truncate px-3 py-4 font-semibold text-slate-500">{post.createdAt}</td>
+                      <td className="px-3 py-4 font-semibold text-slate-500">{post.views}</td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-nowrap justify-end gap-1 whitespace-nowrap">
                           <Link
                             href={`/admin/board/${post.id}`}
-                            className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50"
+                            className="inline-flex min-h-8 items-center rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50"
                           >
                             상세
                           </Link>
                           {editable ? (
                             <Link
                               href={`/admin/board/${post.id}/edit`}
-                              className="inline-flex min-h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
+                              className="inline-flex min-h-8 items-center rounded-md border border-sky-200 px-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
                             >
                               수정
                             </Link>
@@ -182,7 +182,7 @@ export default function AdminBoardPage() {
                           {canUseCommentManagement ? (
                             <button
                               type="button"
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                             >
                               <MessageSquare className="h-3.5 w-3.5" />
                               댓글 {post.commentsCount}
@@ -192,7 +192,7 @@ export default function AdminBoardPage() {
                             <button
                               type="button"
                               onClick={() => handleToggleHidden(post.id)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-amber-200 px-3 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
+                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-amber-200 px-2 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
                             >
                               <EyeOff className="h-3.5 w-3.5" />
                               {post.isHidden ? "해제" : "숨김"}
@@ -202,7 +202,7 @@ export default function AdminBoardPage() {
                             <button
                               type="button"
                               onClick={() => handleDelete(post.id)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50"
+                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-red-200 px-2 text-xs font-bold text-red-700 transition hover:bg-red-50"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                               삭제
