@@ -8,12 +8,15 @@ import {
 } from "@/features/reports/api";
 import type { ReportPriority, ReportType, UploadPurpose } from "@/features/reports/types";
 import { ReportFilePreview } from "./ReportFilePreview";
+import { ReportLocationForm } from "./ReportLocationForm";
 
 export function ReportUploadForm() {
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [location, setLocation] = useState("");
+  const [latitude, setLatitude] = useState("37.2636");
+  const [longitude, setLongitude] = useState("127.0286");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -31,6 +34,15 @@ export function ReportUploadForm() {
       return;
     }
 
+    const latitudeValue = Number(formData.get("latitude"));
+    const longitudeValue = Number(formData.get("longitude"));
+
+    if (!Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue)) {
+      setErrorMessage("위도와 경도를 숫자로 입력해주세요.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const payload: UploadReportPayload = {
       files,
       title: String(formData.get("title") || "정차 이벤트 신고"),
@@ -39,11 +51,13 @@ export function ReportUploadForm() {
       description: String(formData.get("description") || ""),
       priority: (formData.get("priority") || "NORMAL") as ReportPriority,
       location: String(formData.get("location") || ""),
+      latitude: latitudeValue,
+      longitude: longitudeValue,
       isDemoData: formData.get("isDemoData") === "on",
     };
 
     try {
-      setStatusMessage("신고 파일을 업로드하고 AI 분석 대기열을 준비하는 중입니다.");
+      setStatusMessage("신고 파일을 업로드하고 사고 신고를 생성하는 중입니다.");
       const response = await uploadReport(payload);
       const reportId = response.report_id ?? response.id;
       const reportCode = response.report_code ? " (" + response.report_code + ")" : "";
@@ -68,8 +82,8 @@ export function ReportUploadForm() {
         <label className="grid gap-2 text-sm font-semibold">
           신고 유형
           <select name="reportType" className="h-11 rounded-lg border border-slate-200 px-3">
-            <option value="GENERAL">일반 신고</option>
-            <option value="ACCIDENT">이상상황 신고</option>
+            <option value="GENERAL">일반 리포트</option>
+            <option value="ACCIDENT">사고 리포트</option>
             <option value="LANE_STOP_REPORT">주행차로 정차 신고</option>
             <option value="SHOULDER_STOP_REPORT">갓길 정차 신고</option>
           </select>
@@ -102,16 +116,28 @@ export function ReportUploadForm() {
         설명
         <textarea name="description" className="min-h-28 rounded-lg border border-slate-200 p-3" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        위치 설명
-        <input
-          name="location"
+      <div className="grid gap-2 text-sm font-semibold">
+        <span>위치 입력</span>
+        <ReportLocationForm
           value={location}
-          onChange={(event) => setLocation(event.target.value)}
-          className="h-11 rounded-lg border border-slate-200 px-3"
-          placeholder="예: 경부고속도로 수원IC 123.4K"
+          onChange={setLocation}
+          onSelect={(selectedLocation) => {
+            setLocation(selectedLocation.label);
+            setLatitude(String(selectedLocation.latitude));
+            setLongitude(String(selectedLocation.longitude));
+          }}
         />
-      </label>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="grid gap-2 text-sm font-semibold">
+          위도
+          <input name="latitude" type="number" step="any" value={latitude} onChange={(event) => setLatitude(event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          경도
+          <input name="longitude" type="number" step="any" value={longitude} onChange={(event) => setLongitude(event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
+        </label>
+      </div>
       <label className="flex items-center gap-2 text-sm font-semibold">
         <input name="isDemoData" type="checkbox" className="h-4 w-4" />
         데모 데이터로 업로드
