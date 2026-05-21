@@ -3,6 +3,24 @@ import type { AuthUser, UserRole } from "@/features/auth/types";
 export type BoardCategory = "NOTICE" | "REFERENCE" | "DISCUSSION";
 export type BoardRole = Extract<UserRole, "SUPER_ADMIN" | "CONTROL_ADMIN" | "MAINTAINER">;
 
+export type BoardAttachment = {
+  id: string;
+  fileName: string;
+  fileSize: string;
+  fileType: string;
+  uploadedAt: string;
+  downloadUrl?: string;
+};
+
+export type BoardComment = {
+  id: string;
+  author: string;
+  content: string;
+  createdAt: string;
+  isHidden?: boolean;
+  replies: BoardComment[];
+};
+
 export type AdminBoardPost = {
   id: string;
   title: string;
@@ -142,4 +160,81 @@ export function canManageComments(user: AuthUser | null) {
 
 export function canWriteComments(user: AuthUser | null) {
   return getBoardRole(user?.role) === "SUPER_ADMIN" || getBoardRole(user?.role) === "CONTROL_ADMIN" || getBoardRole(user?.role) === "MAINTAINER";
+}
+
+
+export const boardAttachmentsByPost: Record<string, BoardAttachment[]> = {
+  "1": [
+    { id: "file-1-1", fileName: "2026-05-maintenance-window.pdf", fileSize: "184 KB", fileType: "PDF", uploadedAt: "2026. 05. 04. 09:10" },
+  ],
+  "2": [
+    { id: "file-2-1", fileName: "cctv-failure-response-v1.2.pdf", fileSize: "1.2 MB", fileType: "PDF", uploadedAt: "2026. 05. 02. 14:36" },
+    { id: "file-2-2", fileName: "roi-checklist.xlsx", fileSize: "72 KB", fileType: "XLSX", uploadedAt: "2026. 05. 02. 14:37" },
+  ],
+  "3": [
+    { id: "file-3-1", fileName: "night-detection-threshold-sample.mp4", fileSize: "8.4 MB", fileType: "MP4", uploadedAt: "2026. 04. 30. 18:21" },
+  ],
+  "4": [],
+};
+
+export const boardCommentsByPost: Record<string, BoardComment[]> = {
+  "1": [
+    {
+      id: "comment-1-1",
+      author: "김관리",
+      content: "점검 시간 동안 알림 수신 지연 여부도 같이 확인하겠습니다.",
+      createdAt: "2026. 05. 04. 10:02",
+      replies: [
+        {
+          id: "reply-1-1-1",
+          author: "STACCATO Super Admin",
+          content: "WebSocket 알림 로그도 함께 남겨주세요.",
+          createdAt: "2026. 05. 04. 10:15",
+          replies: [],
+        },
+      ],
+    },
+  ],
+  "2": [
+    {
+      id: "comment-2-1",
+      author: "오관제",
+      content: "ROI 오탐 확인 절차가 추가되어 좋습니다. 현장 점검표에도 반영하겠습니다.",
+      createdAt: "2026. 05. 02. 15:05",
+      replies: [],
+    },
+    {
+      id: "comment-2-2",
+      author: "김관리",
+      content: "첨부한 체크리스트 기준으로 다음 주까지 피드백 주세요.",
+      createdAt: "2026. 05. 03. 09:20",
+      replies: [
+        {
+          id: "reply-2-2-1",
+          author: "문조회",
+          content: "확인했습니다. 2번 카메라 ROI 항목을 먼저 점검하겠습니다.",
+          createdAt: "2026. 05. 03. 10:11",
+          replies: [],
+        },
+      ],
+    },
+  ],
+  "3": [
+    {
+      id: "comment-3-1",
+      author: "이순찰",
+      content: "야간 샘플 영상 기준으로 갓길 구역 민감도를 낮추는 안을 제안합니다.",
+      createdAt: "2026. 04. 30. 18:45",
+      replies: [],
+    },
+  ],
+  "4": [],
+};
+
+export function getBoardAttachments(postId: string) {
+  return boardAttachmentsByPost[postId] ?? [];
+}
+
+export function getBoardComments(postId: string) {
+  return boardCommentsByPost[postId] ?? [];
 }

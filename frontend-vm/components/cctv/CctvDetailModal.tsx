@@ -74,7 +74,7 @@ export function CctvDetailModal({
               onClick={() => setIsFormOpen((value) => !value)}
               className="h-11 rounded-lg bg-orange-500 px-4 font-bold text-white transition hover:bg-orange-600"
             >
-              {isFormOpen ? "등록 폼 닫기" : "수동 사고 등록"}
+              {isFormOpen ? "등록 폼 닫기" : "수동 이벤트 트리거"}
             </button>
           </aside>
         </div>
@@ -85,12 +85,12 @@ export function CctvDetailModal({
               <ManualIncidentForm cctv={cctv} onSubmit={onCreateIncident} />
             ) : (
               <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-semibold text-slate-500">
-                관리자 확인이 필요한 상황이면 수동 사고 등록 버튼을 눌러 사고를 생성하세요.
+                관리자 확인이 필요한 상황이면 수동 이벤트 트리거 버튼을 눌러 시연용 이벤트를 생성하세요.
               </div>
             )}
           </div>
           <div className="rounded-lg border border-slate-200 p-4">
-            <h3 className="font-black text-slate-950">최근 수동 등록 이력</h3>
+            <h3 className="font-black text-slate-950">최근 수동 이벤트 이력</h3>
             <div className="mt-4 grid gap-3">
               {incidents.length > 0 ? (
                 incidents.map((incident) => (

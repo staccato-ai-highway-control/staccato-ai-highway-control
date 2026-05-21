@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card } from "@/components/common/Card";
@@ -6,7 +5,6 @@ import { DetectionEvidence } from "@/components/incident/DetectionEvidence";
 import { IncidentDetailCard } from "@/components/incident/IncidentDetailCard";
 import { IncidentMemoBox } from "@/components/incident/IncidentMemoBox";
 import { IncidentStatusChanger } from "@/components/incident/IncidentStatusChanger";
-import { GenerateReportButton } from "@/components/llm/GenerateReportButton";
 import { getIncident } from "@/features/incidents/api";
 
 export default async function IncidentDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +13,7 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
 
   return (
     <RequireAuth>
-      <AppLayout title="사건 상세">
+      <AppLayout title="이벤트 상세">
       <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
         <div className="grid gap-5">
           <DetectionEvidence incident={incident} />
@@ -37,11 +35,10 @@ export default async function IncidentDetailPage({ params }: { params: Promise<{
             <IncidentMemoBox memo={incident.memo} />
           </Card>
           <Card className="p-5">
-            <h2 className="mb-3 font-black">LLM 보고서 생성 모듈</h2>
-            <GenerateReportButton incidentId={incident.id} />
-            <Link href="/llm-reports/llm-001" className="mt-3 inline-flex text-sm font-bold text-staccato">
-              생성된 보고서 보기
-            </Link>
+            <h2 className="mb-3 font-black">AI 탐지 결과</h2>
+            <p className="text-sm font-semibold leading-6 text-slate-500">
+              Snapshot, 탐지 신뢰도, ITS 정보와 관리자 메모를 기준으로 이벤트 상태를 변경합니다.
+            </p>
           </Card>
         </div>
       </div>

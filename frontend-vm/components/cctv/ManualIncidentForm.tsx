@@ -84,7 +84,7 @@ export function ManualIncidentForm({
     <form onSubmit={handleSubmit} className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
-          사고 유형
+          이벤트 유형
           <select value={incidentType} onChange={(event) => setIncidentType(event.target.value as ManualIncidentType)} className="h-11 rounded-lg border border-slate-200 bg-white px-3">
             {incidentTypeOptions.map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
@@ -100,15 +100,15 @@ export function ManualIncidentForm({
           </select>
         </label>
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
-          사고 제목
-          <input value={title} onChange={(event) => setTitle(event.target.value)} required className="h-11 rounded-lg border border-slate-200 bg-white px-3" placeholder="예: 주행차로 정차 의심" />
+          이벤트 제목
+          <input value={title} onChange={(event) => setTitle(event.target.value)} required className="h-11 rounded-lg border border-slate-200 bg-white px-3" placeholder="예: 주행차로 정차 탐지" />
         </label>
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
           감지 시각
           <input type="datetime-local" value={detectedAt} onChange={(event) => setDetectedAt(event.target.value)} required className="h-11 rounded-lg border border-slate-200 bg-white px-3" />
         </label>
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
-          처리 상태
+          이벤트 상태
           <select value={status} onChange={(event) => setStatus(event.target.value as ManualIncidentStatus)} className="h-11 rounded-lg border border-slate-200 bg-white px-3">
             {statusOptions.map((value) => (
               <option key={value} value={value}>{value}</option>
@@ -116,13 +116,13 @@ export function ManualIncidentForm({
           </select>
         </label>
         <label className="grid gap-2 text-sm font-semibold text-slate-700">
-          담당자
-          <input value={assignee} onChange={(event) => setAssignee(event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3" placeholder="예: 김관제" />
+          관리자
+          <input value={assignee} onChange={(event) => setAssignee(event.target.value)} className="h-11 rounded-lg border border-slate-200 bg-white px-3" placeholder="예: 최고관리자" />
         </label>
       </div>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
-        사고 설명
-        <textarea value={description} onChange={(event) => setDescription(event.target.value)} required className="min-h-24 rounded-lg border border-slate-200 bg-white p-3" placeholder="사고 상황을 입력해주세요." />
+        이벤트 설명
+        <textarea value={description} onChange={(event) => setDescription(event.target.value)} required className="min-h-24 rounded-lg border border-slate-200 bg-white p-3" placeholder="시연용 이벤트 상황을 입력해주세요." />
       </label>
       <label className="grid gap-2 text-sm font-semibold text-slate-700">
         관리자 메모
@@ -132,7 +132,7 @@ export function ManualIncidentForm({
         자동 입력: {cctv.cctvCode} · {cctv.roadName} · {cctv.locationName} · {cctv.direction} · sourceType MANUAL
       </div>
       <button type="submit" className="h-11 rounded-lg bg-slate-900 px-4 font-bold text-white transition hover:bg-slate-800">
-        수동 사고 등록
+        수동 이벤트 트리거
       </button>
     </form>
   );

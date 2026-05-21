@@ -7,9 +7,7 @@ import {
   CheckCircle2,
   Clock3,
   Cctv,
-  FileText,
   MapPin,
-  Server,
   ShieldAlert,
   ShieldCheck,
   UserCheck,
@@ -19,6 +17,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
+import { CctvFrame } from "@/components/cctv/CctvCard";
 import { IncidentStatusBadge } from "@/components/incident/IncidentStatusBadge";
 import { RiskLevelBadge } from "@/components/incident/RiskLevelBadge";
 import type { AuthUser } from "@/features/auth/types";
@@ -260,17 +259,15 @@ const superAdminMock = {
   pendingSignupRequests: 5,
   securityLogs: [
     ["관리자 로그인", "김관리", "2026-05-15 09:12"],
-    ["권한 변경", "이순찰 -> 관제 관리자", "2026-05-15 08:44"],
+    ["권한 변경", "이순찰 -> 최고 관리자", "2026-05-15 08:44"],
     ["비밀번호 변경", "박출동", "2026-05-14 18:20"],
   ],
   signupRequests: [
-    ["정현장", "출동 관리자", "요청"],
-    ["오관제", "관제 관리자", "요청"],
-    ["문조회", "일반 조회 계정", "검토중"],
+    ["정현장", "최고 관리자", "요청"],
+    ["오관제", "최고 관리자", "요청"],
+    ["문조회", "최고 관리자", "검토중"],
   ],
 };
-
-const llmReportWaitingCount = 2;
 
 function isUnresolvedIncident(incident: Incident) {
   return !["RESOLVED", "CLOSED", "FALSE_POSITIVE"].includes(incident.status);
@@ -334,7 +331,7 @@ function IncidentRows({ incidents, hrefPrefix = "/incidents" }: { incidents: Inc
   if (incidents.length === 0) {
     return (
       <p className="rounded-lg border border-slate-100 bg-slate-50 p-5 text-center text-sm font-semibold text-slate-500">
-        표시할 사고가 없습니다.
+        표시할 이벤트가 없습니다.
       </p>
     );
   }
@@ -363,18 +360,20 @@ function IncidentRows({ incidents, hrefPrefix = "/incidents" }: { incidents: Inc
 
 function SuperAdminDashboard() {
   const unresolvedCount = mockIncidents.filter(isUnresolvedIncident).length;
+  const recentCctvEvent = mockCctvs.find((cctv) => cctv.isAiDetected) ?? mockCctvs[0];
+  const recentCctvEventIndex = mockCctvs.findIndex((cctv) => cctv.id === recentCctvEvent.id);
   const cards: StatCard[] = [
     { label: "전체 사용자 수", value: String(superAdminMock.totalUsers), helper: "활성 계정", tone: "text-sky-600", bg: "bg-sky-50", icon: Users },
     { label: "가입 승인 대기 수", value: String(superAdminMock.pendingSignupRequests), helper: "검토 필요", tone: "text-amber-600", bg: "bg-amber-50", icon: UserCheck },
-    { label: "전체 사고 수", value: String(mockIncidents.length), helper: "누적", tone: "text-red-600", bg: "bg-red-50", icon: AlertTriangle },
-    { label: "미처리 사고 수", value: String(unresolvedCount), helper: "진행중", tone: "text-orange-600", bg: "bg-orange-50", icon: ShieldAlert },
+    { label: "전체 이벤트 수", value: String(mockIncidents.length), helper: "누적", tone: "text-red-600", bg: "bg-red-50", icon: AlertTriangle },
+    { label: "미처리 이벤트 수", value: String(unresolvedCount), helper: "진행중", tone: "text-orange-600", bg: "bg-orange-50", icon: ShieldAlert },
   ];
 
   return (
     <>
       <DashboardHeader
-        title="최고관리자 대시보드"
-        description="사용자, 승인, 보안, 사고와 시스템 상태를 전체 관점에서 확인합니다."
+        title="최고 관리자 통합 관제"
+        description="사용자, 승인, 보안, 실시간 이벤트와 시스템 상태를 통합 관점에서 확인합니다."
         actions={[
           { href: "/admin/signup-requests", label: "가입 신청 관리" },
           { href: "/admin/users", label: "사용자 관리" },
@@ -385,14 +384,26 @@ function SuperAdminDashboard() {
       <StatGrid cards={cards} />
 
       <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <DashboardPanel title="시스템 상태">
-          <div className="grid gap-3 md:grid-cols-3">
-            {["Flask API 정상", "DB 연결 정상", "AI 서버 연결"].map((item) => (
-              <div key={item} className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
-                <Server className="h-5 w-5 text-emerald-600" aria-hidden="true" />
-                <b className="mt-3 block text-sm text-emerald-800">{item}</b>
-              </div>
-            ))}
+        <DashboardPanel
+          title="최근 CCTV 이벤트 발생"
+          titleAction={<Badge tone="red">LIVE</Badge>}
+        >
+          <div className="overflow-hidden rounded-lg border border-orange-200 bg-slate-950">
+            <CctvFrame cctv={recentCctvEvent} index={recentCctvEventIndex >= 0 ? recentCctvEventIndex : 0} large />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs font-black text-slate-400">CCTV</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{recentCctvEvent.cctvCode}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs font-black text-slate-400">AI 탐지 결과</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{recentCctvEvent.detectionType ?? "이벤트 감지"}</p>
+            </div>
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+              <p className="text-xs font-black text-slate-400">최근 업데이트</p>
+              <p className="mt-1 text-sm font-bold text-slate-900">{recentCctvEvent.lastUpdatedAt}</p>
+            </div>
           </div>
         </DashboardPanel>
 
@@ -423,7 +434,7 @@ function SuperAdminDashboard() {
           </div>
         </DashboardPanel>
 
-        <DashboardPanel title="최근 사고 요약">
+        <DashboardPanel title="최근 이벤트 요약">
           <IncidentRows incidents={mockIncidents.slice(0, 4)} />
         </DashboardPanel>
       </section>
@@ -442,13 +453,12 @@ function ControlAdminDashboard() {
   return (
     <>
       <DashboardHeader
-        title="관제관리자 대시보드"
-        description="신규 사고, 신고 분석, CCTV 상태와 보고서 생성 흐름을 확인합니다."
+        title="통합 관제 대시보드"
+        description="신규 이벤트, 신고 분석, CCTV 상태와 이벤트 전환 흐름을 확인합니다."
         actions={[
-          { href: "/incidents", label: "사고 확인" },
+          { href: "/incidents", label: "이벤트 확인" },
           { href: "/reports", label: "신고 관리" },
-          { href: "/llm-reports", label: "LLM 보고서 생성" },
-          { href: "/cctvs", label: "CCTV 관제 이동" },
+                    { href: "/cctvs", label: "CCTV 관제 이동" },
         ]}
       />
       <StatGrid cards={cards} />
@@ -458,11 +468,11 @@ function ControlAdminDashboard() {
           <IncidentRows incidents={mockIncidents.filter(isUnresolvedIncident).slice(0, 4)} />
         </DashboardPanel>
 
-        <DashboardPanel title="LLM 보고서 생성 대기">
+        <DashboardPanel title="이벤트 전환 대기">
           <div className="rounded-lg border border-sky-100 bg-sky-50 p-5">
-            <FileText className="h-6 w-6 text-sky-700" aria-hidden="true" />
-            <strong className="mt-4 block text-3xl font-black text-sky-900">{llmReportWaitingCount}</strong>
-            <p className="mt-1 text-sm font-semibold text-sky-700">생성 대기 보고서</p>
+            <CheckCircle2 className="h-6 w-6 text-sky-700" aria-hidden="true" />
+            <strong className="mt-4 block text-3xl font-black text-sky-900">{mockReports.filter((report) => report.analysisStatus === "COMPLETED").length}</strong>
+            <p className="mt-1 text-sm font-semibold text-sky-700">검토 필요한 AI 탐지 결과</p>
           </div>
         </DashboardPanel>
       </section>
@@ -508,8 +518,8 @@ function MaintainerDashboard({ user }: { user: AuthUser | null }) {
   const processingIncidents = assignedIncidents.filter((incident) => incident.status === "REVIEWING");
   const completedIncidents = assignedIncidents.filter((incident) => ["RESOLVED", "CLOSED"].includes(incident.status));
   const cards: StatCard[] = [
-    { label: "내 배정 사고 수", value: String(assignedIncidents.length), helper: "내 담당", tone: "text-amber-600", bg: "bg-amber-50", icon: AlertTriangle },
-    { label: "출동 대기 수", value: String(waitingIncidents.length), helper: "배정됨", tone: "text-sky-600", bg: "bg-sky-50", icon: Clock3 },
+    { label: "이벤트 배정 수", value: String(assignedIncidents.length), helper: "내 담당", tone: "text-amber-600", bg: "bg-amber-50", icon: AlertTriangle },
+    { label: "검토 대기 수", value: String(waitingIncidents.length), helper: "배정됨", tone: "text-sky-600", bg: "bg-sky-50", icon: Clock3 },
     { label: "처리 중 사고 수", value: String(processingIncidents.length), helper: "현장 확인", tone: "text-orange-600", bg: "bg-orange-50", icon: ShieldCheck },
     { label: "처리 완료 수", value: String(completedIncidents.length), helper: "완료", tone: "text-emerald-600", bg: "bg-emerald-50", icon: CheckCircle2 },
   ];
@@ -517,20 +527,20 @@ function MaintainerDashboard({ user }: { user: AuthUser | null }) {
   return (
     <>
       <DashboardHeader
-        title="출동관리자 대시보드"
-        description="내게 배정된 사고와 출동 위치, 처리 상태를 확인합니다."
+        title="통합 관제 대시보드"
+        description="실시간 이벤트와 처리 상태를 통합 화면에서 확인합니다."
         actions={[
-          { href: "/dispatch/map", label: "위치 확인" },
-          { href: "/dispatch", label: "출동 관리" },
-          { href: assignedIncidents[0] ? `/dispatch/incidents/${assignedIncidents[0].id}` : "/dispatch", label: "처리 상태 변경" },
-          { href: assignedIncidents[0] ? `/dispatch/incidents/${assignedIncidents[0].id}` : "/dispatch", label: "사고 상세 보기" },
+          { href: "/incidents", label: "상세 확인" },
+          { href: "/incidents", label: "이벤트 관리" },
+          { href: assignedIncidents[0] ? `/incidents/${assignedIncidents[0].id}` : "/incidents", label: "처리 상태 변경" },
+          { href: assignedIncidents[0] ? `/incidents/${assignedIncidents[0].id}` : "/incidents", label: "이벤트 상세 보기" },
         ]}
       />
       <StatGrid cards={cards} />
 
       <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <DashboardPanel title="내 배정 사고 목록">
-          <IncidentRows incidents={assignedIncidents} hrefPrefix="/dispatch/incidents" />
+          <IncidentRows incidents={assignedIncidents} hrefPrefix="/incidents" />
         </DashboardPanel>
 
         <DashboardPanel title="신규 배정 알림">
@@ -543,10 +553,10 @@ function MaintainerDashboard({ user }: { user: AuthUser | null }) {
       </section>
 
       <section className="mt-6">
-        <DashboardPanel title="사고 위치 요약">
+        <DashboardPanel title="이벤트 위치 요약">
           {assignedIncidents.length === 0 ? (
             <p className="rounded-lg border border-slate-100 bg-slate-50 p-5 text-center text-sm font-semibold text-slate-500">
-              현재 사용자에게 배정된 사고 위치가 없습니다.
+              현재 배정된 이벤트가 없습니다.
             </p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
@@ -629,14 +639,8 @@ export default function DashboardPage() {
       <AppLayout title="대시보드">
         {isLoading || errorMessage || !isActive || !role ? (
           <DashboardAccessState isLoading={isLoading} errorMessage={errorMessage} />
-        ) : role === "SUPER_ADMIN" ? (
-          <SuperAdminDashboard />
-        ) : role === "CONTROL_ADMIN" ? (
-          <ControlAdminDashboard />
-        ) : role === "MAINTAINER" || role === "DISPATCH_ADMIN" ? (
-          <MaintainerDashboard user={authUser} />
         ) : (
-          <DashboardAccessState isLoading={false} />
+          <SuperAdminDashboard />
         )}
       </AppLayout>
     </RequireAuth>

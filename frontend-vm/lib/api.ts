@@ -38,19 +38,4 @@ export function requestReportAnalysis(id: string) {
   return apiClient<{ ok: boolean }>(`/api/reports/${id}/analyze`, { method: "POST" });
 }
 
-export function generateLlmReport(id: string) {
-  return apiClient<{ reportId?: string; id?: string }>("/incidents/" + id + "/llm-reports", {
-    method: "POST",
-    body: { report_type: "INCIDENT_REPORT", prompt_version: "v1", llm_provider: "LOCAL_LLM" },
-  });
-}
-
-export function fetchLlmReport(id: string) {
-  return apiClient("/llm-reports/" + id);
-}
-
-export function verifyLlmReport(id: string) {
-  return apiClient<{ ok?: boolean; success?: boolean }>("/llm-reports/" + id + "/confirm", { method: "POST" });
-}
-
 export type { LoginRequest, LoginResponse };

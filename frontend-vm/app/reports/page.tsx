@@ -26,13 +26,13 @@ const statusLabels: Record<ReportProcessingStatus, string> = {
   SUBMITTED: "접수",
   REVIEWING: "검토중",
   ANALYZING: "AI 분석중",
-  CONVERTED_TO_INCIDENT: "사고 전환",
+  CONVERTED_TO_INCIDENT: "이벤트 전환",
   REJECTED: "반려",
 };
 
 const typeLabels: Record<ReportType, string> = {
   GENERAL: "일반",
-  ACCIDENT: "사고",
+  ACCIDENT: "이벤트",
   LANE_STOP_REPORT: "주행차로 정차",
   SHOULDER_STOP_REPORT: "갓길 정차",
   UNKNOWN_REPORT: "유형 미확인",
@@ -67,14 +67,14 @@ const statusOptions: Array<{ label: string; value: StatusFilter }> = [
   { label: "접수", value: "SUBMITTED" },
   { label: "검토중", value: "REVIEWING" },
   { label: "AI 분석중", value: "ANALYZING" },
-  { label: "사고 전환", value: "CONVERTED_TO_INCIDENT" },
+  { label: "이벤트 전환", value: "CONVERTED_TO_INCIDENT" },
   { label: "반려", value: "REJECTED" },
 ];
 
 const typeOptions: Array<{ label: string; value: TypeFilter }> = [
   { label: "전체 유형", value: "ALL" },
   { label: "일반", value: "GENERAL" },
-  { label: "사고", value: "ACCIDENT" },
+  { label: "이벤트", value: "ACCIDENT" },
   { label: "주행차로 정차", value: "LANE_STOP_REPORT" },
   { label: "갓길 정차", value: "SHOULDER_STOP_REPORT" },
   { label: "유형 미확인", value: "UNKNOWN_REPORT" },
@@ -139,25 +139,13 @@ export default function ReportsPage() {
     setAuthUser(getStoredAuthUser());
   }, []);
 
-  const role = getRole(authUser);
-  const isMaintainer = isMaintainerRole(role);
-  const canRegisterReport = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
-  const canRequestAnalysis = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
-  const canChangeStatus = role === "SUPER_ADMIN" || role === "CONTROL_ADMIN";
-  const canDeleteReport = role === "SUPER_ADMIN";
-  const canControlReview = role === "CONTROL_ADMIN";
+  const canRegisterReport = true;
+  const canRequestAnalysis = true;
+  const canChangeStatus = true;
+  const canDeleteReport = true;
+  const canControlReview = true;
 
-  const visibleReports = useMemo(() => {
-    if (!isMaintainer) return reports;
-
-    const assignedIncidents = mockIncidents.filter((incident) =>
-      isAssignedToUser(incident, authUser)
-    );
-
-    return reports.filter((report) =>
-      assignedIncidents.some((incident) => isReportConnectedToIncident(report, incident))
-    );
-  }, [authUser, isMaintainer, reports]);
+  const visibleReports = reports;
 
   const filteredReports = useMemo(() => {
     return visibleReports.filter((report) => {
@@ -174,11 +162,7 @@ export default function ReportsPage() {
     });
   }, [priorityFilter, searchKeyword, statusFilter, typeFilter, visibleReports]);
 
-  const pageDescription = isMaintainer
-    ? "내 배정 사고와 연결된 신고만 조회합니다. 등록, 분석 요청, 상태 변경은 제한됩니다."
-    : role === "CONTROL_ADMIN"
-      ? "신고 등록, AI 분석 요청, 사고 전환 결과와 검토 상태를 관리합니다."
-      : "전체 신고 목록과 AI 분석, 사고 전환, 삭제/관리 액션을 처리합니다.";
+  const pageDescription = "전체 신고 목록과 AI 분석 요청, 이벤트 전환 결과, 검토 상태를 통합 관리합니다.";
 
   function handleMockAction(action: string, reportCode: string) {
     window.alert(`${reportCode} ${action} 기능은 API 확정 후 연결 예정입니다.`);
@@ -193,10 +177,10 @@ export default function ReportsPage() {
 
   return (
     <RequireAuth>
-      <AppLayout title="이상상황 등록/처리">
+      <AppLayout title="신고 목록">
         <section className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black text-slate-950">이상상황 등록/처리</h2>
+            <h2 className="text-2xl font-black text-slate-950">신고 목록</h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
               {pageDescription}
             </p>
@@ -207,7 +191,7 @@ export default function ReportsPage() {
               className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white no-underline transition hover:bg-staccato-dark"
             >
               <Upload className="h-4 w-4" aria-hidden="true" />
-              이상상황 등록
+              신고 등록
             </Link>
           ) : null}
         </section>
@@ -240,9 +224,7 @@ export default function ReportsPage() {
             </select>
           </div>
           <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-500">
-            {isMaintainer
-              ? "출동관리자는 배정 사고와 연결된 신고를 조회만 할 수 있습니다."
-              : "상단의 이상상황 등록 버튼에서 영상/이미지를 업로드하고 AI 분석 상태를 확인합니다."}
+            상단의 신고 등록 버튼에서 영상/이미지를 업로드하고 AI 분석 상태를 확인합니다.
           </div>
         </section>
 
@@ -318,7 +300,7 @@ export default function ReportsPage() {
 
           {filteredReports.length === 0 ? (
             <p className="border-t border-slate-100 p-6 text-center text-sm font-semibold text-slate-500">
-              조건에 맞는 이상상황 등록 내역이 없습니다.
+              조건에 맞는 신고 등록 내역이 없습니다.
             </p>
           ) : null}
         </section>
