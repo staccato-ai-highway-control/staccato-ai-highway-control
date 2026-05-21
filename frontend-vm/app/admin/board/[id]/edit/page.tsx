@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Paperclip, X } from "lucide-react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/common/Button";
@@ -27,6 +27,7 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
   const [category, setCategory] = useState<BoardCategory>(post?.category ?? "NOTICE");
   const [title, setTitle] = useState(post?.title ?? "");
   const [content, setContent] = useState(post?.content ?? "");
+  const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
     setAuthUser(getStoredAuthUser());
@@ -39,6 +40,14 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
       ? writableCategories
       : [post.category]
     : writableCategories;
+
+  function handleFileChange(fileList: FileList | null) {
+    setFiles(Array.from(fileList ?? []));
+  }
+
+  function handleRemoveFile(fileName: string) {
+    setFiles((current) => current.filter((file) => file.name !== fileName));
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -124,6 +133,34 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
                 rows={12}
                 className="resize-none rounded-lg border border-slate-200 p-3 text-sm font-semibold leading-7 text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-50 disabled:text-slate-400"
               />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs font-black text-slate-500">첨부파일</span>
+              <span className="grid gap-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4">
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-600">
+                  <Paperclip className="h-4 w-4" aria-hidden="true" />
+                  파일을 선택해 게시글에 첨부합니다.
+                </span>
+                <input
+                  type="file"
+                  multiple
+                  onChange={(event) => handleFileChange(event.target.files)}
+                  className="rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold text-slate-700"
+                />
+                {files.length > 0 ? (
+                  <div className="grid gap-2">
+                    {files.map((file) => (
+                      <div key={`${file.name}-${file.size}`} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-600">
+                        <span className="truncate">{file.name} · {Math.ceil(file.size / 1024)} KB</span>
+                        <button type="button" onClick={() => handleRemoveFile(file.name)} className="grid h-7 w-7 place-items-center rounded border border-red-100 text-red-600 hover:bg-red-50" aria-label="첨부파일 제거">
+                          <X className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </span>
             </label>
             <div className="flex flex-wrap gap-2">
               <Button type="submit" disabled={!editable}>저장</Button>

@@ -4,13 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { ControlAdminMyPage } from "@/components/mypage/ControlAdminMyPage";
-import { DispatchAdminMyPage } from "@/components/mypage/DispatchAdminMyPage";
 import { PendingApprovalMyPage } from "@/components/mypage/PendingApprovalMyPage";
 import { ProfileSummary } from "@/components/mypage/ProfileSummary";
 import { SecurityCard } from "@/components/mypage/SecurityCard";
 import { SuperAdminMyPage } from "@/components/mypage/SuperAdminMyPage";
-import { ViewerMyPage } from "@/components/mypage/ViewerMyPage";
 import type { AuthUser } from "@/features/auth/types";
 import { clearStoredAuth, getStoredAuthUser } from "@/lib/authStorage";
 
@@ -19,17 +16,13 @@ function RoleContent({ user }: { user: AuthUser | null }) {
     return <PendingApprovalMyPage user={user} />;
   }
 
-  if (user?.role === "SUPER_ADMIN") return <SuperAdminMyPage />;
-  if (user?.role === "CONTROL_ADMIN") return <ControlAdminMyPage />;
-  if (user?.role === "MAINTAINER" || user?.role === "DISPATCH_ADMIN") return <DispatchAdminMyPage />;
-  if (user?.role === "VIEWER") return <ViewerMyPage />;
+  if (user?.role) return <SuperAdminMyPage />;
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <h3 className="text-lg font-black text-slate-950">권한 확인 필요</h3>
+      <h3 className="text-lg font-black text-slate-950">계정 확인 필요</h3>
       <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-        /auth/me 응답의 role 값을 확인할 수 없습니다. 관리자에게 계정 권한을
-        문의해주세요.
+        /auth/me 응답의 계정 정보를 확인할 수 없습니다. 관리자에게 문의해주세요.
       </p>
     </section>
   );

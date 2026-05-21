@@ -28,6 +28,5 @@ export type SystemSettingsData = {
   apiConnections: SettingsStatusItem[];
   socketStatus: SettingsStatusItem;
   aiServerStatus: SettingsStatusItem;
-  llmSettings: SettingsStatusItem[];
   notificationSettings: NotificationSetting[];
 };
