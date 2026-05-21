@@ -1,3 +1,4 @@
+from db_cleanup import cleanup_database
 import os
 import io
 import pytest
@@ -27,11 +28,11 @@ def app(tmp_path):
     with app.app_context():
         assert "staccato_test" in str(db.engine.url), f"Unsafe test DB: {db.engine.url}"
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
         db.create_all()
         yield app
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
 
 
 @pytest.fixture

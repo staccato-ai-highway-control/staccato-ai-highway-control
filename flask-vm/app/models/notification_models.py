@@ -7,7 +7,7 @@ class Notification(db.Model):
     __tablename__ = "notifications"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=True)
+    user_id = db.Column(db.BigInteger, nullable=True)
     incident_id = db.Column(db.BigInteger, db.ForeignKey("incidents.id"), nullable=True)
     notification_type = db.Column(db.String(50), nullable=False)
     title = db.Column(db.String(200), nullable=False)

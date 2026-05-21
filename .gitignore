@@ -96,3 +96,7 @@ ai-vm/**/.env
 
 # LLM model checkpoint
 ai-vm/llm-server/storage/models/llm/*.pt
+
+# Python cache
+__pycache__/
+*.py[cod]

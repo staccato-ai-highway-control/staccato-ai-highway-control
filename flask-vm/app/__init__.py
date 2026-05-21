@@ -51,6 +51,7 @@ from app.modules.incident.routes import incident_bp
 # - 파일 위치: app/modules/report_upload/
 # ============================================================
 from app.modules.report_upload.routes import report_upload_bp
+from app.modules.location_search.routes import location_search_bp
 
 
 
@@ -86,6 +87,17 @@ from app.modules.chatbot.routes import chatbot_bp
 # ============================================================
 from app.modules.chat.routes import chat_bp
 from app.modules.frontend_config.routes import frontend_config_bp
+
+
+
+
+
+# ============================================================
+# Board Module
+# - 담당: 관리자 게시판
+# - 파일 위치: app/modules/board/
+# ============================================================
+from app.modules.board.routes import board_bp
 
 
 
@@ -130,6 +142,7 @@ def register_blueprints(app):
     # ========================================================
     app.register_blueprint(incident_bp)
     app.register_blueprint(report_upload_bp)
+    app.register_blueprint(location_search_bp)
 
 
 
@@ -162,7 +175,7 @@ def register_blueprints(app):
     # ========================================================
     # board
     # ========================================================
-
+    app.register_blueprint(board_bp)
 
 
 
@@ -181,6 +194,10 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     init_extensions(app)
+
     register_blueprints(app)
+
+    # Register Socket.IO event handlers.
+    from app.modules import socketio as socketio_module  # noqa: F401
 
     return app
