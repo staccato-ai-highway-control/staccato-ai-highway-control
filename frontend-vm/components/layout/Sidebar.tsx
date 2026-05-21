@@ -72,7 +72,7 @@ export function Sidebar({
           </button>
         </div>
 
-        <nav className="h-[calc(100vh-4rem)] overflow-y-auto px-3 py-4">
+        <nav className="sidebar-scrollbar h-[calc(100vh-4rem)] overflow-y-auto px-3 py-4">
           {visibleSections.map((section) => (
             <div key={`${role}-${section.title}`} className="mb-5 last:mb-0">
               <p className="mb-2 px-2 text-xs font-black tracking-[0.18em] text-slate-500">

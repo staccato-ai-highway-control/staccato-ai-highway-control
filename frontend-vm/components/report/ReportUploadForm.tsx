@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import {
+  requestReportAnalysis,
   uploadReport,
   type UploadReportPayload,
 } from "@/features/reports/api";
@@ -13,6 +14,9 @@ export function ReportUploadForm() {
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [location, setLocation] = useState("");
+  const [latitude, setLatitude] = useState("37.2636");
+  const [longitude, setLongitude] = useState("127.0286");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,10 +34,10 @@ export function ReportUploadForm() {
       return;
     }
 
-    const latitude = Number(formData.get("latitude"));
-    const longitude = Number(formData.get("longitude"));
+    const latitudeValue = Number(formData.get("latitude"));
+    const longitudeValue = Number(formData.get("longitude"));
 
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    if (!Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue)) {
       setErrorMessage("위도와 경도를 숫자로 입력해주세요.");
       setIsSubmitting(false);
       return;
@@ -46,16 +50,25 @@ export function ReportUploadForm() {
       uploadPurpose: (formData.get("purpose") || "ANALYSIS") as UploadPurpose,
       description: String(formData.get("description") || ""),
       priority: (formData.get("priority") || "NORMAL") as ReportPriority,
-      latitude,
-      longitude,
+      location: String(formData.get("location") || ""),
+      latitude: latitudeValue,
+      longitude: longitudeValue,
       isDemoData: formData.get("isDemoData") === "on",
     };
 
     try {
       setStatusMessage("신고 파일을 업로드하고 사고 신고를 생성하는 중입니다.");
       const response = await uploadReport(payload);
+      const reportId = response.report_id ?? response.id;
       const reportCode = response.report_code ? " (" + response.report_code + ")" : "";
-      setStatusMessage(response.message ?? "신고 영상/이미지 업로드가 완료되었습니다." + reportCode);
+
+      if (reportId === undefined || reportId === null || String(reportId) === "") {
+        throw new Error("신고가 저장됐지만 분석 요청에 필요한 report_id를 받지 못했습니다.");
+      }
+
+      setStatusMessage("신고가 저장되었습니다. AI 분석 대기열을 생성하는 중입니다." + reportCode);
+      await requestReportAnalysis(String(reportId));
+      setStatusMessage("신고 영상/이미지 업로드와 AI 분석 요청이 완료되었습니다." + reportCode);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "신고 처리 중 오류가 발생했습니다.");
     } finally {
@@ -103,18 +116,26 @@ export function ReportUploadForm() {
         설명
         <textarea name="description" className="min-h-28 rounded-lg border border-slate-200 p-3" />
       </label>
-      <label className="grid gap-2 text-sm font-semibold">
-        위치 입력
-        <ReportLocationForm />
-      </label>
+      <div className="grid gap-2 text-sm font-semibold">
+        <span>위치 입력</span>
+        <ReportLocationForm
+          value={location}
+          onChange={setLocation}
+          onSelect={(selectedLocation) => {
+            setLocation(selectedLocation.label);
+            setLatitude(String(selectedLocation.latitude));
+            setLongitude(String(selectedLocation.longitude));
+          }}
+        />
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="grid gap-2 text-sm font-semibold">
           위도
-          <input name="latitude" type="number" step="any" defaultValue="37.2636" className="h-11 rounded-lg border border-slate-200 px-3" />
+          <input name="latitude" type="number" step="any" value={latitude} onChange={(event) => setLatitude(event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           경도
-          <input name="longitude" type="number" step="any" defaultValue="127.0286" className="h-11 rounded-lg border border-slate-200 px-3" />
+          <input name="longitude" type="number" step="any" value={longitude} onChange={(event) => setLongitude(event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
         </label>
       </div>
       <label className="flex items-center gap-2 text-sm font-semibold">
