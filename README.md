@@ -1,3 +1,32 @@
+# STACCATO AI Highway Control
+
+> Final MVP scope reference: [`docs/mvp/final-mvp-scope.md`](docs/mvp/final-mvp-scope.md)
+
+## Final MVP Summary
+
+STACCATO is an AI-based highway CCTV abnormal situation detection and real-time control system.
+
+Final MVP focus:
+
+- YOLOv11 based vehicle detection
+- ByteTrack based tracking
+- ROI / Rule Engine based abnormal event detection
+- Flask API Gateway and MySQL metadata storage
+- Socket.IO based realtime notification
+- Frontend monitoring, report upload, signup/auth, and mypage
+- Snapshot / MP4 Replay metadata integration
+
+Excluded from final MVP:
+
+- LLM report generation
+- LLM chatbot
+- Map API
+- GPS based location display
+- Full Docker Compose deployment
+- Reinforcement learning / automatic retraining
+
+---
+
 
 # staccato-ai-highway-control
 AI-based traffic incident control system for detecting stopped vehicles on driving lanes and shoulders. \ 스타카토 팀의 AI 기반 정차 차량 탐지 및 관제 대응 MVP 시스템입니다
