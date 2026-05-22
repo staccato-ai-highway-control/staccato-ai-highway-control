@@ -5,7 +5,7 @@ import pytest
 import jwt
 from app import create_app
 from app.extensions import db
-from app.models import User, IncidentReport
+from app.models import User, IncidentReport, ReportLocation
 from datetime import datetime, UTC, timedelta
 from uuid import uuid4
 
@@ -115,3 +115,81 @@ def test_report_database_integrity(client, auth_header):
 
     report = IncidentReport.query.filter_by(title='DB Check').first()
     assert report is not None
+
+
+## 시나리오 3: 위치값 없이 신고 등록 가능 + 위치 row 미생성 + YOLOV11 분석 job 생성
+def test_report_upload_without_location_does_not_create_report_location(client, auth_header):
+    payload = {
+        'subject': 'No Location Report',
+        'report_type': 'STALLED_VEHICLE',
+        'description': '위치값 없는 신고 등록 테스트',
+        'files': (io.BytesIO(b"test content"), 'no_location_report.png')
+    }
+
+    res = client.post('/api/reports',
+                      data=payload,
+                      headers=auth_header,
+                      content_type='multipart/form-data')
+
+    if res.status_code != 201:
+        print(f"\nResponse Body: {res.get_json()}")
+
+    assert res.status_code == 201
+
+    report = IncidentReport.query.filter_by(title='No Location Report').first()
+    assert report is not None
+
+    location = ReportLocation.query.filter_by(report_id=report.id).first()
+    assert location is None
+
+
+
+## 시나리오 4: 빈 문자열 좌표는 None 처리되고 위치 row는 생성하지 않음
+def test_report_upload_with_blank_coordinates_treats_location_as_absent(client, auth_header):
+    payload = {
+        'subject': 'Blank Coordinates Report',
+        'report_type': 'STALLED_VEHICLE',
+        'description': '빈 문자열 좌표 테스트',
+        'latitude': '',
+        'longitude': '',
+        'files': (io.BytesIO(b"test content"), 'blank_coordinates_report.png')
+    }
+
+    res = client.post('/api/reports',
+                      data=payload,
+                      headers=auth_header,
+                      content_type='multipart/form-data')
+
+    if res.status_code != 201:
+        print(f"\nResponse Body: {res.get_json()}")
+
+    assert res.status_code == 201
+
+    report = IncidentReport.query.filter_by(title='Blank Coordinates Report').first()
+    assert report is not None
+
+    location = ReportLocation.query.filter_by(report_id=report.id).first()
+    assert location is None
+
+
+## 시나리오 5: 잘못된 좌표 문자열은 신고 등록 실패
+def test_report_upload_with_invalid_coordinates_returns_bad_request(client, auth_header):
+    payload = {
+        'subject': 'Invalid Coordinates Report',
+        'report_type': 'STALLED_VEHICLE',
+        'description': '잘못된 좌표 문자열 테스트',
+        'latitude': 'not-a-number',
+        'longitude': '126.9780',
+        'files': (io.BytesIO(b"test content"), 'invalid_coordinates_report.png')
+    }
+
+    res = client.post('/api/reports',
+                      data=payload,
+                      headers=auth_header,
+                      content_type='multipart/form-data')
+
+    assert res.status_code in (400, 422)
+
+    report = IncidentReport.query.filter_by(title='Invalid Coordinates Report').first()
+    assert report is None
+
