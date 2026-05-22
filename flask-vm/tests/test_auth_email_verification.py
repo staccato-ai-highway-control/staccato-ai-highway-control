@@ -9,6 +9,7 @@ import pytest
 from app import create_app
 from app.extensions import db
 from app.models import EmailVerification, User
+from app.utils.security import hash_password
 
 
 def _get_test_database_url():
@@ -136,3 +137,83 @@ def test_verify_email_token_marks_user_as_verified(client):
     db_user = User.query.filter_by(email=email).first()
     assert db_user is not None
     assert db_user.is_email_verified is True
+
+
+def create_login_policy_user(
+    login_id=None,
+    password="Password123!",
+    is_email_verified=True,
+    account_status="ACTIVE",
+):
+    suffix = uuid4().hex[:8]
+
+    user = User(
+        login_id=login_id or f"login_policy_{suffix}",
+        password_hash=hash_password(password),
+        name="로그인 정책 테스트 유저",
+        email=f"login-policy-{suffix}@example.com",
+        phone="01012345678",
+        role="USER",
+        account_status=account_status,
+        is_email_verified=is_email_verified,
+        created_at=datetime.utcnow(),
+    )
+
+    db.session.add(user)
+    db.session.commit()
+
+    return user
+
+
+def test_login_rejects_unverified_email_user(client):
+    user = create_login_policy_user(
+        is_email_verified=False,
+        account_status="ACTIVE",
+    )
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "login_id": user.login_id,
+            "password": "Password123!",
+        },
+    )
+
+    assert response.status_code in (400, 401, 403), response.get_json()
+    assert response.status_code != 200
+
+
+def test_login_rejects_pending_account(client):
+    user = create_login_policy_user(
+        is_email_verified=True,
+        account_status="PENDING",
+    )
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "login_id": user.login_id,
+            "password": "Password123!",
+        },
+    )
+
+    assert response.status_code in (400, 401, 403), response.get_json()
+    assert response.status_code != 200
+
+
+def test_login_allows_verified_active_user(client):
+    user = create_login_policy_user(
+        is_email_verified=True,
+        account_status="ACTIVE",
+    )
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "login_id": user.login_id,
+            "password": "Password123!",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+
