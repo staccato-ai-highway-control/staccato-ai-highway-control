@@ -86,6 +86,21 @@ class ReportUploadService:
         return data
 
     @staticmethod
+    def _to_optional_decimal(value, field_name):
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+
+        try:
+            return Decimal(str(value))
+        except Exception as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
+
+    @staticmethod
     def _report_response(report, include_children=True):
         from app.models import ReportAnalysisJob, ReportAttachment, ReportLocation
 
@@ -248,23 +263,26 @@ class ReportUploadService:
             if saved_count == 0:
                 raise ValueError("저장 가능한 파일이 없습니다.")
 
-            location_text = data.get("location") or data.get("address") or data.get("place_name")
+            location_text = (data.get("location") or data.get("address") or data.get("place_name") or "").strip()
+            latitude = ReportUploadService._to_optional_decimal(data.get("latitude"), "위도")
+            longitude = ReportUploadService._to_optional_decimal(data.get("longitude"), "경도")
 
-            location = ReportLocation(**ReportUploadService._model_kwargs(
-                ReportLocation,
-                {
-                    "report_id": report.id,
-                    "location_source": "USER",
-                    "latitude": data.get("latitude"),
-                    "longitude": data.get("longitude"),
-                    "place_name": location_text,
-                    "address_raw": location_text,
-                    "is_location_confirmed": 0,
-                    "created_at": now,
-                    "updated_at": now,
-                },
-            ))
-            db.session.add(location)
+            if location_text or latitude is not None or longitude is not None:
+                location = ReportLocation(**ReportUploadService._model_kwargs(
+                    ReportLocation,
+                    {
+                        "report_id": report.id,
+                        "location_source": "USER",
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "place_name": location_text or None,
+                        "address_raw": location_text or None,
+                        "is_location_confirmed": 0,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                ))
+                db.session.add(location)
 
             db.session.commit()
             return report
@@ -335,7 +353,7 @@ class ReportUploadService:
                 attachment_id=attachment.id,
                 job_status="QUEUED",
                 analysis_type="INCIDENT_DETECTION",
-                ai_engine_type="YOLOV8",
+                ai_engine_type="YOLOV11",
                 confidence_threshold=0.450,
                 lane_stop_threshold=10,
                 shoulder_stop_threshold=15,
