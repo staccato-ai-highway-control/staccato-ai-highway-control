@@ -66,6 +66,10 @@ from app.models.notification_models import (
     NotificationDelivery,
 )
 
+from app.models.realtime_models import (
+    RealtimeEvent,
+)
+
 from app.models.chat_models import (
     ChatMessage,
     ChatMessageRead,
@@ -124,6 +128,7 @@ __all__ = [
     "RiskCalculationLog",
     "Notification",
     "NotificationDelivery",
+    "RealtimeEvent",
     "ChatRoom",
     "ChatMessage",
     "ChatMessageRead",

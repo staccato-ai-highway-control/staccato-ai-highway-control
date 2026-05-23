@@ -40,6 +40,7 @@ from app.modules.auth.routes import auth_bp
 # - 파일 위치: app/modules/incident/
 # ============================================================
 from app.modules.incident.routes import incident_bp
+from app.modules.incident_event.routes import incident_event_bp
 
 
 
@@ -134,6 +135,7 @@ def register_blueprints(app):
     # Incident / Report
     # ========================================================
     app.register_blueprint(incident_bp)
+    app.register_blueprint(incident_event_bp)
     app.register_blueprint(report_upload_bp)
     app.register_blueprint(location_search_bp)
 
