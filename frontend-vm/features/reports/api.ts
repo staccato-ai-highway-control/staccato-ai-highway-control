@@ -139,13 +139,6 @@ export async function createIncidentReport(payload: CreateIncidentReportPayload)
   });
 }
 
-export async function uploadReportAttachment(id: string, file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  return apiClient<{ ok: boolean }>('/api/reports/' + id + '/attachments', { method: "POST", formData });
-}
-
 export async function requestReportAnalysis(id: string) {
   return apiClient<{ ok: boolean }>('/api/reports/' + id + '/analyze', { method: "POST" });
 }
