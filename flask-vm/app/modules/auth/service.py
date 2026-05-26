@@ -247,6 +247,19 @@ class AuthService:
 
         now = datetime.utcnow()
 
+        identity_method = (
+            data.get("identity_method")
+            or data.get("identityMethod")
+            or "EMAIL"
+        ).strip().upper()
+
+        if identity_method not in {"EMAIL", "GOOGLE"}:
+            raise AuthError(
+                "Unsupported identity verification method.",
+                400,
+                code="UNSUPPORTED_IDENTITY_METHOD",
+            )
+
         user = User(
             login_id=login_id,
             email=email,
@@ -272,7 +285,12 @@ class AuthService:
 
         db.session.add(signup_request)
 
-        raw_token, verification = AuthService._create_email_verification(user, now=now)
+        email_verification_required = identity_method == "EMAIL"
+        raw_token = None
+        verification = None
+
+        if email_verification_required:
+            raw_token, verification = AuthService._create_email_verification(user, now=now)
 
         AuthService.create_security_log(
             action_type="SIGNUP_REQUESTED",
@@ -284,30 +302,32 @@ class AuthService:
             log_message="User signup requested.",
         )
 
-        AuthService.create_security_log(
-            action_type="EMAIL_VERIFICATION_CREATED",
-            actor_user_id=user.id,
-            target_type="EMAIL_VERIFICATION",
-            target_id=None,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            log_message="Email verification token created.",
-        )
+        if email_verification_required:
+            AuthService.create_security_log(
+                action_type="EMAIL_VERIFICATION_CREATED",
+                actor_user_id=user.id,
+                target_type="EMAIL_VERIFICATION",
+                target_id=None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                log_message="Email verification token created.",
+            )
 
         try:
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
             raise AuthError("Failed to create signup request.", 409)
-        email_delivery = EmailService.send_verification_email(
-            user.email,
-            raw_token,
-        )
 
-        return {
-            "user": user.to_public_dict(),
-            "signup_request_id": signup_request.id,
-            "email_verification": {
+        email_verification_data = None
+
+        if email_verification_required and raw_token and verification:
+            email_delivery = EmailService.send_verification_email(
+                user.email,
+                raw_token,
+            )
+
+            email_verification_data = {
                 "id": verification.id,
                 "email": verification.email,
                 "expires_at": verification.expires_at.isoformat(),
@@ -321,7 +341,13 @@ class AuthService:
                     if email_delivery.get("sent")
                     else "Email delivery failed. Please check SMTP settings or request resend."
                 ),
-            },
+            }
+
+        return {
+            "user": user.to_public_dict(),
+            "signup_request_id": signup_request.id,
+            "identity_method": identity_method,
+            "email_verification": email_verification_data,
         }
 
     @staticmethod
