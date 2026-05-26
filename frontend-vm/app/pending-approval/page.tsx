@@ -23,7 +23,23 @@ function PendingApprovalContent() {
   const [isStartingGoogleIdentity, setIsStartingGoogleIdentity] = useState(false);
 
   const queryEmail = searchParams.get("email");
-  const isVerified = isIdentityVerified(authUser);
+  const identityStatus = searchParams.get("status") ?? searchParams.get("identity_status");
+  const identityProvider = searchParams.get("provider") ?? searchParams.get("identity");
+  const identityMessage = searchParams.get("message");
+
+  const normalizedIdentityStatus = (identityStatus ?? "").toLowerCase();
+  const normalizedIdentityProvider = identityProvider?.toLowerCase();
+
+  const isGoogleIdentitySuccess =
+    normalizedIdentityProvider === "google" &&
+    ["success", "verified", "completed"].includes(normalizedIdentityStatus);
+
+  const isGoogleIdentityFailure =
+    normalizedIdentityProvider === "google" &&
+    ["failed", "error"].includes(normalizedIdentityStatus);
+
+  const isVerified =
+    isIdentityVerified(authUser) || isGoogleIdentitySuccess || manualIdentityVerified;
 
   useEffect(() => {
     const storedUser = getStoredAuthUser();
@@ -36,7 +52,19 @@ function PendingApprovalContent() {
       return {
         tone: "success",
         title: "본인인증이 완료되었습니다.",
-        description: "관리자 승인 후 서비스를 이용할 수 있습니다.",
+        description:
+          normalizedIdentityProvider === "google"
+            ? "Google 본인인증이 완료되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다."
+            : "관리자 승인 후 서비스를 이용할 수 있습니다.",
+      };
+    }
+
+    if (isGoogleIdentityFailure) {
+      return {
+        tone: "error",
+        title: "Google 본인인증에 실패했습니다.",
+        description:
+          identityMessage || "회원가입 이메일과 Google 계정 이메일이 일치하지 않습니다.",
       };
     }
 
@@ -45,7 +73,12 @@ function PendingApprovalContent() {
       title: "본인인증 방법을 선택해주세요.",
       description: "이메일 인증 또는 Google 본인인증 중 하나를 선택해 진행할 수 있습니다.",
     };
-  }, [isVerified]);
+  }, [
+    isVerified,
+    isGoogleIdentityFailure,
+    normalizedIdentityProvider,
+    identityMessage,
+  ]);
 
   const emailVerificationHref = email.trim()
     ? `/verify-email?email=${encodeURIComponent(email.trim())}`
