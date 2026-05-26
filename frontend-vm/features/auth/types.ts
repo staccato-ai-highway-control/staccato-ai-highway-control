@@ -18,6 +18,7 @@ export type SignupRequest = {
   requestedRole: UserRole;
   reason?: string;
   agreed: boolean;
+  identityMethod?: "EMAIL" | "GOOGLE";
 };
 
 export type SignupApiRequest = {
@@ -29,6 +30,7 @@ export type SignupApiRequest = {
   requested_role: UserRole;
   request_memo?: string;
   agreed?: boolean;
+  identity_method?: "EMAIL" | "GOOGLE";
 };
 
 export type SendEmailVerificationRequest = {

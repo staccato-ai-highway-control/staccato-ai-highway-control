@@ -21,6 +21,7 @@ export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
     requested_role: payload.requestedRole,
     request_memo: payload.reason?.trim() || undefined,
     agreed: payload.agreed,
+    identity_method: payload.identityMethod,
   };
 }
 
