@@ -28,12 +28,6 @@ export function createReport(payload: UploadReportPayload) {
   return uploadReport(payload);
 }
 
-export function uploadReportAttachment(id: string, file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-  return apiClient<{ ok: boolean }>(`/api/reports/${id}/attachments`, { method: "POST", formData });
-}
-
 export function requestReportAnalysis(id: string) {
   return apiClient<{ ok: boolean }>(`/api/reports/${id}/analyze`, { method: "POST" });
 }
