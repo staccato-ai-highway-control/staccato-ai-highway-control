@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import {
   requestReportAnalysis,
   uploadReport,
@@ -17,6 +17,11 @@ export function ReportUploadForm() {
   const [location, setLocation] = useState("");
   const [latitude, setLatitude] = useState("37.2636");
   const [longitude, setLongitude] = useState("127.0286");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setSelectedFiles(Array.from(event.target.files ?? []));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -144,9 +149,16 @@ export function ReportUploadForm() {
       </label>
       <label className="grid gap-2 text-sm font-semibold">
         이미지/영상 업로드
-        <input name="files" type="file" multiple accept="image/*,video/*" className="rounded-lg border border-slate-200 p-3" />
+        <input
+          name="files"
+          type="file"
+          multiple
+          accept="image/*,video/*"
+          onChange={handleFileChange}
+          className="rounded-lg border border-slate-200 p-3"
+        />
       </label>
-      <ReportFilePreview />
+      <ReportFilePreview files={selectedFiles} />
       {statusMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-staccato">{statusMessage}</p> : null}
       {errorMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{errorMessage}</p> : null}
       <button type="submit" disabled={isSubmitting} className="h-11 rounded-lg bg-staccato font-bold text-white disabled:opacity-60">
