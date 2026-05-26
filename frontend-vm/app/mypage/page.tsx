@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { PendingApprovalMyPage } from "@/components/mypage/PendingApprovalMyPage";
 import { ProfileSummary } from "@/components/mypage/ProfileSummary";
 import { SecurityCard } from "@/components/mypage/SecurityCard";
+import { ControlAdminMyPage } from "@/components/mypage/ControlAdminMyPage";
 import { SuperAdminMyPage } from "@/components/mypage/SuperAdminMyPage";
 import type { AuthUser } from "@/features/auth/types";
 import { clearStoredAuth, getStoredAuthUser } from "@/lib/authStorage";
@@ -16,7 +17,13 @@ function RoleContent({ user }: { user: AuthUser | null }) {
     return <PendingApprovalMyPage user={user} />;
   }
 
-  if (user?.role) return <SuperAdminMyPage />;
+  if (user?.role === "SUPER_ADMIN") {
+    return <SuperAdminMyPage />;
+  }
+
+  if (user?.role === "CONTROL_ADMIN") {
+    return <ControlAdminMyPage />;
+  }
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
