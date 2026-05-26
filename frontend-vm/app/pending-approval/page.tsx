@@ -4,15 +4,23 @@ import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getStoredAuthUser } from "@/lib/authStorage";
+import { startSignupGoogleIdentityVerification } from "@/features/auth/api";
 
 function isIdentityVerified(user: ReturnType<typeof getStoredAuthUser>) {
   return Boolean(user?.is_email_verified || user?.email_verified_at);
+}
+
+function isAlreadyVerifiedMessage(message: string) {
+  return message.toLowerCase().includes("identity is already verified");
 }
 
 function PendingApprovalContent() {
   const searchParams = useSearchParams();
   const [authUser, setAuthUser] = useState(() => getStoredAuthUser());
   const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [manualIdentityVerified, setManualIdentityVerified] = useState(false);
+  const [isStartingGoogleIdentity, setIsStartingGoogleIdentity] = useState(false);
 
   const queryEmail = searchParams.get("email");
   const isVerified = isIdentityVerified(authUser);
@@ -35,7 +43,7 @@ function PendingApprovalContent() {
     return {
       tone: "info",
       title: "본인인증 방법을 선택해주세요.",
-      description: "MVP에서는 이메일 인증으로 본인인증을 진행합니다.",
+      description: "이메일 인증 또는 Google 본인인증 중 하나를 선택해 진행할 수 있습니다.",
     };
   }, [isVerified]);
 
@@ -49,6 +57,44 @@ function PendingApprovalContent() {
       : notice.tone === "error"
         ? "border-rose-400/30 bg-rose-400/10 text-rose-100"
         : "border-amber-400/30 bg-amber-400/10 text-amber-100";
+
+  async function handleStartGoogleIdentity() {
+    const targetEmail = email.trim();
+
+    if (!targetEmail) {
+      setMessage("가입 이메일을 입력해주세요.");
+      return;
+    }
+
+    try {
+      setIsStartingGoogleIdentity(true);
+      setMessage("");
+
+      const response = await startSignupGoogleIdentityVerification(targetEmail);
+      const authorizationUrl = response.data?.authorization_url;
+
+      if (!authorizationUrl) {
+        throw new Error("Google 인증 URL을 찾을 수 없습니다.");
+      }
+
+      window.location.href = authorizationUrl;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Google 본인인증 시작 중 오류가 발생했습니다.";
+
+      if (isAlreadyVerifiedMessage(errorMessage)) {
+        setManualIdentityVerified(true);
+        setMessage("Google 본인인증이 이미 완료되었습니다. 관리자 승인 후 서비스를 이용할 수 있습니다.");
+        return;
+      }
+
+      setMessage(errorMessage);
+    } finally {
+      setIsStartingGoogleIdentity(false);
+    }
+  }
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 px-6 text-white">
@@ -105,12 +151,17 @@ function PendingApprovalContent() {
 
               <button
                 type="button"
-                disabled
-                className="rounded-lg border border-white/10 bg-slate-800/70 px-4 py-3 text-sm font-bold text-slate-400 disabled:cursor-not-allowed"
+                onClick={handleStartGoogleIdentity}
+                disabled={!email.trim() || isStartingGoogleIdentity}
+                className="rounded-lg border border-emerald-400/60 px-4 py-3 text-sm font-bold text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
               >
-                Google 본인인증은 추후 지원 예정입니다.
+                {isStartingGoogleIdentity ? "Google 인증 이동 중..." : "Google로 본인인증"}
               </button>
             </div>
+
+            {message ? (
+              <p className="text-sm font-semibold text-amber-200">{message}</p>
+            ) : null}
           </div>
         ) : null}
 

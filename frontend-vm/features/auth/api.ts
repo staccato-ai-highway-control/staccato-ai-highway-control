@@ -87,8 +87,15 @@ export function verifyEmailCode(email: string, code: string) {
   return verifyEmail({ email, code });
 }
 
-export function startGoogleIdentityVerification(email: string) {
+export function startGoogleIdentityVerification() {
   return apiClient<GoogleIdentityStartResponse>("/auth/identity/google/start", {
+    method: "POST",
+    body: {},
+  });
+}
+
+export function startSignupGoogleIdentityVerification(email: string) {
+  return apiClient<GoogleIdentityStartResponse>("/auth/signup/identity/google/start", {
     method: "POST",
     auth: false,
     body: { email },
