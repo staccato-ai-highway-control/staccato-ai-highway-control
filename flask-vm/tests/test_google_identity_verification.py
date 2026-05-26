@@ -122,6 +122,10 @@ def test_start_google_identity_verification_creates_oauth_state(app_context):
         assert result["authorization_url"].startswith(
             "https://accounts.google.com/o/oauth2/v2/auth?"
         )
+
+        query = parse_qs(urlparse(result["authorization_url"]).query)
+        assert query["prompt"] == ["select_account"]
+
         assert "expires_at" in result
 
         oauth_state = IdentityOAuthState.query.filter_by(
