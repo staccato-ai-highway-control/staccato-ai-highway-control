@@ -47,6 +47,35 @@ const connectionMeta: Record<RealtimeConnectionStatus, { label: string; tone: "b
   error: { label: "연결 오류", tone: "red" },
 };
 
+const READ_NOTIFICATION_IDS_KEY = "staccato:notifications:readIds";
+const DELETED_NOTIFICATION_IDS_KEY = "staccato:notifications:deletedIds";
+
+function loadStoredIdSet(key: string) {
+  if (typeof window === "undefined") return new Set<string>();
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return new Set<string>();
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set<string>();
+
+    return new Set(parsed.filter((item): item is string => typeof item === "string"));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function saveStoredIdSet(key: string, values: Set<string>) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(Array.from(values)));
+  } catch {
+    // localStorage 저장 실패는 알림 표시 자체를 막지 않습니다.
+  }
+}
+
 function matchesFilter(notification: NotificationItem, filter: NotificationFilter) {
   if (filter === "ALL") return true;
   if (filter === "UNREAD") return !notification.isRead;
@@ -119,8 +148,8 @@ function toNotificationItem(event: RealtimeIncidentEvent, readIds: Set<string>, 
 export default function NotificationsPage() {
   const { events, status, errorMessage, socketBaseUrl } = useRealtimeIncidents(30);
   const [filter, setFilter] = useState<NotificationFilter>("ALL");
-  const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
-  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
+  const [readIds, setReadIds] = useState<Set<string>>(() => loadStoredIdSet(READ_NOTIFICATION_IDS_KEY));
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => loadStoredIdSet(DELETED_NOTIFICATION_IDS_KEY));
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
   const notifications = useMemo(
@@ -140,7 +169,11 @@ export default function NotificationsPage() {
   const connection = connectionMeta[status];
 
   function markAsRead(notificationId: string) {
-    setReadIds((current) => new Set([...current, notificationId]));
+    setReadIds((current) => {
+      const next = new Set([...current, notificationId]);
+      saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
+      return next;
+    });
   }
 
   function openNotification(notification: NotificationItem) {
@@ -175,7 +208,11 @@ export default function NotificationsPage() {
           </div>
           <button
             type="button"
-            onClick={() => setReadIds(new Set(notifications.map((item) => item.id)))}
+            onClick={() => {
+              const next = new Set(notifications.map((item) => item.id));
+              saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
+              setReadIds(next);
+            }}
             disabled={unreadCount === 0}
             className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
           >
@@ -274,7 +311,11 @@ export default function NotificationsPage() {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      setDeletedIds((current) => new Set([...current, notification.id]));
+                      setDeletedIds((current) => {
+                        const next = new Set([...current, notification.id]);
+                        saveStoredIdSet(DELETED_NOTIFICATION_IDS_KEY, next);
+                        return next;
+                      });
                     }}
                     className="inline-flex h-9 items-center gap-1 rounded-lg border border-red-100 px-3 text-xs font-bold text-red-600 transition hover:bg-red-50"
                   >
