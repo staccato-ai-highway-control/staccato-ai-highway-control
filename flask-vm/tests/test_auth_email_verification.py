@@ -217,3 +217,60 @@ def test_login_allows_verified_active_user(client):
 
     assert response.status_code == 200, response.get_json()
 
+
+
+def test_signup_with_google_identity_method_skips_email_verification(client):
+    code_int, _ = unique_verification_code()
+    email = f"google-identity-signup-{code_int}@example.com"
+
+    response = client.post(
+        "/auth/signup",
+        json={
+            "login_id": f"google_user_{code_int}",
+            "email": email,
+            "password": "Password123!",
+            "name": "Google Identity Signup",
+            "phone": "01012345678",
+            "requested_role": "VIEWER",
+            "request_memo": "google identity signup test",
+            "agreed": True,
+            "identity_method": "GOOGLE",
+        },
+    )
+
+    assert response.status_code == 201
+
+    body = response.get_json()
+    data = body["data"]
+
+    assert data["identity_method"] == "GOOGLE"
+    assert data["email_verification"] is None
+
+    user = User.query.filter_by(email=email).first()
+    assert user is not None
+    assert user.is_email_verified is False
+
+    email_verification = EmailVerification.query.filter_by(user_id=user.id).first()
+    assert email_verification is None
+
+
+def test_signup_rejects_unsupported_identity_method(client):
+    code_int, _ = unique_verification_code()
+
+    response = client.post(
+        "/auth/signup",
+        json={
+            "login_id": f"bad_identity_{code_int}",
+            "email": f"bad-identity-{code_int}@example.com",
+            "password": "Password123!",
+            "name": "Bad Identity Method",
+            "phone": "01012345678",
+            "requested_role": "VIEWER",
+            "request_memo": "bad identity method test",
+            "agreed": True,
+            "identity_method": "KAKAO",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["code"] == "UNSUPPORTED_IDENTITY_METHOD"
