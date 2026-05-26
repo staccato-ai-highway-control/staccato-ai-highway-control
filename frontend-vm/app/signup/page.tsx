@@ -255,6 +255,7 @@ export default function SignupPage() {
           requestedRole,
           reason,
           agreed,
+          identityMethod: "GOOGLE",
         });
       } catch (error) {
         if (!isEmailAlreadyExistsError(error)) {
