@@ -600,6 +600,7 @@ class AuthService:
             "scope": "openid email profile",
             "state": raw_state,
             "include_granted_scopes": "true",
+            "prompt": "select_account",
         })
 
         authorization_url = f"https://accounts.google.com/o/oauth2/v2/auth?{query}"
