@@ -261,6 +261,28 @@ def reject_signup_request(signup_request_id):
     except AuthError as error:
         return jsonify(error.to_dict()), error.status_code
 
+@auth_bp.post("/signup/identity/google/start")
+def start_signup_google_identity_verification():
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = AuthService.start_google_identity_verification(
+            data,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get("User-Agent"),
+        )
+
+        return jsonify({
+            "message": "Google signup identity verification started.",
+            "data": result,
+        }), 200
+
+    except AuthError as error:
+        return jsonify({
+            "message": error.message,
+        }), error.status_code
+
+
 @auth_bp.post("/identity/google/start")
 @require_auth
 def start_google_identity_verification():
