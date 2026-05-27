@@ -20,11 +20,36 @@ def health():
 @require_auth
 def list_reports():
     try:
-        result, status_code = ReportUploadService.list_reports(request.args)
+        result, status_code = ReportUploadService.list_reports(
+            request.args,
+            current_user=request.current_user,
+        )
         return jsonify(result), status_code
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
 
     except Exception:
         logger.exception("리포트 목록 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/my", methods=["GET"])
+@require_auth
+def list_my_reports():
+    try:
+        result, status_code = ReportUploadService.list_reports(
+            request.args,
+            current_user=request.current_user,
+            mine_only=True,
+        )
+        return jsonify(result), status_code
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+    except Exception:
+        logger.exception("내 리포트 목록 조회 중 오류 발생")
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
@@ -65,6 +90,41 @@ def create_report():
 
     except Exception:
         logger.exception("리포트 생성 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/<int:report_id>", methods=["PATCH"])
+@require_auth
+def update_report(report_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
+        result, status_code = ReportUploadService.update_report(
+            report_id=report_id,
+            current_user=request.current_user,
+            data=data,
+        )
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 수정 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/<int:report_id>", methods=["DELETE"])
+@require_auth
+def delete_report(report_id):
+    try:
+        result, status_code = ReportUploadService.delete_report(
+            report_id=report_id,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 삭제 중 오류 발생")
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 

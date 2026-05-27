@@ -1,7 +1,7 @@
 import hashlib
 import os
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from decimal import Decimal
 from pathlib import PurePath
 
@@ -135,29 +135,202 @@ class ReportUploadService:
         return data
 
     @staticmethod
-    def list_reports(args):
-        from app.models import IncidentReport
+    def _to_positive_int(value, default, minimum=1, maximum=200):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+
+        return max(minimum, min(parsed, maximum))
+
+    @staticmethod
+    def _to_bool(value):
+        if isinstance(value, bool):
+            return value
+
+        if value is None:
+            return False
+
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    @staticmethod
+    def _parse_date(value, field_name, end_of_day=False):
+        if value is None:
+            return None
+
+        raw = str(value).strip()
+        if not raw:
+            return None
 
         try:
-            limit = int(args.get("limit", 50))
-        except (TypeError, ValueError):
-            limit = 50
+            if len(raw) == 10:
+                parsed_date = datetime.fromisoformat(raw).date()
+                parsed_time = time.max if end_of_day else time.min
+                return datetime.combine(parsed_date, parsed_time)
 
-        limit = max(1, min(limit, 200))
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
 
-        reports = (
-            IncidentReport.query
-            .order_by(IncidentReport.id.desc())
-            .limit(limit)
-            .all()
+    @staticmethod
+    def _is_report_editable(report):
+        return report.status not in {"CLOSED", "CANCELLED", "DELETED"}
+
+    @staticmethod
+    def _can_manage_report(report, current_user):
+        return (
+            report.reporter_id == current_user.id
+            or current_user.role in {"SUPER_ADMIN", "CONTROL_ADMIN"}
         )
+
+    @staticmethod
+    def _upsert_report_location(report_id, data, user_id=None):
+        from app.models import ReportLocation
+
+        now = ReportUploadService._now()
+        has_location_key = any(
+            key in data
+            for key in ("location", "address", "place_name", "latitude", "longitude")
+        )
+
+        if not has_location_key:
+            return
+
+        location_text = (
+            data.get("location")
+            or data.get("address")
+            or data.get("place_name")
+            or ""
+        ).strip()
+        latitude = ReportUploadService._to_optional_decimal(data.get("latitude"), "위도")
+        longitude = ReportUploadService._to_optional_decimal(data.get("longitude"), "경도")
+
+        if not location_text and latitude is None and longitude is None:
+            return
+
+        location = (
+            ReportLocation.query
+            .filter_by(report_id=report_id)
+            .order_by(ReportLocation.id.asc())
+            .first()
+        )
+
+        if location is None:
+            location = ReportLocation(**ReportUploadService._model_kwargs(
+                ReportLocation,
+                {
+                    "report_id": report_id,
+                    "location_source": "USER",
+                    "is_location_confirmed": 0,
+                    "created_at": now,
+                },
+            ))
+
+        for key, value in ReportUploadService._model_kwargs(
+            ReportLocation,
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "place_name": location_text or None,
+                "address_raw": location_text or None,
+                "updated_at": now,
+            },
+        ).items():
+            setattr(location, key, value)
+
+        return location
+
+    @staticmethod
+    def list_reports(args, current_user=None, mine_only=False):
+        from app.models import IncidentReport
+        from sqlalchemy import or_
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 10)),
+            10,
+            maximum=200,
+        )
+
+        query = IncidentReport.query
+
+        status = args.get("status")
+        if status:
+            query = query.filter(IncidentReport.status == status)
+        else:
+            query = query.filter(IncidentReport.status.notin_(("CANCELLED", "DELETED")))
+            if hasattr(IncidentReport, "deleted_at"):
+                query = query.filter(IncidentReport.deleted_at.is_(None))
+
+        keyword = args.get("keyword")
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            query = query.filter(or_(
+                IncidentReport.title.ilike(like_keyword),
+                IncidentReport.description.ilike(like_keyword),
+                IncidentReport.report_code.ilike(like_keyword),
+            ))
+
+        filters = {
+            "report_type": IncidentReport.report_type,
+            "priority": IncidentReport.priority,
+            "risk_level": IncidentReport.risk_level,
+        }
+
+        for param_name, column in filters.items():
+            value = args.get(param_name)
+            if value:
+                query = query.filter(column == value)
+
+        cctv_id = args.get("cctv_id")
+        if cctv_id not in (None, ""):
+            try:
+                query = query.filter(IncidentReport.cctv_id == int(cctv_id))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("cctv_id 값이 올바르지 않습니다.") from exc
+
+        start_date = ReportUploadService._parse_date(args.get("start_date"), "start_date")
+        end_date = ReportUploadService._parse_date(args.get("end_date"), "end_date", end_of_day=True)
+
+        if start_date:
+            query = query.filter(IncidentReport.submitted_at >= start_date)
+
+        if end_date:
+            query = query.filter(IncidentReport.submitted_at <= end_date)
+
+        mine = mine_only or ReportUploadService._to_bool(args.get("mine"))
+        if mine:
+            if current_user is None:
+                raise ValueError("mine 필터는 로그인 사용자가 필요합니다.")
+            query = query.filter(IncidentReport.reporter_id == current_user.id)
+
+        pagination = query.order_by(IncidentReport.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        items = [
+            ReportUploadService._report_response(report, include_children=False)
+            for report in pagination.items
+        ]
+
+        data = {
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }
 
         return {
             "success": True,
-            "reports": [
-                ReportUploadService._report_response(report, include_children=False)
-                for report in reports
-            ],
+            "data": data,
+            "reports": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
         }, 200
 
     @staticmethod
@@ -299,6 +472,131 @@ class ReportUploadService:
 
             current_app.logger.exception("Report creation failed")
             raise
+
+    @staticmethod
+    def update_report(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        report = db.session.get(IncidentReport, report_id)
+
+        if not report:
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "신고 수정 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "수정할 수 없는 신고 상태입니다.",
+            }, 400
+
+        try:
+            if "report_type" in data:
+                report.report_type = data.get("report_type") or report.report_type
+            if "upload_purpose" in data:
+                report.upload_purpose = data.get("upload_purpose") or report.upload_purpose
+            if "title" in data or "subject" in data:
+                report.title = data.get("title") or data.get("subject") or report.title
+            if "description" in data:
+                report.description = data.get("description")
+            if "priority" in data:
+                report.priority = data.get("priority") or report.priority
+
+            report.updated_at = ReportUploadService._now()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+
+        except ValueError as exc:
+            db.session.rollback()
+            return {
+                "success": False,
+                "error": str(exc),
+            }, 400
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report update failed", extra={"report_id": report_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "신고가 수정되었습니다.",
+            "data": ReportUploadService._report_response(report),
+        }, 200
+
+    @staticmethod
+    def delete_report(report_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+
+        if not report:
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "신고 삭제 권한이 없습니다.",
+            }, 403
+
+        if report.converted_incident_id:
+            return {
+                "success": False,
+                "error": "이상상황으로 전환된 신고는 삭제할 수 없습니다.",
+            }, 409
+
+        active_job = (
+            ReportAnalysisJob.query
+            .filter(
+                ReportAnalysisJob.report_id == report.id,
+                ReportAnalysisJob.job_status.in_(ReportUploadService.ACTIVE_JOB_STATUSES),
+            )
+            .first()
+        )
+        if active_job:
+            return {
+                "success": False,
+                "error": "분석 중인 신고는 삭제할 수 없습니다.",
+            }, 409
+
+        if report.status in {"CANCELLED", "DELETED"}:
+            return {
+                "success": False,
+                "error": "이미 삭제 또는 취소 처리된 신고입니다.",
+            }, 400
+
+        now = ReportUploadService._now()
+        report.status = "CANCELLED"
+        report.deleted_at = now
+        report.deleted_by = current_user.id
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "신고가 삭제 또는 취소 처리되었습니다.",
+        }, 200
 
     @staticmethod
     def request_report_analysis(report_id, user_id):
