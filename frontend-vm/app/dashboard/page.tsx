@@ -33,6 +33,22 @@ function isUnresolvedIncident(incident: Incident) {
   return !["RESOLVED", "CLOSED", "FALSE_POSITIVE"].includes(incident.status);
 }
 
+function getReportTitle(report: Report) {
+  return report.title ?? report.subject ?? "제목 없음";
+}
+
+function getReportCode(report: Report) {
+  return report.report_code ?? report.reportCode ?? `#${report.id}`;
+}
+
+function getReportLocation(report: Report) {
+  return report.location ?? report.address ?? report.place_name ?? report.locationName ?? "-";
+}
+
+function getReportAnalysisStatus(report: Report) {
+  return report.analysis_status ?? report.analysisStatus ?? "WAITING";
+}
+
 function StatGrid({ cards }: { cards: StatCard[] }) {
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -85,8 +101,8 @@ function ReportRows({ reports }: { reports: Report[] }) {
     <div className="grid gap-3">
       {reports.map((report) => (
         <Link key={report.id} href={`/reports/${report.id}`} className="rounded-lg border border-slate-100 p-4 text-slate-900 no-underline transition hover:bg-slate-50">
-          <b className="block truncate text-sm text-slate-950">{report.title}</b>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{report.reportCode} · {report.status} · {report.location}</p>
+          <b className="block truncate text-sm text-slate-950">{getReportTitle(report)}</b>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{getReportCode(report)} · {report.status ?? "SUBMITTED"} · {getReportLocation(report)}</p>
         </Link>
       ))}
     </div>
@@ -133,7 +149,7 @@ export default function DashboardPage() {
       const [nextSummary, nextIncidents, nextReports, nextCctvs] = await Promise.all([
         getDashboardSummary().catch(() => null),
         getIncidents().catch(() => []),
-        getReports().catch(() => []),
+        getReports({ page: 1, size: 5 }).then((result) => result.items).catch(() => []),
         getCctvs().catch(() => []),
       ]);
 
@@ -154,8 +170,8 @@ export default function DashboardPage() {
 
   const cards = useMemo<StatCard[]>(() => {
     const unresolved = incidents.filter(isUnresolvedIncident);
-    const analyzingReports = reports.filter((report) => report.status === "ANALYZING" || report.analysisStatus === "ANALYZING");
-    const completedReports = reports.filter((report) => report.status === "CONVERTED_TO_INCIDENT" || report.analysisStatus === "COMPLETED");
+    const analyzingReports = reports.filter((report) => report.status === "ANALYZING" || getReportAnalysisStatus(report) === "ANALYZING");
+    const completedReports = reports.filter((report) => report.status === "CONVERTED_TO_INCIDENT" || getReportAnalysisStatus(report) === "COMPLETED");
 
     return [
       { label: "전체 이벤트 수", value: String(incidents.length), helper: "API 기준", tone: "text-red-600", bg: "bg-red-50", icon: AlertTriangle },

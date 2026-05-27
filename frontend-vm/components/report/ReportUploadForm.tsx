@@ -2,11 +2,7 @@
 
 import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  requestReportAnalysis,
-  uploadReport,
-  type UploadReportPayload,
-} from "@/features/reports/api";
+import { uploadReport, type UploadReportPayload } from "@/features/reports/api";
 import type { ReportPriority, ReportType, UploadPurpose } from "@/features/reports/types";
 import { ReportFilePreview } from "./ReportFilePreview";
 import { ReportLocationForm } from "./ReportLocationForm";
@@ -19,8 +15,8 @@ export function ReportUploadForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [location, setLocation] = useState("");
-  const [latitude, setLatitude] = useState("37.2636");
-  const [longitude, setLongitude] = useState("127.0286");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -44,23 +40,35 @@ export function ReportUploadForm() {
       return;
     }
 
-    const latitudeValue = Number(formData.get("latitude"));
-    const longitudeValue = Number(formData.get("longitude"));
+    const title = String(formData.get("title") || "").trim();
 
-    if (!Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue)) {
-      setErrorMessage("위도와 경도를 숫자로 입력해주세요.");
+    if (!title) {
+      setErrorMessage("신고 제목을 입력해 주세요.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const locationText = String(formData.get("location") || "").trim();
+    const description = String(formData.get("description") || "").trim();
+    const latitudeText = String(formData.get("latitude") || "").trim();
+    const longitudeText = String(formData.get("longitude") || "").trim();
+    const latitudeValue = latitudeText ? Number(latitudeText) : undefined;
+    const longitudeValue = longitudeText ? Number(longitudeText) : undefined;
+
+    if ((latitudeText && !Number.isFinite(latitudeValue)) || (longitudeText && !Number.isFinite(longitudeValue))) {
+      setErrorMessage("위도와 경도는 숫자로 입력해 주세요.");
       setIsSubmitting(false);
       return;
     }
 
     const payload: UploadReportPayload = {
       files,
-      title: String(formData.get("title") || "정차 이벤트 신고"),
+      title,
       reportType: (formData.get("reportType") || "GENERAL") as ReportType,
       uploadPurpose: (formData.get("purpose") || "ANALYSIS") as UploadPurpose,
-      description: String(formData.get("description") || ""),
+      description: description || undefined,
       priority: (formData.get("priority") || "NORMAL") as ReportPriority,
-      location: String(formData.get("location") || ""),
+      location: locationText || undefined,
       latitude: latitudeValue,
       longitude: longitudeValue,
       isDemoData: formData.get("isDemoData") === "on",
@@ -69,20 +77,20 @@ export function ReportUploadForm() {
     try {
       setStatusMessage("신고 파일을 업로드하고 사고 신고를 생성하는 중입니다.");
       const response = await uploadReport(payload);
-      const reportId = response.report_id ?? response.id;
-      const reportCode = response.report_code ? " (" + response.report_code + ")" : "";
+      const reportId = response.report_id ?? response.id ?? response.data?.report_id ?? response.data?.id;
+      const reportCodeValue = response.report_code ?? response.data?.report_code;
+      const reportCode = reportCodeValue ? " (" + reportCodeValue + ")" : "";
 
-      if (reportId === undefined || reportId === null || String(reportId) === "") {
-        throw new Error("신고가 저장됐지만 분석 요청에 필요한 report_id를 받지 못했습니다.");
-      }
-
-      setStatusMessage("신고가 저장되었습니다. AI 분석 대기열을 생성하는 중입니다." + reportCode);
-      await requestReportAnalysis(String(reportId));
-      setStatusMessage("신고 영상/이미지 업로드와 AI 분석 요청이 완료되었습니다." + reportCode);
+      setStatusMessage("리포트가 성공적으로 접수되었습니다." + reportCode);
       setIsCompleted(true);
 
       window.setTimeout(() => {
-        router.replace("/reports");
+        if (reportId === undefined || reportId === null || String(reportId) === "") {
+          router.replace("/reports");
+          return;
+        }
+
+        router.replace(`/reports/${reportId}`);
       }, 800);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "신고 처리 중 오류가 발생했습니다.");
@@ -172,7 +180,7 @@ export function ReportUploadForm() {
       {statusMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-staccato">{statusMessage}</p> : null}
       {errorMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{errorMessage}</p> : null}
       <button type="submit" disabled={isSubmitting || isCompleted} className="h-11 rounded-lg bg-staccato font-bold text-white disabled:opacity-60">
-        {isCompleted ? "신고 목록으로 이동 중..." : isSubmitting ? "처리 중..." : "AI 분석 요청"}
+        {isCompleted ? "신고 상세로 이동 중..." : isSubmitting ? "처리 중..." : "신고 등록"}
       </button>
     </form>
   );
