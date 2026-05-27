@@ -49,15 +49,12 @@ CCTV_SOURCE_REFRESH_ENABLED = (
 CCTV_SOURCE_REFRESH_INTERVAL_SECONDS = float(os.environ.get("CCTV_SOURCE_REFRESH_INTERVAL_SECONDS", "3.0"))
 
 DEV_LOGIN_ID = os.environ.get("DEV_LOGIN_ID", "admin").strip()
-DEV_PASSWORD = os.environ.get("DEV_PASSWORD", "admin1234!").strip()
-DEV_ACCESS_TOKEN = os.environ.get("DEV_ACCESS_TOKEN", "dev-access-token").strip()
+DEV_PASSWORD = os.environ.get("DEV_PASSWORD", "").strip()
+DEV_ACCESS_TOKEN = os.environ.get("DEV_ACCESS_TOKEN", "").strip()
 
 CORS_ORIGINS = [
     origin.strip()
-    for origin in os.environ.get(
-        "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002,http://localhost:3005,http://127.0.0.1:3005,http://192.168.0.52:3005",
-    ).split(",")
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
     if origin.strip()
 ]
 
@@ -92,10 +89,10 @@ YOLO_FAR_MIN_BOX_HEIGHT = int(os.environ.get("YOLO_FAR_MIN_BOX_HEIGHT", "3"))
 YOLO_FAR_MAX_BOX_WIDTH = int(os.environ.get("YOLO_FAR_MAX_BOX_WIDTH", "300"))
 YOLO_FAR_MAX_BOX_HEIGHT = int(os.environ.get("YOLO_FAR_MAX_BOX_HEIGHT", "220"))
 
-AI_VM_PUBLIC_BASE_URL = os.environ.get("AI_VM_PUBLIC_BASE_URL", "http://127.0.0.1:8001").strip()
+AI_VM_PUBLIC_BASE_URL = os.environ.get("AI_VM_PUBLIC_BASE_URL", "").strip()
 FLASK_RELAY_EVENTS_URL = os.environ.get(
     "FLASK_RELAY_EVENTS_URL",
-    "http://127.0.0.1:5000/api/events",
+    "",
 ).strip()
 FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS", "1.5"))
 EVENT_CLIP_PRE_SECONDS = float(os.environ.get("EVENT_CLIP_PRE_SECONDS", "5.0"))

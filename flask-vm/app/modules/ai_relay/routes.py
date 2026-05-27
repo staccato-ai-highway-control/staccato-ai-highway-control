@@ -52,7 +52,6 @@ def get_events():
         limit=request.args.get("limit", default=100, type=int),
         camera_id=request.args.get("camera_id"),
         event_type=request.args.get("event_type"),
-        status=request.args.get("status"),
     )
     event_items = [event.to_dict() for event in events]
 
