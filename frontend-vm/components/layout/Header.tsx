@@ -17,11 +17,11 @@ type HeaderBadge = {
   className: string;
 };
 
-function getRoleHeader(user: AuthUser | null, fallbackTitle: string): { title: string; badges: HeaderBadge[] } {
+function getRoleHeader(_user: AuthUser | null, fallbackTitle: string): { title: string; badges: HeaderBadge[] } {
   return {
     title: fallbackTitle || "통합 관제",
     badges: [
-      { label: getRoleLabel(user?.role), className: "border-sky-200 bg-sky-50 text-sky-700" },
+      { label: "최고 관리자", className: "border-sky-200 bg-sky-50 text-sky-700" },
       { label: "실시간 이벤트", className: "border-amber-200 bg-amber-50 text-amber-700" },
       { label: "시스템 정상", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
     ],

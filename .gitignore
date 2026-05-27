@@ -100,3 +100,25 @@ ai-vm/llm-server/storage/models/llm/*.pt
 # Python cache
 __pycache__/
 *.py[cod]
+
+# Local reference/source folders
+my-ai-vm-source/
+my-flask-vm-source/
+storage/
+.env
+*.db
+__pycache__/
+*.pyc
+event_media/
+
+# Local/dev artifacts
+node_modules/
+frontend-vm/node_modules/
+my-ai-vm-source/
+my-flask-vm-source/
+storage/
+logs/
+.env
+*.db
+__pycache__/
+*.pyc

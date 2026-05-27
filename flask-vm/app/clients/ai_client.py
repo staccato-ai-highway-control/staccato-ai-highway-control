@@ -1,13 +1,39 @@
 import os
 import requests
+from flask import current_app
 
 
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001")
-INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
+DEFAULT_AI_VM_BASE_URL = "http://192.168.0.186:8001"
+
+
+def _config_value(name: str, default: str = "") -> str:
+    try:
+        value = current_app.config.get(name)
+    except RuntimeError:
+        value = None
+
+    if value is None:
+        value = os.getenv(name, default)
+
+    return str(value or "").strip()
+
+
+def _ai_vm_base_url() -> str:
+    return (
+        _config_value("AI_VM_BASE_URL")
+        or _config_value("AI_SERVER_URL")
+        or os.getenv("AI_VM_BASE_URL")
+        or os.getenv("AI_SERVER_URL")
+        or DEFAULT_AI_VM_BASE_URL
+    ).rstrip("/")
+
+
+def _internal_api_token() -> str:
+    return _config_value("INTERNAL_API_TOKEN")
 
 
 def check_ai_health() -> dict:
-    url = f"{AI_SERVER_URL}/internal/ai/health"
+    url = f"{_ai_vm_base_url()}/internal/ai/health"
 
     try:
         response = requests.get(url, timeout=5)
@@ -23,14 +49,15 @@ def check_ai_health() -> dict:
 
 
 def request_ai_analysis(payload: dict) -> dict:
-    url = f"{AI_SERVER_URL}/internal/ai/analyze"
+    url = f"{_ai_vm_base_url()}/internal/ai/analyze"
 
     headers = {
         "Content-Type": "application/json",
     }
 
-    if INTERNAL_API_TOKEN:
-        headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+    internal_api_token = _internal_api_token()
+    if internal_api_token:
+        headers["X-Internal-Token"] = internal_api_token
 
     try:
         response = requests.post(

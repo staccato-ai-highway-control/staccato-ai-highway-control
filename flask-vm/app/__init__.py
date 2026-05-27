@@ -18,6 +18,7 @@ from app.extensions import init_extensions
 # - 예: health check
 # ============================================================
 from app.modules.health.routes import health_bp
+from app.modules.ai_relay.routes import ai_relay_bp
 
 
 
@@ -40,8 +41,6 @@ from app.modules.auth.routes import auth_bp
 # - 파일 위치: app/modules/incident/
 # ============================================================
 from app.modules.incident.routes import incident_bp
-from app.modules.incident_event.routes import incident_event_bp
-from app.modules.realtime.routes import realtime_bp
 
 
 
@@ -109,6 +108,7 @@ def register_blueprints(app):
     # Common
     # ========================================================
     app.register_blueprint(health_bp)
+    app.register_blueprint(ai_relay_bp)
 
 
 
@@ -136,8 +136,6 @@ def register_blueprints(app):
     # Incident / Report
     # ========================================================
     app.register_blueprint(incident_bp)
-    app.register_blueprint(incident_event_bp)
-    app.register_blueprint(realtime_bp)
     app.register_blueprint(report_upload_bp)
     app.register_blueprint(location_search_bp)
 

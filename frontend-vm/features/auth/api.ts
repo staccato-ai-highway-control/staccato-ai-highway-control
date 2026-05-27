@@ -21,7 +21,6 @@ export function mapSignupRequest(payload: SignupRequest): SignupApiRequest {
     requested_role: payload.requestedRole,
     request_memo: payload.reason?.trim() || undefined,
     agreed: payload.agreed,
-    identity_method: payload.identityMethod,
   };
 }
 
@@ -88,15 +87,8 @@ export function verifyEmailCode(email: string, code: string) {
   return verifyEmail({ email, code });
 }
 
-export function startGoogleIdentityVerification() {
+export function startGoogleIdentityVerification(email: string) {
   return apiClient<GoogleIdentityStartResponse>("/auth/identity/google/start", {
-    method: "POST",
-    body: {},
-  });
-}
-
-export function startSignupGoogleIdentityVerification(email: string) {
-  return apiClient<GoogleIdentityStartResponse>("/auth/signup/identity/google/start", {
     method: "POST",
     auth: false,
     body: { email },

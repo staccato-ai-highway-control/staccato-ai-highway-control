@@ -21,15 +21,13 @@ export const USER_ROLES: UserRole[] = [
   "VIEWER",
 ];
 
-export const roleLabels: Record<string, string> = {
+export const roleLabels: Record<UserRole, string> = {
   SUPER_ADMIN: "최고 관리자",
-  CONTROL_ADMIN: "관제 관리자",
-  DISPATCH_ADMIN: "출동 관리자",
-  VIEWER: "일반 조회 계정",
-
-  // MVP 제외 권한
-  AUTH_ADMIN: "미사용 권한",
-  MAINTAINER: "미사용 권한",
+  AUTH_ADMIN: "최고 관리자",
+  CONTROL_ADMIN: "최고 관리자",
+  MAINTAINER: "최고 관리자",
+  DISPATCH_ADMIN: "최고 관리자",
+  VIEWER: "최고 관리자",
 };
 
 export type NavigationItem = {

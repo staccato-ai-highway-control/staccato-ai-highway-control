@@ -1,11 +1,3 @@
-# Deprecated / Historical Notice
-
-> This document contains earlier planning details that may not match the final STACCATO MVP scope.
-> For the current final MVP scope, see `docs/mvp/final-mvp-scope.md`.
-> LLM, chatbot, full Docker Compose deployment, map/GPS integration, reinforcement learning, and automatic retraining are excluded from the final MVP.
-
----
-
 # STACCATO Project Handoff
 
 > 이 문서는 새 대화에서 프로젝트 맥락을 빠르게 복원하기 위한 인수인계 문서입니다.  

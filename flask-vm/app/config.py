@@ -41,7 +41,11 @@ class Config:
     SQLALCHEMY_DATABASE_URI = build_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001")
+    AI_VM_BASE_URL = os.getenv(
+        "AI_VM_BASE_URL",
+        os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001"),
+    )
+    AI_SERVER_URL = AI_VM_BASE_URL
     # AI VM 내부 llm-server 기본 포트와 app.clients.llm_client 기본값을 맞춘다.
     LLM_SERVER_URL = os.getenv("LLM_SERVER_URL", "http://192.168.0.186:8000")
     ITS_SERVER_URL = os.getenv("ITS_SERVER_URL", "http://192.168.0.189:8002")

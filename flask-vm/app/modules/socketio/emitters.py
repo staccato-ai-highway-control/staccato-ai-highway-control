@@ -91,23 +91,3 @@ def emit_report_analysis_updated(job) -> None:
             report_id,
             job_id,
         )
-
-
-def emit_incident_created(payload: dict) -> bool:
-    """
-    Emit realtime incident creation event.
-
-    This function is intentionally fail-safe:
-    socket emit failure must not break incident DB persistence or API response.
-    """
-    incident_id = payload.get("incident_id") if isinstance(payload, dict) else None
-
-    try:
-        socketio.emit("incident.created", payload)
-        return True
-    except Exception:
-        current_app.logger.exception(
-            "Failed to emit incident.created. incident_id=%s",
-            incident_id,
-        )
-        return False

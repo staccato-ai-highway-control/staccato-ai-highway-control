@@ -1,18 +1,51 @@
-# app/modules/ai_gateway/service.py
+from app.clients.ai_client import request_ai_analysis
+
 
 class AIGatewayService:
     @staticmethod
     def request_analysis(report_id, file_path):
-        """
-        AI 서버가 준비될 때까지 가짜로 성공을 반환하는 Mock 함수
-        """
-        # [임시] AI 서버가 아직 구축 중이므로 로그만 남기고 성공 처리
-        print(f"\n[🚧 AI-Gateway Mock] Report {report_id} 분석 요청 수신됨")
-        print(f"[🚧 AI-Gateway Mock] 대상 파일: {file_path}")
-        print(f"[🚧 AI-Gateway Mock] 현재 AI 서버 구축 중으로, 실제 요청은 건너뜁니다.")
+        payload = AIGatewayService._build_analysis_payload(report_id, file_path)
+        response = request_ai_analysis(payload)
+        return bool(response.get("success")), response
 
-        # 나중에 서버 완공되면 아래 주석을 해제하세요!
-        # ai_url = f"{current_app.config.get('AI_SERVER_URL')}/analyze"
-        # response = requests.post(ai_url, json=payload, timeout=10)
+    @staticmethod
+    def _build_analysis_payload(report_id, file_path):
+        payload = {
+            "analysis_job_id": 0,
+            "report_id": int(report_id),
+            "attachment_id": 0,
+            "file_path": file_path,
+        }
 
-        return True, {"status": "mock_success", "message": "AI server is under construction"}
+        try:
+            from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+
+            report = IncidentReport.query.get(report_id)
+            attachment = (
+                ReportAttachment.query
+                .filter_by(report_id=report_id, file_path=file_path)
+                .order_by(ReportAttachment.id.desc())
+                .first()
+            )
+
+            job_query = ReportAnalysisJob.query.filter_by(report_id=report_id)
+            if attachment is not None:
+                payload["attachment_id"] = int(attachment.id)
+                job_query = job_query.filter_by(attachment_id=attachment.id)
+
+            job = job_query.order_by(ReportAnalysisJob.id.desc()).first()
+            if job is not None:
+                payload["analysis_job_id"] = int(job.id)
+                payload["thresholds"] = {
+                    "confidence": float(job.confidence_threshold or 0.6),
+                    "lane_stop_seconds": int(job.lane_stop_threshold or 5),
+                    "shoulder_stop_seconds": int(job.shoulder_stop_threshold or 10),
+                    "movement_threshold_px": int(job.movement_threshold_px or 15),
+                }
+
+            if report is not None and report.cctv_id is not None:
+                payload["cctv_id"] = int(report.cctv_id)
+        except Exception:
+            pass
+
+        return payload

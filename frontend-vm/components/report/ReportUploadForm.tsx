@@ -1,7 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
 import {
   requestReportAnalysis,
   uploadReport,
@@ -12,25 +11,16 @@ import { ReportFilePreview } from "./ReportFilePreview";
 import { ReportLocationForm } from "./ReportLocationForm";
 
 export function ReportUploadForm() {
-  const router = useRouter();
-
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCompleted, setIsCompleted] = useState(false);
   const [location, setLocation] = useState("");
   const [latitude, setLatitude] = useState("37.2636");
   const [longitude, setLongitude] = useState("127.0286");
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    setSelectedFiles(Array.from(event.target.files ?? []));
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
-    setIsCompleted(false);
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
@@ -79,11 +69,6 @@ export function ReportUploadForm() {
       setStatusMessage("신고가 저장되었습니다. AI 분석 대기열을 생성하는 중입니다." + reportCode);
       await requestReportAnalysis(String(reportId));
       setStatusMessage("신고 영상/이미지 업로드와 AI 분석 요청이 완료되었습니다." + reportCode);
-      setIsCompleted(true);
-
-      window.setTimeout(() => {
-        router.replace("/reports");
-      }, 800);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "신고 처리 중 오류가 발생했습니다.");
     } finally {
@@ -159,20 +144,13 @@ export function ReportUploadForm() {
       </label>
       <label className="grid gap-2 text-sm font-semibold">
         이미지/영상 업로드
-        <input
-          name="files"
-          type="file"
-          multiple
-          accept="image/*,video/*"
-          onChange={handleFileChange}
-          className="rounded-lg border border-slate-200 p-3"
-        />
+        <input name="files" type="file" multiple accept="image/*,video/*" className="rounded-lg border border-slate-200 p-3" />
       </label>
-      <ReportFilePreview files={selectedFiles} />
+      <ReportFilePreview />
       {statusMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-staccato">{statusMessage}</p> : null}
       {errorMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{errorMessage}</p> : null}
-      <button type="submit" disabled={isSubmitting || isCompleted} className="h-11 rounded-lg bg-staccato font-bold text-white disabled:opacity-60">
-        {isCompleted ? "신고 목록으로 이동 중..." : isSubmitting ? "처리 중..." : "AI 분석 요청"}
+      <button type="submit" disabled={isSubmitting} className="h-11 rounded-lg bg-staccato font-bold text-white disabled:opacity-60">
+        {isSubmitting ? "처리 중..." : "AI 분석 요청"}
       </button>
     </form>
   );
