@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronDown, LogOut, Menu, MessageSquare, UserCircle, X } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, UserCircle, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -18,43 +18,12 @@ type HeaderBadge = {
 };
 
 function getRoleHeader(user: AuthUser | null, fallbackTitle: string): { title: string; badges: HeaderBadge[] } {
-  if (user?.role === "SUPER_ADMIN") {
-    return {
-      title: "관리자 대시보드",
-      badges: [
-        { label: "가입요청 5", className: "border-amber-200 bg-amber-50 text-amber-700" },
-        { label: "사용자 23", className: "border-sky-200 bg-sky-50 text-sky-700" },
-        { label: "시스템 정상", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-      ],
-    };
-  }
-
-  if (user?.role === "CONTROL_ADMIN") {
-    return {
-      title: "실시간 관제",
-      badges: [
-        { label: "신규 사고 3", className: "border-red-200 bg-red-50 text-red-700" },
-        { label: "처리중 5", className: "border-amber-200 bg-amber-50 text-amber-700" },
-        { label: "보고서 대기 2", className: "border-sky-200 bg-sky-50 text-sky-700" },
-      ],
-    };
-  }
-
-  if (user?.role === "MAINTAINER" || user?.role === "DISPATCH_ADMIN") {
-    return {
-      title: "출동 관리",
-      badges: [
-        { label: "배정 사고 2", className: "border-amber-200 bg-amber-50 text-amber-700" },
-        { label: "처리중 1", className: "border-sky-200 bg-sky-50 text-sky-700" },
-        { label: "완료 4", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-      ],
-    };
-  }
-
   return {
-    title: fallbackTitle,
+    title: fallbackTitle || "통합 관제",
     badges: [
-      { label: "조회 모드", className: "border-slate-200 bg-slate-100 text-slate-600" },
+      { label: getRoleLabel(user?.role), className: "border-sky-200 bg-sky-50 text-sky-700" },
+      { label: "실시간 이벤트", className: "border-amber-200 bg-amber-50 text-amber-700" },
+      { label: "시스템 정상", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
     ],
   };
 }
@@ -123,13 +92,6 @@ export function Header({
         <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-staccato" />
       </Link>
 
-      <Link
-        href="/chat"
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-600 no-underline transition hover:bg-slate-50"
-        aria-label="채팅"
-      >
-        <MessageSquare className="h-4 w-4" aria-hidden="true" />
-      </Link>
 
       <div className="relative shrink-0">
         <button

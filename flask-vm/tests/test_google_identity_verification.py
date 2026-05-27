@@ -1,3 +1,4 @@
+from db_cleanup import cleanup_database
 import os
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
@@ -52,13 +53,13 @@ def app_context(monkeypatch):
 
     with app.app_context():
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
         db.create_all()
 
         yield app
 
         db.session.remove()
-        db.drop_all()
+        cleanup_database(db)
 
 
 def _make_test_user(email: str, is_email_verified: bool = False) -> User:
@@ -121,6 +122,10 @@ def test_start_google_identity_verification_creates_oauth_state(app_context):
         assert result["authorization_url"].startswith(
             "https://accounts.google.com/o/oauth2/v2/auth?"
         )
+
+        query = parse_qs(urlparse(result["authorization_url"]).query)
+        assert query["prompt"] == ["select_account"]
+
         assert "expires_at" in result
 
         oauth_state = IdentityOAuthState.query.filter_by(
@@ -222,6 +227,67 @@ def test_start_google_identity_verification_rejects_already_verified_user(
 
         assert error.value.status_code == 409
         assert error.value.message == "Identity is already verified."
+
+    finally:
+        _cleanup_test_user(email)
+
+
+def test_signup_google_identity_route_starts_without_auth_header(app_context):
+    email = f"signup-google-route-{uuid4().hex[:8]}@example.com"
+    _make_test_user(email=email)
+
+    try:
+        client = app_context.test_client()
+
+        response = client.post(
+            "/auth/signup/identity/google/start",
+            json={"email": email},
+        )
+
+        assert response.status_code == 200
+
+        body = response.get_json()
+        assert body["message"] == "Google signup identity verification started."
+        assert body["data"]["provider"] == "GOOGLE"
+        assert body["data"]["email"] == email
+        assert body["data"]["authorization_url"].startswith(
+            "https://accounts.google.com/o/oauth2/v2/auth?"
+        )
+        assert "expires_at" in body["data"]
+
+        oauth_state = IdentityOAuthState.query.filter_by(
+            provider="GOOGLE",
+            target_email=email,
+            status="PENDING",
+        ).first()
+
+        assert oauth_state is not None
+        assert oauth_state.state_hash
+        assert oauth_state.expires_at is not None
+
+    finally:
+        _cleanup_test_user(email)
+
+
+def test_signup_google_identity_route_rejects_already_verified_user(app_context):
+    email = f"signup-google-route-verified-{uuid4().hex[:8]}@example.com"
+    user = _make_test_user(email=email, is_email_verified=True)
+
+    try:
+        user.identity_provider = "GOOGLE"
+        user.identity_provider_user_id = "google-sub-already-verified-route"
+        user.identity_verified_at = datetime.utcnow()
+        db.session.commit()
+
+        client = app_context.test_client()
+
+        response = client.post(
+            "/auth/signup/identity/google/start",
+            json={"email": email},
+        )
+
+        assert response.status_code == 409
+        assert response.get_json()["message"] == "Identity is already verified."
 
     finally:
         _cleanup_test_user(email)

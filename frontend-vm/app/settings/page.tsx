@@ -1,4 +1,4 @@
-import { Bell, Bot, Cable, CheckCircle2, KeyRound, MonitorCheck, ServerCog, Settings } from "lucide-react";
+import { Bell, Bot, Cable, CheckCircle2, MonitorCheck, ServerCog, Settings } from "lucide-react";
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
@@ -45,7 +45,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-2xl font-black text-slate-950">시스템 설정</h2>
             <p className="mt-2 text-sm font-semibold text-slate-500">
-              시스템 상태, 서버 연결 상태, 기본 설정을 read-only로 확인합니다.
+              시스템 상태, 서버 연결 상태, 실시간 이벤트 처리 상태, 기본 설정을 read-only로 확인합니다.
             </p>
           </div>
           <Badge tone="blue">read-only mock</Badge>
@@ -112,18 +112,6 @@ export default function SettingsPage() {
                 <h3 className="text-base font-black text-slate-950">AI 서버 상태</h3>
               </div>
               <StatusRow item={settings.aiServerStatus} />
-            </Card>
-
-            <Card className="p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-teal-700" />
-                <h3 className="text-base font-black text-slate-950">LLM 설정 상태</h3>
-              </div>
-              <div className="grid gap-3">
-                {settings.llmSettings.map((item) => (
-                  <StatusRow key={`${item.id}-${item.status}`} item={item} />
-                ))}
-              </div>
             </Card>
 
             <Card className="p-5">

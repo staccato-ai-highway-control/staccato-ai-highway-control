@@ -49,7 +49,7 @@ const mockSecurityLogs: SecurityLog[] = [
     userEmail: "park.control@its.go.kr",
     ipAddress: "10.10.12.51",
     resourceType: "FILE",
-    description: "LLM 보고서 초안 PDF 다운로드",
+    description: "AI 탐지 결과 요약 PDF 다운로드",
   },
   {
     id: "LOG-20260429-004",

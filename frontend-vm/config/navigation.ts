@@ -1,17 +1,12 @@
 import {
-  BarChart3,
   Bell,
-  Bot,
   Cctv,
   ClipboardList,
-  Database,
-  FileText,
   LayoutDashboard,
-  Map,
-  Newspaper,
+  PlaySquare,
   ShieldCheck,
+  Newspaper,
   SlidersHorizontal,
-  UserCircle,
   Users,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -26,13 +21,15 @@ export const USER_ROLES: UserRole[] = [
   "VIEWER",
 ];
 
-export const roleLabels: Record<UserRole, string> = {
+export const roleLabels: Record<string, string> = {
   SUPER_ADMIN: "최고 관리자",
-  AUTH_ADMIN: "인증 관리자",
   CONTROL_ADMIN: "관제 관리자",
-  MAINTAINER: "출동 관리자",
   DISPATCH_ADMIN: "출동 관리자",
   VIEWER: "일반 조회 계정",
+
+  // MVP 제외 권한
+  AUTH_ADMIN: "미사용 권한",
+  MAINTAINER: "미사용 권한",
 };
 
 export type NavigationItem = {
@@ -49,50 +46,36 @@ export type NavigationSection = {
 };
 
 const allRoles = USER_ROLES;
-const controlRoles: UserRole[] = ["SUPER_ADMIN", "CONTROL_ADMIN"];
-const dispatchRoles: UserRole[] = ["SUPER_ADMIN", "CONTROL_ADMIN", "MAINTAINER", "DISPATCH_ADMIN"];
-const nonViewerRoles: UserRole[] = ["SUPER_ADMIN", "AUTH_ADMIN", "CONTROL_ADMIN", "MAINTAINER", "DISPATCH_ADMIN"];
 
 export const navigationSections: NavigationSection[] = [
   {
-    title: "공통",
+    title: "통합 관제",
     items: [
       { href: "/dashboard", icon: LayoutDashboard, label: "대시보드", allowedRoles: allRoles },
-      { href: "/mypage", icon: UserCircle, label: "마이페이지", allowedRoles: allRoles },
-      { href: "/chatbot", icon: Bot, label: "챗봇", allowedRoles: allRoles },
-      { href: "/board", icon: Newspaper, label: "게시판", allowedRoles: allRoles },
+      { href: "/cctvs", icon: Cctv, label: "CCTV 관제", allowedRoles: allRoles },
     ],
   },
   {
-    title: "관제",
+    title: "신고 관리",
     items: [
-      { href: "/cctvs", icon: Cctv, label: "CCTV 관제/조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "VIEWER"] },
-      { href: "/map", icon: Map, label: "지도 모니터링", allowedRoles: allRoles },
-      { href: "/reports", icon: ClipboardList, label: "이상상황/신고 관리", allowedRoles: controlRoles },
-      { href: "/incidents", icon: ShieldCheck, label: "이상상황 조회", allowedRoles: allRoles },
-      { href: "/notifications", icon: Bell, label: "실시간 알림", allowedRoles: nonViewerRoles },
-      { href: "/llm-reports", icon: FileText, label: "LLM 보고서", allowedRoles: allRoles },
-      { href: "/its", icon: BarChart3, label: "ITS 연계 조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "VIEWER"] },
-      { href: "/statistics", icon: BarChart3, label: "통계 조회", allowedRoles: ["SUPER_ADMIN", "CONTROL_ADMIN", "VIEWER"] },
+      { href: "/reports/create", icon: ClipboardList, label: "신고 등록", allowedRoles: allRoles },
+      { href: "/reports", icon: ClipboardList, label: "신고 목록", allowedRoles: allRoles },
     ],
   },
   {
-    title: "출동",
+    title: "이벤트",
     items: [
-      { href: "/dispatch/incidents", icon: ShieldCheck, label: "출동 관리", allowedRoles: dispatchRoles },
-      { href: "/dispatch/map", icon: Map, label: "지도/위치 확인", allowedRoles: dispatchRoles },
-      { href: "/reports/create", icon: ClipboardList, label: "현장 조치 보고", allowedRoles: dispatchRoles },
-      { href: "/reports", icon: FileText, label: "출동 결과 작성", allowedRoles: dispatchRoles },
+      { href: "/incidents", icon: ShieldCheck, label: "이벤트 관리", allowedRoles: allRoles },
+      { href: "/replay", icon: PlaySquare, label: "리플레이", allowedRoles: allRoles },
+      { href: "/notifications", icon: Bell, label: "알림", allowedRoles: allRoles },
     ],
   },
   {
     title: "관리",
     items: [
-      { href: "/admin/signup-requests", icon: Users, label: "회원가입 신청 관리", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/admin/users", icon: Users, label: "사용자/권한 관리", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/admin/security-logs", icon: ShieldCheck, label: "보안 로그", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/admin/llm-training-data", icon: Database, label: "LLM 학습데이터", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
-      { href: "/settings", icon: SlidersHorizontal, label: "시스템 설정", allowedRoles: ["SUPER_ADMIN"], adminOnly: true },
+      { href: "/admin/users", icon: Users, label: "사용자 관리", allowedRoles: allRoles },
+      { href: "/settings", icon: SlidersHorizontal, label: "시스템 설정", allowedRoles: allRoles },
+      { href: "/board", icon: Newspaper, label: "게시판", allowedRoles: allRoles },
     ],
   },
 ];
@@ -100,7 +83,7 @@ export const navigationSections: NavigationSection[] = [
 export function getRoleLabel(role?: string) {
   return role && USER_ROLES.includes(role as UserRole)
     ? roleLabels[role as UserRole]
-    : "권한 미지정";
+    : "최고 관리자";
 }
 
 export function isActiveAccount(user: AuthUser | null) {
@@ -113,25 +96,14 @@ export function getUserRole(user: AuthUser | null): UserRole | null {
 }
 
 export function getVisibleNavigationSections(user: AuthUser | null) {
-  const role = getUserRole(user);
-
-  if (!role || !isActiveAccount(user)) {
+  if (!getUserRole(user) || !isActiveAccount(user)) {
     return navigationSections
       .map((section) => ({
         ...section,
-        items: section.items.filter((item) => item.href === "/mypage"),
+        items: section.items.filter((item) => item.href === "/dashboard"),
       }))
       .filter((section) => section.items.length > 0);
   }
 
-  return navigationSections
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) => {
-        // TODO: Menu filtering is UX-only. Backend APIs must enforce the same role checks.
-        if (item.adminOnly && role !== "SUPER_ADMIN") return false;
-        return item.allowedRoles.includes(role);
-      }),
-    }))
-    .filter((section) => section.items.length > 0);
+  return navigationSections;
 }

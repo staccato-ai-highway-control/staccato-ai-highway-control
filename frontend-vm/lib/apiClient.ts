@@ -83,7 +83,7 @@ export async function apiClient<T>(path: string, options: ApiOptions = {}): Prom
   const payload = await parseResponseBody(response);
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       redirectToLogin();
     }
 
@@ -100,9 +100,21 @@ export type ApiEnvelope<T> = {
   data: T;
 };
 
-export function getEnvelopeData<T>(response: T | ApiEnvelope<T>): T {
-  if (typeof response === "object" && response !== null && "data" in response) {
-    return (response as ApiEnvelope<T>).data;
+export type FlexibleApiResponse<T> =
+  | T
+  | ApiEnvelope<T>
+  | { success?: boolean; message?: string; data?: T }
+  | { success?: boolean; message?: string; result?: T };
+
+export function getEnvelopeData<T>(response: FlexibleApiResponse<T>): T {
+  if (typeof response === "object" && response !== null) {
+    if ("data" in response && (response as { data?: T }).data !== undefined) {
+      return (response as { data: T }).data;
+    }
+
+    if ("result" in response && (response as { result?: T }).result !== undefined) {
+      return (response as { result: T }).result;
+    }
   }
 
   return response as T;

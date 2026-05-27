@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   resendEmailVerification,
   signup,
+  startSignupGoogleIdentityVerification,
   verifyEmailCode,
 } from "@/features/auth/api";
 import type { UserRole } from "@/features/auth/types";
@@ -42,6 +43,7 @@ export default function SignupPage() {
   const [emailResendCooldown, setEmailResendCooldown] = useState(0);
   const [isSendingCode, setIsSendingCode] = useState(false);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isStartingGoogleIdentity, setIsStartingGoogleIdentity] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const canSubmit =
@@ -231,6 +233,55 @@ export default function SignupPage() {
     }
   }
 
+  async function handleStartGoogleIdentity() {
+    const validationMessage = getSignupValidationMessage();
+
+    if (validationMessage) {
+      setEmailVerifyMessage(validationMessage);
+      return;
+    }
+
+    try {
+      setIsStartingGoogleIdentity(true);
+      setEmailVerifyMessage("");
+
+      try {
+        await signup({
+          name,
+          login_id: loginId,
+          phone,
+          email,
+          password,
+          requestedRole,
+          reason,
+          agreed,
+          identityMethod: "GOOGLE",
+        });
+      } catch (error) {
+        if (!isEmailAlreadyExistsError(error)) {
+          throw error;
+        }
+      }
+
+      const response = await startSignupGoogleIdentityVerification(email.trim());
+      const authorizationUrl = response.data?.authorization_url;
+
+      if (!authorizationUrl) {
+        throw new Error("Google 인증 URL을 찾을 수 없습니다.");
+      }
+
+      window.location.href = authorizationUrl;
+    } catch (error) {
+      setEmailVerifyMessage(
+        error instanceof Error
+          ? error.message
+          : "Google 본인인증 시작 중 오류가 발생했습니다."
+      );
+    } finally {
+      setIsStartingGoogleIdentity(false);
+    }
+  }
+
   const handleSubmitSignup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
@@ -400,7 +451,7 @@ export default function SignupPage() {
                 본인인증 방법
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-400">
-                MVP에서는 이메일 인증으로 본인인증을 진행합니다.
+                이메일 인증 또는 Google 본인인증 중 하나를 선택해 진행할 수 있습니다.
               </p>
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -415,10 +466,15 @@ export default function SignupPage() {
 
                 <button
                   type="button"
-                  disabled
-                  className="rounded-lg border border-white/10 bg-slate-800/70 px-4 py-3 text-sm font-bold text-slate-400 disabled:cursor-not-allowed"
+                  onClick={handleStartGoogleIdentity}
+                  disabled={isStartingGoogleIdentity || isEmailVerified}
+                  className="rounded-lg border border-emerald-400/60 px-4 py-3 text-sm font-bold text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-slate-600 disabled:text-slate-500"
                 >
-                  Google 본인인증은 추후 지원 예정입니다.
+                  {isStartingGoogleIdentity
+                    ? "Google 인증 이동 중..."
+                    : isEmailVerified
+                      ? "이메일 인증 완료"
+                      : "Google로 본인인증"}
                 </button>
               </div>
             </div>
