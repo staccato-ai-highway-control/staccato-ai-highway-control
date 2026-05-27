@@ -70,6 +70,10 @@ from app.models.realtime_models import (
     RealtimeEvent,
 )
 
+from app.models.ai_event_models import (
+    AiEvent,
+)
+
 from app.models.chat_models import (
     ChatMessage,
     ChatMessageRead,
@@ -129,6 +133,7 @@ __all__ = [
     "Notification",
     "NotificationDelivery",
     "RealtimeEvent",
+    "AiEvent",
     "ChatRoom",
     "ChatMessage",
     "ChatMessageRead",

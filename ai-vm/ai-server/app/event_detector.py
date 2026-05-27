@@ -1,0 +1,321 @@
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+import math
+import uuid
+from typing import Any
+
+import cv2
+import numpy as np
+
+from .config import (
+    EVENT_COOLDOWN_SECONDS,
+    EVENT_DANGER_LOW_RATIO,
+    EVENT_DANGER_SECONDS,
+    EVENT_HISTORY_LENGTH,
+    EVENT_STOPPED_MOVE_PX,
+    EVENT_TRACK_MATCH_DISTANCE,
+    EVENT_TRACK_STALE_FRAMES,
+    EVENT_VEHICLE_CLASSES,
+    AI_VM_PUBLIC_BASE_URL,
+    ROI_BASE_HEIGHT,
+    ROI_BASE_WIDTH,
+)
+from .detector import Detection
+from .roi_config import get_camera_rois
+
+
+@dataclass
+class _TrackState:
+    track_id: int
+    center: tuple[float, float]
+    bbox: list[float]
+    class_name: str
+    last_frame_id: int
+
+
+@dataclass(frozen=True)
+class _TrackedDetection:
+    detection: Detection
+    track_id: int
+    center: tuple[float, float]
+    roi_ids: list[str]
+
+
+class EventDetector:
+    def __init__(
+        self,
+        camera_id: str,
+        camera_name: str | None = None,
+        vehicle_classes: set[str] | None = None,
+    ) -> None:
+        self.camera_id = camera_id
+        self.camera_name = camera_name or camera_id
+        self.vehicle_classes = vehicle_classes or EVENT_VEHICLE_CLASSES
+
+        self._next_track_id = 1
+        self._tracks: dict[int, _TrackState] = {}
+        self._track_history: dict[int, deque[tuple[float, float]]] = defaultdict(
+            lambda: deque(maxlen=EVENT_HISTORY_LENGTH)
+        )
+        self._slow_started_at: dict[int, datetime] = {}
+        self._last_event_at: dict[tuple[int, str, str | None], datetime] = {}
+
+        self.generated_events = 0
+        self.last_event_at: datetime | None = None
+
+    def update(
+        self,
+        *,
+        frame_id: int,
+        timestamp: datetime,
+        detections: list[Detection],
+        frame_shape: tuple[int, ...],
+    ) -> list[dict[str, Any]]:
+        tracked = self._assign_tracks(detections, frame_id, frame_shape)
+        if not tracked:
+            self._purge_stale_tracks(frame_id)
+            return []
+
+        moves: dict[int, float] = {}
+        all_moves: list[float] = []
+
+        for item in tracked:
+            history = self._track_history[item.track_id]
+            history.append(item.center)
+            move = self._average_move(history)
+            moves[item.track_id] = move
+            all_moves.append(move)
+
+        flow_speed = float(np.median(all_moves)) if all_moves else 0.0
+        events: list[dict[str, Any]] = []
+
+        for item in tracked:
+            move = moves.get(item.track_id, 0.0)
+            is_relative_slow = flow_speed > 0 and move < flow_speed * EVENT_DANGER_LOW_RATIO
+            is_absolute_stop = len(self._track_history[item.track_id]) >= 2 and move <= EVENT_STOPPED_MOVE_PX
+            is_slow = is_relative_slow or is_absolute_stop
+
+            if is_slow:
+                self._slow_started_at.setdefault(item.track_id, timestamp)
+            else:
+                self._slow_started_at.pop(item.track_id, None)
+
+            slow_started_at = self._slow_started_at.get(item.track_id)
+            danger_time = (
+                (timestamp - slow_started_at).total_seconds()
+                if slow_started_at is not None
+                else 0.0
+            )
+
+            if danger_time < EVENT_DANGER_SECONDS:
+                continue
+
+            event_type = self._event_type_for_rois(item.roi_ids)
+            roi_id = item.roi_ids[0] if item.roi_ids else None
+            if not self._can_emit(item.track_id, event_type, roi_id, timestamp):
+                continue
+
+            event = self._build_event(
+                item=item,
+                event_type=event_type,
+                roi_id=roi_id,
+                timestamp=timestamp,
+                move=move,
+                flow_speed=flow_speed,
+                danger_time=danger_time,
+            )
+            events.append(event)
+            self.generated_events += 1
+            self.last_event_at = timestamp
+
+        self._purge_stale_tracks(frame_id)
+        return events
+
+    def to_status_payload(self) -> dict[str, Any]:
+        return {
+            "active_tracks": len(self._tracks),
+            "generated_events": self.generated_events,
+            "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
+        }
+
+    def _assign_tracks(
+        self,
+        detections: list[Detection],
+        frame_id: int,
+        frame_shape: tuple[int, ...],
+    ) -> list[_TrackedDetection]:
+        tracked: list[_TrackedDetection] = []
+        used_track_ids: set[int] = set()
+
+        for detection in detections:
+            if detection.class_name not in self.vehicle_classes:
+                continue
+
+            center = self._bottom_center(detection.bbox)
+            track_id = detection.track_id
+            if track_id is None:
+                track_id = self._nearest_track_id(center, used_track_ids)
+            if track_id is None:
+                track_id = self._next_track_id
+                self._next_track_id += 1
+
+            used_track_ids.add(track_id)
+            self._tracks[track_id] = _TrackState(
+                track_id=track_id,
+                center=center,
+                bbox=detection.bbox,
+                class_name=detection.class_name,
+                last_frame_id=frame_id,
+            )
+            tracked.append(
+                _TrackedDetection(
+                    detection=detection,
+                    track_id=track_id,
+                    center=center,
+                    roi_ids=self._roi_ids_for_point(center, frame_shape),
+                )
+            )
+
+        return tracked
+
+    def _nearest_track_id(
+        self,
+        center: tuple[float, float],
+        used_track_ids: set[int],
+    ) -> int | None:
+        nearest_track_id = None
+        nearest_distance = EVENT_TRACK_MATCH_DISTANCE
+
+        for track_id, track in self._tracks.items():
+            if track_id in used_track_ids:
+                continue
+
+            distance = self._distance(center, track.center)
+            if distance <= nearest_distance:
+                nearest_track_id = track_id
+                nearest_distance = distance
+
+        return nearest_track_id
+
+    def _purge_stale_tracks(self, frame_id: int) -> None:
+        stale_track_ids = [
+            track_id
+            for track_id, track in self._tracks.items()
+            if frame_id - track.last_frame_id > EVENT_TRACK_STALE_FRAMES
+        ]
+        for track_id in stale_track_ids:
+            self._tracks.pop(track_id, None)
+            self._track_history.pop(track_id, None)
+            self._slow_started_at.pop(track_id, None)
+
+    def _roi_ids_for_point(
+        self,
+        center: tuple[float, float],
+        frame_shape: tuple[int, ...],
+    ) -> list[str]:
+        height, width = frame_shape[:2]
+        x_scale = width / ROI_BASE_WIDTH
+        y_scale = height / ROI_BASE_HEIGHT
+        point = (float(center[0]), float(center[1]))
+        roi_ids: list[str] = []
+
+        for roi_id, points in get_camera_rois(self.camera_id).items():
+            scaled_points = np.array(
+                [
+                    [int(x * x_scale), int(y * y_scale)]
+                    for x, y in points
+                ],
+                dtype=np.int32,
+            )
+            if cv2.pointPolygonTest(scaled_points, point, False) >= 0:
+                roi_ids.append(roi_id)
+
+        return roi_ids
+
+    def _can_emit(
+        self,
+        track_id: int,
+        event_type: str,
+        roi_id: str | None,
+        timestamp: datetime,
+    ) -> bool:
+        key = (track_id, event_type, roi_id)
+        last_event_at = self._last_event_at.get(key)
+        if last_event_at is not None:
+            elapsed = (timestamp - last_event_at).total_seconds()
+            if elapsed < EVENT_COOLDOWN_SECONDS:
+                return False
+
+        self._last_event_at[key] = timestamp
+        return True
+
+    def _build_event(
+        self,
+        *,
+        item: _TrackedDetection,
+        event_type: str,
+        roi_id: str | None,
+        timestamp: datetime,
+        move: float,
+        flow_speed: float,
+        danger_time: float,
+    ) -> dict[str, Any]:
+        event_id = f"evt_{timestamp.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+        lane_type = "SHOULDER" if event_type == "SHOULDER_STOP" else "LANE"
+        base_url = AI_VM_PUBLIC_BASE_URL.rstrip("/")
+        message = (
+            f"track {item.track_id} {item.detection.class_name} low movement "
+            f"{danger_time:.1f}s, move={move:.1f}, flow={flow_speed:.1f}"
+        )
+
+        return {
+            "event_id": event_id,
+            "camera_id": self.camera_id,
+            "camera_name": self.camera_name,
+            "event_type": event_type,
+            "severity": "WARNING",
+            "timestamp": timestamp.isoformat(),
+            "bbox": item.detection.bbox,
+            "detections": [item.detection.to_dict()],
+            "detection_count": 1,
+            "track_id": item.track_id,
+            "roi_id": roi_id,
+            "lane_type": lane_type,
+            "estimated_speed_kmh": 0.0,
+            "message": message,
+            "snapshot_url": f"{base_url}/snapshots/{self.camera_id}/latest.jpg",
+            "video_url": None,
+            "stream_url": f"{base_url}/streams/{self.camera_id}.mjpeg",
+        }
+
+    @staticmethod
+    def _event_type_for_rois(roi_ids: list[str]) -> str:
+        if "LEFT_SHOULDER" in roi_ids or "RIGHT_SHOULDER" in roi_ids:
+            return "SHOULDER_STOP"
+        return "STOPPED_VEHICLE"
+
+    @staticmethod
+    def _bottom_center(bbox: list[float]) -> tuple[float, float]:
+        x1, _y1, x2, y2 = bbox
+        return ((x1 + x2) / 2.0, y2)
+
+    @staticmethod
+    def _average_move(history: deque[tuple[float, float]]) -> float:
+        if len(history) < 2:
+            return 0.0
+
+        distances = [
+            EventDetector._distance(history[index - 1], history[index])
+            for index in range(1, len(history))
+        ]
+        return float(np.mean(distances)) if distances else 0.0
+
+    @staticmethod
+    def _distance(
+        left: tuple[float, float],
+        right: tuple[float, float],
+    ) -> float:
+        return math.sqrt((right[0] - left[0]) ** 2 + (right[1] - left[1]) ** 2)
