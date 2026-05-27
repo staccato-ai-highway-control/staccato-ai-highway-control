@@ -42,15 +42,12 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001")
-    # AI VM 내부 llm-server 기본 포트와 app.clients.llm_client 기본값을 맞춘다.
-    LLM_SERVER_URL = os.getenv("LLM_SERVER_URL", "http://192.168.0.186:8000")
     ITS_SERVER_URL = os.getenv("ITS_SERVER_URL", "http://192.168.0.189:8002")
 
     FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://192.168.0.188:3000")
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
     SOCKETIO_CORS_ORIGINS = os.getenv("SOCKETIO_CORS_ORIGINS", CORS_ORIGINS)
 
-    INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
 
     # === Storage Settings 수정 및 추가 ===
     STORAGE_ROOT = os.getenv("STORAGE_ROOT", str(BASE_DIR / "storage"))

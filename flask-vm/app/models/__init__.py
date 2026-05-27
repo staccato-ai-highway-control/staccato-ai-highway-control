@@ -29,15 +29,6 @@ from app.models.incident_support_models import (
     IncidentStatusHistory,
 )
 
-from app.models.llm_models import (
-    LlmReport,
-)
-
-from app.models.llm_support_models import (
-    LlmReportStatusHistory,
-    LlmReportVersion,
-)
-
 from app.models.board_models import (
     BoardAttachment,
     BoardComment,
@@ -78,8 +69,6 @@ from app.models.chat_models import (
     ChatMessage,
     ChatMessageRead,
     ChatRoom,
-    ChatbotConversation,
-    ChatbotMessage,
 )
 
 from app.models.chat_support_models import (
@@ -116,9 +105,6 @@ __all__ = [
     "IncidentSnapshot",
     "IncidentStatusHistory",
     "IncidentMemo",
-    "LlmReport",
-    "LlmReportVersion",
-    "LlmReportStatusHistory",
     "BoardPost",
     "BoardComment",
     "BoardAttachment",
@@ -137,8 +123,6 @@ __all__ = [
     "ChatRoom",
     "ChatMessage",
     "ChatMessageRead",
-    "ChatbotConversation",
-    "ChatbotMessage",
     "ChatRoomMember",
     "Cctv",
     "CctvRoi",
