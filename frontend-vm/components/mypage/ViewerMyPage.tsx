@@ -14,7 +14,6 @@ export function ViewerMyPage() {
           { href: "/cctvs", label: "CCTV 조회", description: "CCTV 정보를 조회합니다." },
           { href: "/map", label: "지도 조회", description: "지도 기반 위치 정보를 조회합니다." },
           { href: "/incidents", label: "이상상황 조회", description: "이상상황 상세를 조회합니다." },
-          { href: "/llm-reports", label: "보고서 조회", description: "보고서를 조회합니다." },
         ]}
       />
     </div>

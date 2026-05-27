@@ -1,21 +1,6 @@
 export type ChatRoomType = "INCIDENT" | "GROUP" | "DM";
 export type ChatRoomStatus = "OPEN" | "CLOSED" | "DELETED";
 
-export type ChatbotIncidentContext = {
-  incident_type: string;
-  risk_level: string;
-  location?: string;
-  stopped_seconds?: number;
-  [key: string]: unknown;
-};
-
-export type ChatbotAnswer = {
-  answer: string;
-  llm_model?: string;
-  llm_provider?: string;
-  prompt_version?: string;
-};
-
 export type ChatRoomDto = {
   id: number;
   incident_id?: number;
@@ -35,7 +20,7 @@ export type ChatMessageDto = {
   sender_id?: number;
   sender_user_id?: number;
   sender_name?: string;
-  sender_type?: "USER" | "BOT" | "SYSTEM";
+  sender_type?: "USER" | "SYSTEM";
   content: string;
   message_type: "TEXT" | "SYSTEM" | "INCIDENT_UPDATE";
   created_at: string;
