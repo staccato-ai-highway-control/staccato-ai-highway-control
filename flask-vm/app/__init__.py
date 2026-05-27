@@ -89,6 +89,17 @@ from app.modules.frontend_config.routes import frontend_config_bp
 
 
 # ============================================================
+# Dashboard Module
+# - 담당: 대시보드 최소 요약
+# - 파일 위치: app/modules/dashboard/
+# ============================================================
+from app.modules.dashboard import dashboard_bp
+
+
+
+
+
+# ============================================================
 # Board Module
 # - 담당: 관리자 게시판
 # - 파일 위치: app/modules/board/
@@ -159,6 +170,7 @@ def register_blueprints(app):
     # app.register_blueprint(chatbot_bp)
     # app.register_blueprint(chat_bp)
     app.register_blueprint(frontend_config_bp)
+    app.register_blueprint(dashboard_bp)
 
 
 

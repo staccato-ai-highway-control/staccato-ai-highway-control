@@ -1,78 +1,100 @@
 "use client";
 
 import Link from "next/link";
-import { EyeOff, FilePlus, MessageSquare, Search, Trash2 } from "lucide-react";
+import { FilePlus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import { getBoardPosts, deleteBoardPost } from "@/features/board/api";
+import type { BoardPost } from "@/features/board/types";
 import type { AuthUser } from "@/features/auth/types";
 import { getStoredAuthUser } from "@/lib/authStorage";
 import {
-  boardPosts,
   canCreatePost,
   canDeletePost,
   canEditPost,
-  canHidePost,
-  canManageComments,
   categoryLabels,
   categoryTone,
-  type AdminBoardPost,
+  formatBoardDate,
+  getBoardCategory,
   type BoardCategory,
 } from "./data";
 
-const categoryOptions: Array<BoardCategory | "ALL"> = [
-  "ALL",
-  "NOTICE",
-  "REFERENCE",
-  "DISCUSSION",
-];
+const categoryOptions: Array<BoardCategory | "ALL"> = ["ALL", "NOTICE", "REFERENCE", "DISCUSSION"];
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "게시글 목록을 불러오지 못했습니다.";
+}
 
 export default function AdminBoardPage() {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [posts, setPosts] = useState<AdminBoardPost[]>(boardPosts);
+  const [posts, setPosts] = useState<BoardPost[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<BoardCategory | "ALL">("ALL");
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  async function loadPosts() {
+    setLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const nextPosts = await getBoardPosts({ page: 1, size: 100 });
+      setPosts(nextPosts);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     setAuthUser(getStoredAuthUser());
+    loadPosts();
   }, []);
 
   const filteredPosts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
-    return posts.filter((post) => {
-      const matchesCategory = categoryFilter === "ALL" || post.category === categoryFilter;
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        post.title.toLowerCase().includes(normalizedQuery) ||
-        post.author.toLowerCase().includes(normalizedQuery) ||
-        post.content.toLowerCase().includes(normalizedQuery);
+    return posts
+      .filter((post) => post.post_status !== "DELETED")
+      .filter((post) => {
+        const category = getBoardCategory(post.board_type);
+        const matchesCategory = categoryFilter === "ALL" || category === categoryFilter;
+        const matchesQuery =
+          normalizedQuery.length === 0 ||
+          post.title.toLowerCase().includes(normalizedQuery) ||
+          post.content.toLowerCase().includes(normalizedQuery) ||
+          String(post.author_id).includes(normalizedQuery);
 
-      return matchesCategory && matchesQuery;
-    });
+        return matchesCategory && matchesQuery;
+      })
+      .sort((a, b) => b.is_pinned - a.is_pinned || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [posts, categoryFilter, query]);
 
-  function handleDelete(id: string) {
+  async function handleDelete(post: BoardPost) {
     const confirmed = window.confirm("게시글을 삭제하시겠습니까?");
     if (!confirmed) return;
 
-    setPosts((current) => current.filter((post) => post.id !== id));
-  }
+    setDeletingId(post.id);
+    setErrorMessage(null);
 
-  function handleToggleHidden(id: string) {
-    setPosts((current) =>
-      current.map((post) =>
-        post.id === id ? { ...post, isHidden: !post.isHidden } : post
-      )
-    );
+    try {
+      await deleteBoardPost(post.id);
+      setPosts((current) => current.filter((item) => item.id !== post.id));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "게시글 삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const canWritePost = canCreatePost(authUser);
-  const canUseHiddenControl = canHidePost(authUser);
-  const canUseCommentManagement = canManageComments(authUser);
 
   return (
     <RequireAuth>
@@ -80,9 +102,7 @@ export default function AdminBoardPage() {
         <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h2 className="text-2xl font-black text-slate-950">관리자 게시판</h2>
-            <p className="mt-2 text-sm font-semibold text-slate-500">
-              권한에 따라 공지, 자료, 토론 게시글을 조회하고 관리합니다.
-            </p>
+            <p className="mt-2 text-sm font-semibold text-slate-500">권한에 따라 공지, 자료, 토론 게시글을 조회하고 관리합니다.</p>
           </div>
           {canWritePost ? (
             <Link href="/admin/board/new" className="no-underline">
@@ -117,7 +137,7 @@ export default function AdminBoardPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="제목, 작성자, 내용 검색..."
+                  placeholder="제목, 작성자 ID, 내용 검색..."
                   className="min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400"
                 />
               </span>
@@ -125,25 +145,28 @@ export default function AdminBoardPage() {
           </div>
         </Card>
 
+        {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
+
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
             <h3 className="text-base font-black text-slate-950">게시글 목록</h3>
-            <span className="text-sm font-semibold text-slate-500">{filteredPosts.length}건</span>
+            <span className="text-sm font-semibold text-slate-500">{loading ? "불러오는 중" : `${filteredPosts.length}건`}</span>
           </div>
           <div className="overflow-hidden">
             <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-20 px-3 py-3">카테고리</th>
+                  <th className="w-24 px-3 py-3">카테고리</th>
                   <th className="px-3 py-3">제목</th>
-                  <th className="w-32 px-3 py-3">작성자</th>
+                  <th className="w-24 px-3 py-3">작성자</th>
                   <th className="w-[8.5rem] px-3 py-3">작성일</th>
                   <th className="w-16 px-3 py-3">조회</th>
-                  <th className="w-[24rem] px-3 py-3">관리</th>
+                  <th className="w-36 px-3 py-3">관리</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredPosts.map((post) => {
+                  const category = getBoardCategory(post.board_type);
                   const editable = canEditPost(post, authUser);
                   const deletable = canDeletePost(post, authUser);
 
@@ -151,8 +174,8 @@ export default function AdminBoardPage() {
                     <tr key={post.id} className="border-t border-slate-100">
                       <td className="px-3 py-4">
                         <div className="flex flex-wrap gap-2">
-                          <Badge tone={categoryTone[post.category]}>{categoryLabels[post.category]}</Badge>
-                          {post.isHidden ? <Badge tone="amber">숨김</Badge> : null}
+                          <Badge tone={categoryTone[category]}>{categoryLabels[category]}</Badge>
+                          {post.is_pinned === 1 ? <Badge tone="amber">고정</Badge> : null}
                         </div>
                       </td>
                       <td className="px-3 py-4 font-black text-slate-950">
@@ -160,50 +183,21 @@ export default function AdminBoardPage() {
                           {post.title}
                         </Link>
                       </td>
-                      <td className="truncate px-3 py-4 font-semibold text-slate-600">{post.author}</td>
-                      <td className="truncate px-3 py-4 font-semibold text-slate-500">{post.createdAt}</td>
-                      <td className="px-3 py-4 font-semibold text-slate-500">{post.views}</td>
+                      <td className="truncate px-3 py-4 font-semibold text-slate-600">#{post.author_id}</td>
+                      <td className="truncate px-3 py-4 font-semibold text-slate-500">{formatBoardDate(post.created_at)}</td>
+                      <td className="px-3 py-4 font-semibold text-slate-500">{post.view_count}</td>
                       <td className="px-3 py-4">
                         <div className="flex flex-nowrap justify-end gap-1 whitespace-nowrap">
-                          <Link
-                            href={`/admin/board/${post.id}`}
-                            className="inline-flex min-h-8 items-center rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50"
-                          >
+                          <Link href={`/admin/board/${post.id}`} className="inline-flex min-h-8 items-center rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">
                             상세
                           </Link>
                           {editable ? (
-                            <Link
-                              href={`/admin/board/${post.id}/edit`}
-                              className="inline-flex min-h-8 items-center rounded-md border border-sky-200 px-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
-                            >
+                            <Link href={`/admin/board/${post.id}/edit`} className="inline-flex min-h-8 items-center rounded-md border border-sky-200 px-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">
                               수정
                             </Link>
                           ) : null}
-                          {canUseCommentManagement ? (
-                            <button
-                              type="button"
-                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                            >
-                              <MessageSquare className="h-3.5 w-3.5" />
-                              댓글 {post.commentsCount}
-                            </button>
-                          ) : null}
-                          {canUseHiddenControl ? (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleHidden(post.id)}
-                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-amber-200 px-2 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-                            >
-                              <EyeOff className="h-3.5 w-3.5" />
-                              {post.isHidden ? "해제" : "숨김"}
-                            </button>
-                          ) : null}
                           {deletable ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(post.id)}
-                              className="inline-flex min-h-8 items-center gap-1 rounded-md border border-red-200 px-2 text-xs font-bold text-red-700 transition hover:bg-red-50"
-                            >
+                            <button type="button" onClick={() => handleDelete(post)} disabled={deletingId === post.id} className="inline-flex min-h-8 items-center gap-1 rounded-md border border-red-200 px-2 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                               <Trash2 className="h-3.5 w-3.5" />
                               삭제
                             </button>
@@ -213,6 +207,11 @@ export default function AdminBoardPage() {
                     </tr>
                   );
                 })}
+                {!loading && filteredPosts.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-10 text-center text-sm font-semibold text-slate-500">게시글이 없습니다.</td>
+                  </tr>
+                ) : null}
               </tbody>
             </table>
           </div>

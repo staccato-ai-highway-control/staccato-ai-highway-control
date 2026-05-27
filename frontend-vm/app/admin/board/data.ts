@@ -1,4 +1,5 @@
 import type { AuthUser, UserRole } from "@/features/auth/types";
+import type { BoardPost } from "@/features/board/types";
 
 export type BoardCategory = "NOTICE" | "REFERENCE" | "DISCUSSION";
 export type BoardRole = Extract<UserRole, "SUPER_ADMIN" | "CONTROL_ADMIN" | "MAINTAINER">;
@@ -21,19 +22,6 @@ export type BoardComment = {
   replies: BoardComment[];
 };
 
-export type AdminBoardPost = {
-  id: string;
-  title: string;
-  category: BoardCategory;
-  author: string;
-  createdAt: string;
-  updatedAt: string;
-  views: number;
-  content: string;
-  isHidden?: boolean;
-  commentsCount: number;
-};
-
 export const categoryLabels: Record<BoardCategory, string> = {
   NOTICE: "공지",
   REFERENCE: "자료",
@@ -46,59 +34,28 @@ export const categoryTone: Record<BoardCategory, "blue" | "green" | "amber"> = {
   DISCUSSION: "amber",
 };
 
-export const boardPosts: AdminBoardPost[] = [
-  {
-    id: "1",
-    title: "5월 관제센터 정기 점검 안내",
-    category: "NOTICE",
-    author: "STACCATO Super Admin",
-    createdAt: "2026. 05. 04. 09:10",
-    updatedAt: "2026. 05. 04. 09:10",
-    views: 42,
-    commentsCount: 2,
-    content:
-      "5월 정기 점검은 2026년 5월 8일 02:00부터 04:00까지 진행됩니다. 점검 시간 동안 일부 관제 화면의 실시간 갱신이 지연될 수 있습니다.",
-  },
-  {
-    id: "2",
-    title: "CCTV 장애 대응 매뉴얼 v1.2",
-    category: "REFERENCE",
-    author: "김관리",
-    createdAt: "2026. 05. 02. 14:35",
-    updatedAt: "2026. 05. 03. 10:12",
-    views: 31,
-    commentsCount: 5,
-    content:
-      "CCTV 스트림 단절, ROI 오탐, AI 탐지 지연 상황별 점검 절차를 정리했습니다. 현장 점검 전 네트워크 상태와 장비 전원 로그를 먼저 확인해주세요.",
-  },
-  {
-    id: "3",
-    title: "야간 정차 차량 알림 기준 조정 의견",
-    category: "DISCUSSION",
-    author: "이순찰",
-    createdAt: "2026. 04. 30. 18:20",
-    updatedAt: "2026. 04. 30. 18:20",
-    views: 18,
-    commentsCount: 8,
-    content:
-      "야간 시간대 갓길 정차 알림이 다소 민감하게 발생한다는 의견이 있어 기준 조정이 필요한지 논의하고자 합니다.",
-  },
-  {
-    id: "4",
-    title: "출동 완료 보고서 작성 방식 제안",
-    category: "DISCUSSION",
-    author: "박순찰",
-    createdAt: "2026. 04. 29. 16:05",
-    updatedAt: "2026. 04. 29. 16:05",
-    views: 12,
-    commentsCount: 3,
-    content:
-      "출동 완료 후 관제자에게 공유할 처리 결과 항목을 위치, 안전조치, 후속 요청으로 나누어 작성하면 좋겠습니다.",
-  },
-];
+export function isBoardCategory(value: string): value is BoardCategory {
+  return value === "NOTICE" || value === "REFERENCE" || value === "DISCUSSION";
+}
 
-export function getBoardPost(id: string) {
-  return boardPosts.find((post) => post.id === id);
+export function getBoardCategory(value: string): BoardCategory {
+  return isBoardCategory(value) ? value : "DISCUSSION";
+}
+
+export function formatBoardDate(value: string | null | undefined) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 export function isMaintainerRole(role: UserRole | null | undefined) {
@@ -128,26 +85,21 @@ export function canCreatePost(user: AuthUser | null) {
   return getWritableCategories(user).length > 0;
 }
 
-export function isOwnPost(post: AdminBoardPost, user: AuthUser | null) {
-  const candidates = [user?.name, user?.login_id, user?.email].filter(Boolean);
-  return candidates.some((value) => post.author === value);
+export function isSuperAdmin(user: AuthUser | null) {
+  return user?.role === "SUPER_ADMIN";
 }
 
-export function canEditPost(post: AdminBoardPost, user: AuthUser | null) {
-  const role = getBoardRole(user?.role);
-
-  if (role === "SUPER_ADMIN") return true;
-  if (role === "CONTROL_ADMIN") return post.category !== "NOTICE" && isOwnPost(post, user);
-  if (role === "MAINTAINER") return post.category === "DISCUSSION" && isOwnPost(post, user);
-  return false;
+export function isOwnPost(post: BoardPost, user: AuthUser | null) {
+  if (!user?.id) return false;
+  return String(post.author_id) === String(user.id);
 }
 
-export function canDeletePost(post: AdminBoardPost, user: AuthUser | null) {
-  const role = getBoardRole(user?.role);
+export function canEditPost(post: BoardPost, user: AuthUser | null) {
+  return isSuperAdmin(user) || isOwnPost(post, user);
+}
 
-  if (role === "SUPER_ADMIN") return true;
-  if (role === "CONTROL_ADMIN") return post.category !== "NOTICE" && isOwnPost(post, user);
-  return false;
+export function canDeletePost(post: BoardPost, user: AuthUser | null) {
+  return isSuperAdmin(user) || isOwnPost(post, user);
 }
 
 export function canHidePost(user: AuthUser | null) {
@@ -162,79 +114,10 @@ export function canWriteComments(user: AuthUser | null) {
   return getBoardRole(user?.role) === "SUPER_ADMIN" || getBoardRole(user?.role) === "CONTROL_ADMIN" || getBoardRole(user?.role) === "MAINTAINER";
 }
 
-
-export const boardAttachmentsByPost: Record<string, BoardAttachment[]> = {
-  "1": [
-    { id: "file-1-1", fileName: "2026-05-maintenance-window.pdf", fileSize: "184 KB", fileType: "PDF", uploadedAt: "2026. 05. 04. 09:10" },
-  ],
-  "2": [
-    { id: "file-2-1", fileName: "cctv-failure-response-v1.2.pdf", fileSize: "1.2 MB", fileType: "PDF", uploadedAt: "2026. 05. 02. 14:36" },
-    { id: "file-2-2", fileName: "roi-checklist.xlsx", fileSize: "72 KB", fileType: "XLSX", uploadedAt: "2026. 05. 02. 14:37" },
-  ],
-  "3": [
-    { id: "file-3-1", fileName: "night-detection-threshold-sample.mp4", fileSize: "8.4 MB", fileType: "MP4", uploadedAt: "2026. 04. 30. 18:21" },
-  ],
-  "4": [],
-};
-
-export const boardCommentsByPost: Record<string, BoardComment[]> = {
-  "1": [
-    {
-      id: "comment-1-1",
-      author: "김관리",
-      content: "점검 시간 동안 알림 수신 지연 여부도 같이 확인하겠습니다.",
-      createdAt: "2026. 05. 04. 10:02",
-      replies: [
-        {
-          id: "reply-1-1-1",
-          author: "STACCATO Super Admin",
-          content: "WebSocket 알림 로그도 함께 남겨주세요.",
-          createdAt: "2026. 05. 04. 10:15",
-          replies: [],
-        },
-      ],
-    },
-  ],
-  "2": [
-    {
-      id: "comment-2-1",
-      author: "오관제",
-      content: "ROI 오탐 확인 절차가 추가되어 좋습니다. 현장 점검표에도 반영하겠습니다.",
-      createdAt: "2026. 05. 02. 15:05",
-      replies: [],
-    },
-    {
-      id: "comment-2-2",
-      author: "김관리",
-      content: "첨부한 체크리스트 기준으로 다음 주까지 피드백 주세요.",
-      createdAt: "2026. 05. 03. 09:20",
-      replies: [
-        {
-          id: "reply-2-2-1",
-          author: "문조회",
-          content: "확인했습니다. 2번 카메라 ROI 항목을 먼저 점검하겠습니다.",
-          createdAt: "2026. 05. 03. 10:11",
-          replies: [],
-        },
-      ],
-    },
-  ],
-  "3": [
-    {
-      id: "comment-3-1",
-      author: "이순찰",
-      content: "야간 샘플 영상 기준으로 갓길 구역 민감도를 낮추는 안을 제안합니다.",
-      createdAt: "2026. 04. 30. 18:45",
-      replies: [],
-    },
-  ],
-  "4": [],
-};
-
-export function getBoardAttachments(postId: string) {
-  return boardAttachmentsByPost[postId] ?? [];
+export function getBoardAttachments(_postId: string | number) {
+  return [] as BoardAttachment[];
 }
 
-export function getBoardComments(postId: string) {
-  return boardCommentsByPost[postId] ?? [];
+export function getBoardComments(_postId: string | number) {
+  return [] as BoardComment[];
 }
