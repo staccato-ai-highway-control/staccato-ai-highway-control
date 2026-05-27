@@ -204,7 +204,7 @@ export default function Home() {
               </p>
 
               <p className="mt-2 max-w-2xl text-lg leading-8 text-slate-200">
-                위험도 판단부터 관제 처리와 보고서 생성까지 연결합니다.
+                위험도 판단부터 관제 처리와 신고 관리까지 연결합니다.
               </p>
 
               <p className="mt-4 text-sm font-semibold text-slate-300">

@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+import logging
+
+from flask import Blueprint, jsonify, request
+
+from app.extensions import socketio
+from app.modules.ai_relay.service import (
+    RelayValidationError,
+    build_replay,
+    get_event,
+    list_events,
+    store_event,
+)
+
+
+logger = logging.getLogger(__name__)
+
+ai_relay_bp = Blueprint("ai_relay", __name__, url_prefix="/api")
+
+
+@ai_relay_bp.post("/events")
+def create_event():
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return jsonify({"ok": False, "success": False, "error": "JSON body is required"}), 400
+
+    try:
+        event, status = store_event(payload)
+    except RelayValidationError as exc:
+        return jsonify({"ok": False, "success": False, "error": str(exc)}), 400
+    except Exception:
+        logger.exception("Unexpected AI event persistence error")
+        return jsonify({"ok": False, "success": False, "error": "Internal server error"}), 500
+
+    event_dict = event.to_dict()
+    broadcast_queued = _emit("ai_event_received", event_dict)
+    status_code = 201 if status == "created" else 200
+
+    return jsonify({
+        "ok": True,
+        "success": True,
+        "status": status,
+        "event": event_dict,
+        "broadcast_queued": broadcast_queued,
+    }), status_code
+
+
+@ai_relay_bp.get("/events")
+def get_events():
+    events = list_events(
+        limit=request.args.get("limit", default=100, type=int),
+        camera_id=request.args.get("camera_id"),
+        event_type=request.args.get("event_type"),
+        status=request.args.get("status"),
+    )
+    event_items = [event.to_dict() for event in events]
+
+    return jsonify({
+        "ok": True,
+        "success": True,
+        "events": event_items,
+        "count": len(event_items),
+    }), 200
+
+
+@ai_relay_bp.get("/events/<event_id>")
+def get_event_detail(event_id: str):
+    event = get_event(event_id)
+    if event is None:
+        return jsonify({"ok": False, "success": False, "error": "event not found"}), 404
+
+    return jsonify({"ok": True, "success": True, "event": event.to_dict()}), 200
+
+
+@ai_relay_bp.get("/replays/<event_id>")
+def get_replay(event_id: str):
+    event = get_event(event_id)
+    if event is None:
+        return jsonify({"ok": False, "success": False, "error": "event not found"}), 404
+
+    return jsonify({"ok": True, "success": True, "replay": build_replay(event)}), 200
+
+
+def _emit(event_name: str, payload: dict) -> bool:
+    try:
+        socketio.emit(event_name, payload)
+        return True
+    except Exception:
+        logger.exception("Failed to emit %s", event_name)
+        return False
