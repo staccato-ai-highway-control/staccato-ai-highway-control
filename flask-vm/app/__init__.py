@@ -55,33 +55,24 @@ from app.modules.realtime.routes import realtime_bp
 # ============================================================
 from app.modules.report_upload.routes import report_upload_bp
 from app.modules.location_search.routes import location_search_bp
+from app.modules.cctv.routes import cctv_bp
 
 
 
 
 
 # ============================================================
-# LLM Gateway Module
-# - 담당: Flask ↔ LLM 서버 연동
-# - 파일 위치: app/modules/llm_gateway/
 # ============================================================
-# MVP 제외 기능: LLM / 챗봇 / 채팅
 # 최종 MVP 범위에서 제외되었으므로 관련 blueprint import/register는 비활성화합니다.
 # 관련 모듈과 DB 테이블은 보존하고 API 노출만 차단합니다.
-# from app.modules.llm_gateway.routes import llm_gateway_bp
-# from app.modules.llm_report.routes import llm_report_bp
 # ============================================================
-# Chatbot Module
 # - 담당: 사고 질의응답 챗봇
-# - 파일 위치: app/modules/chatbot/
 # ============================================================
-# from app.modules.chatbot.routes import chatbot_bp
 # ============================================================
 # Chat Module
 # - 담당: 사고 대응 채팅
 # - 파일 위치: app/modules/chat/
 # ============================================================
-# from app.modules.chat.routes import chat_bp
 from app.modules.frontend_config.routes import frontend_config_bp
 
 
@@ -153,6 +144,7 @@ def register_blueprints(app):
     app.register_blueprint(realtime_bp)
     app.register_blueprint(report_upload_bp)
     app.register_blueprint(location_search_bp)
+    app.register_blueprint(cctv_bp)
 
 
 
@@ -163,12 +155,7 @@ def register_blueprints(app):
 
 
     # ========================================================
-    # LLM / Chatbot / Chat
     # ========================================================
-    # app.register_blueprint(llm_gateway_bp)
-    # app.register_blueprint(llm_report_bp)
-    # app.register_blueprint(chatbot_bp)
-    # app.register_blueprint(chat_bp)
     app.register_blueprint(frontend_config_bp)
     app.register_blueprint(dashboard_bp)
 

@@ -2,36 +2,6 @@
 
 USE staccato;
 
-CREATE INDEX idx_incident_status_histories_incident_created
-    ON incident_status_histories(incident_id, created_at);
-
-CREATE INDEX idx_incident_memos_incident_created
-    ON incident_memos(incident_id, created_at);
-
-CREATE INDEX idx_report_uploads_user_status
-    ON report_uploads(uploaded_by, upload_status);
-
-CREATE INDEX idx_report_uploads_incident
-    ON report_uploads(incident_id);
-
-CREATE INDEX idx_report_attachments_incident
-    ON report_attachments(incident_id);
-
-CREATE INDEX idx_analysis_jobs_status_created
-    ON analysis_jobs(job_status, created_at);
-
-CREATE INDEX idx_analysis_jobs_incident
-    ON analysis_jobs(incident_id);
-
-CREATE INDEX idx_analysis_jobs_upload
-    ON analysis_jobs(upload_id);
-
-CREATE INDEX idx_llm_reports_incident
-    ON llm_reports(incident_id);
-
-CREATE INDEX idx_llm_reports_status_created
-    ON llm_reports(report_status, created_at);
-
 CREATE INDEX idx_its_weather_incident_observed
     ON its_weather_snapshots(incident_id, observed_at);
 

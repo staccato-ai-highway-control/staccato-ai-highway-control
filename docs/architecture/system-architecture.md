@@ -19,8 +19,6 @@ The final MVP focuses on:
 
 The following features are excluded from the final MVP:
 
-- LLM report generation
-- LLM chatbot
 - Map API
 - GPS-based frontend display
 - Full Docker Compose deployment
@@ -119,9 +117,6 @@ The following features are excluded from the final MVP:
 
 The following architecture elements are excluded from the final MVP:
 
-- LLM server
-- LLM report generation
-- LLM chatbot
 - Map API
 - GPS-based frontend display
 - Full Docker Compose deployment

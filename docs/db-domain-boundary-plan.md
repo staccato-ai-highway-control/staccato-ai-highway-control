@@ -52,7 +52,6 @@
 | member DB | users, signup_requests, email_verifications, identity_oauth_states, security_logs |
 | board DB | board_posts, board_comments, board_attachments, board_reactions |
 | incident DB | incident_reports, report_attachments, report_locations, report_analysis_jobs, report_memos, report_status_histories, incidents, incident_memos, incident_status_histories |
-| chat DB | chat_rooms, chat_room_members, chat_messages, chat_message_reads, chatbot_conversations, chatbot_messages |
 | AI DB | ai_models, ai_model_versions, training_datasets, training_jobs, detection_logs, incident_snapshots |
 | ITS/Risk DB | its_weather_snapshots, its_traffic_snapshots, its_risk_scores, risk_context_snapshots, risk_calculation_logs |
 | notification DB | notifications, notification_deliveries |
@@ -72,10 +71,6 @@
 - board_comments.author_id
 - board_attachments.uploaded_by
 - board_reactions.user_id
-- chat_rooms.created_by
-- chat_room_members.user_id
-- chat_messages.sender_user_id
-- chat_message_reads.user_id
 - incident_reports.reporter_id
 - incident_reports.reviewed_by
 - incident_reports.closed_by
@@ -83,9 +78,6 @@
 - report_attachments.uploaded_by
 - report_attachments.deleted_by
 - report_analysis_jobs.requested_by
-- llm_reports.generated_by
-- llm_report_versions.edited_by
-- llm_report_status_histories.changed_by
 - ai_models.owner_user_id
 - training_datasets.created_by
 - training_jobs.requested_by
@@ -102,11 +94,6 @@
 
 대표 제거 후보는 다음과 같다.
 
-- chat_rooms.incident_id
-- chat_messages.incident_id
-- chatbot_conversations.incident_id
-- chatbot_messages.incident_id
-- llm_reports.incident_id
 - detection_logs.incident_id
 - incident_snapshots.incident_id
 - notifications.incident_id
@@ -120,9 +107,7 @@
 
 ### 3순위: board_attachments FK
 
-특히 아래 FK는 chat DB와 board DB 분리를 어렵게 만든다.
 
-- chat_messages.attachment_id -> board_attachments.id
 
 대안은 다음과 같다.
 

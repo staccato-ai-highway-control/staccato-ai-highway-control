@@ -94,8 +94,6 @@ desktop.ini
 ai-vm/.env
 ai-vm/**/.env
 
-# LLM model checkpoint
-ai-vm/llm-server/storage/models/llm/*.pt
 
 # Python cache
 __pycache__/
