@@ -18,6 +18,7 @@ from app.extensions import init_extensions
 # - 예: health check
 # ============================================================
 from app.modules.health.routes import health_bp
+from app.modules.ai_relay.routes import ai_relay_bp
 
 
 
@@ -120,6 +121,7 @@ def register_blueprints(app):
     # Common
     # ========================================================
     app.register_blueprint(health_bp)
+    app.register_blueprint(ai_relay_bp)
 
 
 

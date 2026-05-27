@@ -8,6 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-RUN mkdir -p /app/storage/uploads /app/storage/snapshots /app/storage/results
+RUN mkdir -p /app/storage/uploads /app/storage/snapshots /app/storage/results /app/storage/event_media
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]
