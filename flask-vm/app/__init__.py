@@ -1,4 +1,5 @@
 from flask import Flask
+from app.modules.chat.routes import chat_bp
 
 # ============================================================
 # Core / App Config
@@ -113,6 +114,7 @@ def register_blueprints(app):
     # ========================================================
     app.register_blueprint(health_bp)
     app.register_blueprint(ai_relay_bp)
+    app.register_blueprint(chat_bp)
 
 
 

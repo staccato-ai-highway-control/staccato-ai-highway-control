@@ -65,6 +65,16 @@ from app.models.ai_event_models import (
     AiEvent,
 )
 
+from app.models.chat_models import (
+    ChatMessage,
+    ChatMessageRead,
+    ChatRoom,
+)
+
+from app.models.chat_support_models import (
+    ChatRoomMember,
+)
+
 from app.models.cctv_models import (
     Cctv,
     CctvRoi,
@@ -110,6 +120,10 @@ __all__ = [
     "NotificationDelivery",
     "RealtimeEvent",
     "AiEvent",
+    "ChatRoomMember",
+    "ChatMessageRead",
+    "ChatMessage",
+    "ChatRoom",
     "Cctv",
     "CctvRoi",
     "CctvStatusLog",
