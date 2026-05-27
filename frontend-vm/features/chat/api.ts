@@ -7,7 +7,7 @@ import type {
   ChatRoomStatus,
   CreateChatRoomRequest,
 } from "./types";
-export type { ChatbotAnswer, ChatbotIncidentContext, ChatMessageDto, ChatMessagesDto, ChatRoomDto } from "./types";
+export type { ChatMessageDto, ChatMessagesDto, ChatRoomDto } from "./types";
 
 export function getOrCreateChatRoom(incidentId: number | string) {
   return apiClient<ApiEnvelope<ChatRoomDto>>('/incidents/' + incidentId + '/chat-room', {
