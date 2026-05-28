@@ -94,7 +94,7 @@ export function useRealtimeIncidents(limit = 30) {
     }
 
     const socket = io(socketBaseUrl, {
-      transports: ["polling", "websocket"],
+      transports: ["polling"],
       withCredentials: true,
       auth: {
         token: accessToken,
