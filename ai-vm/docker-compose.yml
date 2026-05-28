@@ -9,12 +9,3 @@ services:
       - ./ai-server/storage:/app/storage
     restart: unless-stopped
 
-  llm-server:
-    build:
-      context: ./llm-server
-    container_name: staccato-llm-server
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./llm-server/storage:/app/storage
-    restart: unless-stopped

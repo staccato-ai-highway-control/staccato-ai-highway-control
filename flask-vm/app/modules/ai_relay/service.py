@@ -30,19 +30,25 @@ def store_event(payload: dict[str, Any]) -> tuple[AiEvent, str]:
             f"event_id must be {EVENT_ID_MAX_LENGTH} characters or fewer"
         )
 
+    now = _utc_now_naive()
     event = db.session.get(AiEvent, event_id)
     status = "updated" if event else "created"
 
     if event is None:
-        event = AiEvent(event_id=event_id)
+        event = AiEvent(event_id=event_id, received_at=now)
         db.session.add(event)
+    else:
+        event.updated_at = now
 
     event.camera_id = camera_id
     event.event_type = event_type.upper()
     event.severity = (_optional_string(payload, "severity") or "INFO").upper()
+    event.status = (_optional_string(payload, "status") or "NEW").upper()
     event.event_timestamp = event_timestamp
+    event.track_id = _optional_string(payload, "track_id")
     event.roi_id = _optional_string(payload, "roi_id")
     event.lane_type = _optional_string(payload, "lane_type")
+    event.bbox_json = payload.get("bbox")
     event.snapshot_url = _optional_string(payload, "snapshot_url")
     event.video_url = _optional_string(payload, "video_url")
     event.stream_url = _optional_string(payload, "stream_url")
@@ -59,6 +65,7 @@ def list_events(
     limit: int | None = DEFAULT_EVENT_LIMIT,
     camera_id: str | None = None,
     event_type: str | None = None,
+    status: str | None = None,
 ) -> list[AiEvent]:
     safe_limit = _safe_limit(limit)
 
@@ -72,10 +79,15 @@ def list_events(
     if clean_event_type:
         query = query.filter(AiEvent.event_type == clean_event_type.upper())
 
+    clean_status = _clean_string(status)
+    if clean_status:
+        query = query.filter(AiEvent.status == clean_status.upper())
+
     return (
         query
         .order_by(
             AiEvent.event_timestamp.desc(),
+            AiEvent.received_at.desc(),
             AiEvent.event_id.desc(),
         )
         .limit(safe_limit)
@@ -150,3 +162,7 @@ def _safe_limit(limit: int | None) -> int:
         return DEFAULT_EVENT_LIMIT
 
     return min(parsed, MAX_EVENT_LIMIT)
+
+
+def _utc_now_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)

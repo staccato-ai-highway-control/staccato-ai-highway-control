@@ -106,7 +106,6 @@ CREATE TABLE IF NOT EXISTS incident_snapshots (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS llm_reports (
     id BIGINT NOT NULL AUTO_INCREMENT,
 
     incident_id BIGINT NOT NULL,
@@ -121,7 +120,6 @@ CREATE TABLE IF NOT EXISTS llm_reports (
 
     model_name VARCHAR(100) NULL,
     token_usage_json JSON NULL,
-    llm_response_json JSON NULL,
 
     error_message TEXT NULL,
 
@@ -130,17 +128,11 @@ CREATE TABLE IF NOT EXISTS llm_reports (
     confirmed_at DATETIME NULL,
 
     PRIMARY KEY (id),
-    KEY idx_llm_reports_incident_id (incident_id),
-    KEY idx_llm_reports_generated_by (generated_by),
-    KEY idx_llm_reports_status (report_status),
-    KEY idx_llm_reports_created_at (created_at),
 
-    CONSTRAINT fk_llm_reports_incident_id
         FOREIGN KEY (incident_id)
         REFERENCES incidents(id)
         ON DELETE CASCADE,
 
-    CONSTRAINT fk_llm_reports_generated_by
         FOREIGN KEY (generated_by)
         REFERENCES users(id)
         ON DELETE SET NULL

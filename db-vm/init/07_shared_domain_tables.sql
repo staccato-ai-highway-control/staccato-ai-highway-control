@@ -217,7 +217,6 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chat_rooms (
     id BIGINT NOT NULL AUTO_INCREMENT,
     incident_id BIGINT NULL,
     room_type VARCHAR(50) NOT NULL DEFAULT 'INCIDENT',
@@ -226,19 +225,14 @@ CREATE TABLE IF NOT EXISTS chat_rooms (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     closed_at DATETIME NULL,
     PRIMARY KEY (id),
-    KEY idx_chat_rooms_incident_id (incident_id),
-    KEY idx_chat_rooms_status (room_status),
-    CONSTRAINT fk_chat_rooms_incident_id
         FOREIGN KEY (incident_id)
         REFERENCES incidents(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_chat_rooms_created_by
         FOREIGN KEY (created_by)
         REFERENCES users(id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chat_messages (
     id BIGINT NOT NULL AUTO_INCREMENT,
     room_id BIGINT NOT NULL,
     incident_id BIGINT NULL,
@@ -249,46 +243,31 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at DATETIME NULL,
     PRIMARY KEY (id),
-    KEY idx_chat_messages_room_created (room_id, created_at),
-    KEY idx_chat_messages_incident_id (incident_id),
-    KEY idx_chat_messages_sender_id (sender_user_id),
-    CONSTRAINT fk_chat_messages_room_id
         FOREIGN KEY (room_id)
-        REFERENCES chat_rooms(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_chat_messages_incident_id
         FOREIGN KEY (incident_id)
         REFERENCES incidents(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_chat_messages_sender_id
         FOREIGN KEY (sender_user_id)
         REFERENCES users(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_chat_messages_attachment_id
         FOREIGN KEY (attachment_id)
         REFERENCES board_attachments(id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chat_message_reads (
     id BIGINT NOT NULL AUTO_INCREMENT,
     message_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     read_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_chat_message_reads_message_user (message_id, user_id),
-    KEY idx_chat_message_reads_user_id (user_id),
-    CONSTRAINT fk_chat_message_reads_message_id
         FOREIGN KEY (message_id)
-        REFERENCES chat_messages(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_chat_message_reads_user_id
         FOREIGN KEY (user_id)
         REFERENCES users(id)
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chatbot_conversations (
     id BIGINT NOT NULL AUTO_INCREMENT,
     user_id BIGINT NULL,
     incident_id BIGINT NULL,
@@ -298,43 +277,30 @@ CREATE TABLE IF NOT EXISTS chatbot_conversations (
     updated_at DATETIME NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
     closed_at DATETIME NULL,
     PRIMARY KEY (id),
-    KEY idx_chatbot_conversations_user_id (user_id),
-    KEY idx_chatbot_conversations_incident_id (incident_id),
-    CONSTRAINT fk_chatbot_conversations_user_id
         FOREIGN KEY (user_id)
         REFERENCES users(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_chatbot_conversations_incident_id
         FOREIGN KEY (incident_id)
         REFERENCES incidents(id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chatbot_messages (
     id BIGINT NOT NULL AUTO_INCREMENT,
     conversation_id BIGINT NOT NULL,
     incident_id BIGINT NULL,
     user_id BIGINT NULL,
     sender_type VARCHAR(50) NOT NULL,
     message TEXT NOT NULL,
-    llm_model_name VARCHAR(100) NULL,
     prompt_text TEXT NULL,
     context_json JSON NULL,
     token_usage_json JSON NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_chatbot_messages_conversation_created (conversation_id, created_at),
-    KEY idx_chatbot_messages_incident_id (incident_id),
-    KEY idx_chatbot_messages_user_id (user_id),
-    CONSTRAINT fk_chatbot_messages_conversation_id
         FOREIGN KEY (conversation_id)
-        REFERENCES chatbot_conversations(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_chatbot_messages_incident_id
         FOREIGN KEY (incident_id)
         REFERENCES incidents(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_chatbot_messages_user_id
         FOREIGN KEY (user_id)
         REFERENCES users(id)
         ON DELETE SET NULL

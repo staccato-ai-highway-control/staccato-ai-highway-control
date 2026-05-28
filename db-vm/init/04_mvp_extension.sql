@@ -150,7 +150,6 @@ CREATE TABLE IF NOT EXISTS analysis_jobs (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS llm_reports (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     incident_id BIGINT NULL,
     generated_by BIGINT NULL,
@@ -173,10 +172,8 @@ CREATE TABLE IF NOT EXISTS llm_reports (
     token_usage_json JSON NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_llm_reports_incident
         FOREIGN KEY (incident_id) REFERENCES incidents(id)
         ON DELETE SET NULL,
-    CONSTRAINT fk_llm_reports_user
         FOREIGN KEY (generated_by) REFERENCES users(id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

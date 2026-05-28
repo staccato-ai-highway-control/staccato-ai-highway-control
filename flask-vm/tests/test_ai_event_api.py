@@ -43,6 +43,7 @@ def _payload(**overrides):
         "event_type": "STOPPED_VEHICLE",
         "severity": "WARNING",
         "timestamp": "2026-05-26T10:45:12+09:00",
+        "track_id": 7,
         "roi_id": "shoulder_1",
         "lane_type": "SHOULDER",
         "bbox": [820, 430, 940, 510],
@@ -79,7 +80,7 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
         assert event.video_url == "http://127.0.0.1:5001/events/evt_20260526_0001.mp4"
         assert event.snapshot_url == "http://127.0.0.1:5001/events/evt_20260526_0001.jpg"
         assert event.stream_url == "http://127.0.0.1:5001/streams/camera-1.mjpeg"
-        assert event.raw_event_json["bbox"] == [820, 430, 940, 510]
+        assert event.bbox_json == [820, 430, 940, 510]
         assert event.raw_event_json["message"] == "Stopped vehicle detected in shoulder ROI"
 
 

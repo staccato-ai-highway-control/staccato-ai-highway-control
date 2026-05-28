@@ -4,7 +4,6 @@
 
 - STACCATO 5개 서버 구조
 - Frontend / Flask / AI / ITS / DB 역할
-- LLM은 Flask 내부 모듈
 - Flask만 DB 직접 접근
 - AI 서버는 분석 결과만 Flask로 반환
 - ITS 서버는 위험도 보조 데이터 제공

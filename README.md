@@ -18,8 +18,6 @@ Final MVP focus:
 
 Excluded from final MVP:
 
-- LLM report generation
-- LLM chatbot
 - Map API
 - GPS based location display
 - Full Docker Compose deployment
@@ -44,7 +42,6 @@ AI-based traffic incident control system for detecting stopped vehicles on drivi
 | FRONTEND-VM | Node.js/npm |
 | AI-VM | Docker |
 | ITS-VM | Python/FastAPI |
-| LLM Server | AI-VM internal service |
 
 자세한 서버 세팅 기준은 `docs/infra` 문서를 참고합니다.
 
@@ -59,7 +56,6 @@ AI-based traffic incident control system for detecting stopped vehicles on drivi
 
 - `.env`, `.env.local`, `.venv`, `node_modules`는 Git에 올리지 않습니다.
 - Docker는 `AI-VM`에서만 사용합니다.
-- 유지되는 Docker 파일은 `ai-vm/docker-compose.yml`, `ai-vm/llm-server/Dockerfile`입니다.
 - `DB-VM`, `FLASK-VM`, `FRONTEND-VM`, `ITS-VM`에서는 Docker를 사용하지 않습니다.
 - 루트 `docker-compose.yml`과 비-AI VM의 Dockerfile은 삭제되었습니다.
 - 실제 서버 실행 상태, DB 데이터, 설치된 패키지는 Git pull만으로 복제되지 않습니다.

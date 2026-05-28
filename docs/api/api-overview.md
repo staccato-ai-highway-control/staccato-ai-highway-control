@@ -31,13 +31,10 @@ Flask owns DB access and API response contracts.
 
 | Domain | Status |
 |---|---|
-| LLM Report API | Excluded from final MVP |
-| Chatbot API | Excluded from final MVP |
 | Map API | Excluded from final MVP |
 | GPS API | Excluded from final MVP |
 | Automatic retraining API | Excluded from final MVP |
 
-Older LLM API documents are retained only as deprecated historical references.
 
 ---
 

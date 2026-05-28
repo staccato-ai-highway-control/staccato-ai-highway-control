@@ -95,7 +95,6 @@ CREATE TABLE IF NOT EXISTS incident_memos (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS llm_report_versions (
     id BIGINT NOT NULL AUTO_INCREMENT,
     report_id BIGINT NOT NULL,
     version_no INT NOT NULL DEFAULT 1,
@@ -105,20 +104,13 @@ CREATE TABLE IF NOT EXISTS llm_report_versions (
     change_summary TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_llm_report_versions_report_version (report_id, version_no),
-    KEY idx_llm_report_versions_report_id (report_id),
-    KEY idx_llm_report_versions_edited_by (edited_by),
-    CONSTRAINT fk_llm_report_versions_report_id
         FOREIGN KEY (report_id)
-        REFERENCES llm_reports(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_llm_report_versions_edited_by
         FOREIGN KEY (edited_by)
         REFERENCES users(id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS llm_report_status_histories (
     id BIGINT NOT NULL AUTO_INCREMENT,
     report_id BIGINT NOT NULL,
     previous_status VARCHAR(50) NULL,
@@ -127,13 +119,8 @@ CREATE TABLE IF NOT EXISTS llm_report_status_histories (
     change_reason TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_llm_report_status_histories_report_id (report_id),
-    KEY idx_llm_report_status_histories_changed_by (changed_by),
-    CONSTRAINT fk_llm_report_status_histories_report_id
         FOREIGN KEY (report_id)
-        REFERENCES llm_reports(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_llm_report_status_histories_changed_by
         FOREIGN KEY (changed_by)
         REFERENCES users(id)
         ON DELETE SET NULL
@@ -219,7 +206,6 @@ CREATE TABLE IF NOT EXISTS board_reactions (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE TABLE IF NOT EXISTS chat_room_members (
     id BIGINT NOT NULL AUTO_INCREMENT,
     room_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -227,13 +213,8 @@ CREATE TABLE IF NOT EXISTS chat_room_members (
     joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     left_at DATETIME NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_chat_room_members_room_user (room_id, user_id),
-    KEY idx_chat_room_members_user_id (user_id),
-    CONSTRAINT fk_chat_room_members_room_id
         FOREIGN KEY (room_id)
-        REFERENCES chat_rooms(id)
         ON DELETE CASCADE,
-    CONSTRAINT fk_chat_room_members_user_id
         FOREIGN KEY (user_id)
         REFERENCES users(id)
         ON DELETE CASCADE
