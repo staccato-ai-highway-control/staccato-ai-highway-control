@@ -53,6 +53,45 @@ def list_my_reports():
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
+
+@report_upload_bp.route("/attachments/<int:attachment_id>/preview", methods=["GET"])
+@require_auth
+def preview_report_attachment(attachment_id):
+    try:
+        result, status_code = ReportUploadService.get_attachment_file(
+            attachment_id=attachment_id,
+            current_user=request.current_user,
+            as_download=False,
+        )
+
+        if status_code == 200:
+            return result
+
+        return jsonify(result), status_code
+    except Exception:
+        logger.exception("리포트 첨부파일 미리보기 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/attachments/<int:attachment_id>/download", methods=["GET"])
+@require_auth
+def download_report_attachment(attachment_id):
+    try:
+        result, status_code = ReportUploadService.get_attachment_file(
+            attachment_id=attachment_id,
+            current_user=request.current_user,
+            as_download=True,
+        )
+
+        if status_code == 200:
+            return result
+
+        return jsonify(result), status_code
+    except Exception:
+        logger.exception("리포트 첨부파일 다운로드 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
 @report_upload_bp.route("/<int:report_id>", methods=["GET"])
 @require_auth
 def get_report(report_id):

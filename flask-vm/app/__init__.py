@@ -58,7 +58,10 @@ from app.modules.report_upload.routes import report_upload_bp
 from app.modules.location_search.routes import location_search_bp
 from app.modules.cctv.routes import cctv_bp
 from app.modules.bug_report import bug_report_bp
+<<<<<<< HEAD
 from app.modules.replay import replay_bp
+=======
+>>>>>>> origin/develop
 
 
 
@@ -150,7 +153,10 @@ def register_blueprints(app):
     app.register_blueprint(location_search_bp)
     app.register_blueprint(cctv_bp)
     app.register_blueprint(bug_report_bp)
+<<<<<<< HEAD
     app.register_blueprint(replay_bp)
+=======
+>>>>>>> origin/develop
 
 
 
