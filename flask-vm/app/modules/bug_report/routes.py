@@ -4,6 +4,8 @@ from flask import Blueprint, jsonify, request
 
 from app.modules.bug_report.service import (
     create_bug_report,
+    create_bug_report_attachments,
+    get_bug_report_attachment_file,
     get_bug_report_detail,
     list_bug_reports,
 )
@@ -36,9 +38,21 @@ def get_bug_report_detail_api(bug_report_id: int):
 
 @bug_report_bp.post("/<int:bug_report_id>/attachments")
 def create_bug_report_attachment_api(bug_report_id: int):
-    # TODO: implement multipart attachment upload in a follow-up task.
-    return jsonify({
-        "success": False,
-        "error": "Bug report attachment upload is not implemented yet.",
-        "bug_report_id": bug_report_id,
-    }), 501
+    try:
+        files = request.files.getlist("files")
+        result, status_code = create_bug_report_attachments(bug_report_id, files)
+        return jsonify(result), status_code
+    except Exception:
+        return jsonify({
+            "success": False,
+            "error": "Failed to upload bug report attachments.",
+            "bug_report_id": bug_report_id,
+        }), 500
+
+
+@bug_report_bp.get("/attachments/<int:attachment_id>/download")
+def download_bug_report_attachment_api(attachment_id: int):
+    result, status_code = get_bug_report_attachment_file(attachment_id)
+    if status_code == 200:
+        return result
+    return jsonify(result), status_code

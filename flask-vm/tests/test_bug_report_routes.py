@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from app import create_app
 
 
@@ -99,16 +101,48 @@ def test_get_bug_report_detail_route(monkeypatch):
     assert body["data"]["attachments"] == []
 
 
-def test_bug_report_attachment_route_is_todo():
+def test_bug_report_attachment_route_uploads_files(monkeypatch):
     app = create_app({"TESTING": True})
 
+    def fake_create_bug_report_attachments(bug_report_id, files):
+        assert bug_report_id == 10
+        assert len(files) == 1
+        assert files[0].filename == "screenshot.png"
+        return {
+            "success": True,
+            "message": "Bug report attachments uploaded.",
+            "bug_report_id": bug_report_id,
+            "count": 1,
+            "items": [
+                {
+                    "id": 1,
+                    "bug_report_id": bug_report_id,
+                    "original_filename": "screenshot.png",
+                    "download_url": "/api/bug-reports/attachments/1/download",
+                }
+            ],
+        }, 201
+
+    monkeypatch.setattr(
+        "app.modules.bug_report.routes.create_bug_report_attachments",
+        fake_create_bug_report_attachments,
+    )
+
     with app.test_client() as client:
-        response = client.post("/api/bug-reports/10/attachments")
+        response = client.post(
+            "/api/bug-reports/10/attachments",
+            data={
+                "files": (BytesIO(b"fake image"), "screenshot.png"),
+            },
+            content_type="multipart/form-data",
+        )
 
     body = response.get_json()
-    assert response.status_code == 501
-    assert body["success"] is False
+    assert response.status_code == 201
+    assert body["success"] is True
     assert body["bug_report_id"] == 10
+    assert body["count"] == 1
+    assert body["items"][0]["download_url"] == "/api/bug-reports/attachments/1/download"
 
 
 def test_bug_report_routes_are_registered():
@@ -125,4 +159,8 @@ def test_bug_report_routes_are_registered():
     assert (
         "/api/bug-reports/<int:bug_report_id>/attachments",
         ("POST",),
+    ) in routes
+    assert (
+        "/api/bug-reports/attachments/<int:attachment_id>/download",
+        ("GET",),
     ) in routes
