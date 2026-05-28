@@ -594,6 +594,60 @@ class ReportUploadService:
             "total_pages": pagination.pages,
         }, 200
 
+
+    @staticmethod
+    def submit_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportStatusHistory
+
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 상태의 신고만 최종 제출할 수 있습니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 제출 권한이 없습니다.",
+            }, 403
+
+        now = ReportUploadService._now()
+        previous_status = report.status
+
+        report.status = "SUBMITTED"
+        report.upload_purpose = "REPORT"
+        report.submitted_at = now
+        report.updated_at = now
+
+        history = ReportStatusHistory(
+            report_id=report.id,
+            previous_status=previous_status,
+            new_status="SUBMITTED",
+            changed_by=current_user.id,
+            change_reason="Draft submitted",
+            created_at=now,
+        )
+
+        db.session.add(history)
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 최종 제출되었습니다.",
+            "report": ReportUploadService._report_response(report),
+            "report_id": report.id,
+        }, 200
+
+
     @staticmethod
     def get_report_draft(draft_id, current_user):
         from app.extensions import db
