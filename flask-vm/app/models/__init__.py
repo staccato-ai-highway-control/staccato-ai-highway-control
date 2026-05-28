@@ -39,6 +39,11 @@ from app.models.board_support_models import (
     BoardReaction,
 )
 
+from app.models.bug_report_models import (
+    BugReport,
+    BugReportAttachment,
+)
+
 from app.models.its_models import (
     ExternalApiLog,
     ItsRiskScore,
@@ -110,6 +115,8 @@ __all__ = [
     "BoardComment",
     "BoardAttachment",
     "BoardReaction",
+    "BugReport",
+    "BugReportAttachment",
     "ItsWeatherSnapshot",
     "ItsTrafficSnapshot",
     "ItsRiskScore",
@@ -134,5 +141,3 @@ __all__ = [
     "TrainingDataset",
     "TrainingJob",
 ]
-
-from app.models.bug_report_models import BugReport, BugReportAttachment
