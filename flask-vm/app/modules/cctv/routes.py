@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.extensions import db
 from app.models import Cctv, CctvRoi, CctvSlot, CctvStatusLog
@@ -160,6 +165,74 @@ def _list_cctvs():
     return [_serialize_cctv(item) for item in items]
 
 
+def _parse_limit(default: int = 8, max_limit: int = 100) -> int:
+    raw_value = request.args.get("limit", default)
+
+    try:
+        limit = int(raw_value)
+    except (TypeError, ValueError):
+        limit = default
+
+    if limit <= 0:
+        return default
+
+    return min(limit, max_limit)
+
+
+def _ai_vm_base_url() -> str:
+    # Prefer AI-vm address. Keep legacy ITS_SERVER_URL only as fallback.
+    return (
+        current_app.config.get("AI_VM_BASE_URL")
+        or os.environ.get("AI_VM_BASE_URL")
+        or os.environ.get("ITS_SERVER_URL")
+        or "http://192.168.0.186:8001"
+        or current_app.config.get("ITS_SERVER_URL")
+    ).rstrip("/")
+
+
+def _fetch_its_cctvs_from_ai_vm() -> list[dict]:
+    base_url = _ai_vm_base_url()
+    limit = _parse_limit(default=8, max_limit=100)
+
+    passthrough_keys = ["minX", "maxX", "minY", "maxY", "cctvType", "roadType"]
+    query_params = {
+        key: request.args.get(key)
+        for key in passthrough_keys
+        if request.args.get(key) not in (None, "")
+    }
+
+    query = urllib.parse.urlencode(query_params)
+    url = f"{base_url}/its/cctvs"
+    if query:
+        url = f"{url}?{query}"
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "STACCATO-FLASK-VM/1.0"},
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            raw_text = response.read().decode("utf-8", errors="replace")
+        payload = json.loads(raw_text)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"AI-vm ITS API HTTP error: {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"AI-vm ITS API connection failed: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("AI-vm ITS API returned non-JSON response.") from exc
+
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        items = []
+
+    return items[:limit]
+
+
+def _is_its_source_request() -> bool:
+    return str(request.args.get("source") or "").strip().lower() in {"its", "ai-vm", "aivm"}
+
+
 def _get_cctv_by_code(code: str):
     clean_code = str(code or "").strip()
     if not clean_code:
@@ -253,15 +326,32 @@ def _update_slot_from_payload(slot: CctvSlot, payload: dict) -> None:
 
 
 @cctv_bp.get("/cctvs")
-def get_cctvs():
-    items = _list_cctvs()
+def list_cctvs():
+    if _is_its_source_request():
+        try:
+            items = _fetch_its_cctvs_from_ai_vm()
+        except RuntimeError as exc:
+            return jsonify({
+                "success": False,
+                "source": "ITS",
+                "message": str(exc),
+                "items": [],
+                "count": 0,
+            }), 502
 
+        return jsonify({
+            "success": True,
+            "source": "ITS",
+            "count": len(items),
+            "items": items,
+        })
+
+    items = _list_cctvs()
     return jsonify({
         "success": True,
         "count": len(items),
         "items": items,
-    }), 200
-
+    })
 
 @cctv_bp.post("/cctvs")
 def create_cctv():
@@ -525,16 +615,35 @@ def put_cctv_slots():
 
 
 @cctv_bp.get("/cameras")
-def get_cameras():
-    cameras = _list_cctvs()
+def list_cameras():
+    if _is_its_source_request():
+        try:
+            items = _fetch_its_cctvs_from_ai_vm()
+        except RuntimeError as exc:
+            return jsonify({
+                "success": False,
+                "ok": False,
+                "source": "ITS",
+                "message": str(exc),
+                "cameras": [],
+                "count": 0,
+            }), 502
 
+        return jsonify({
+            "success": True,
+            "ok": True,
+            "source": "ITS",
+            "count": len(items),
+            "cameras": items,
+        })
+
+    items = _list_cctvs()
     return jsonify({
-        "ok": True,
         "success": True,
-        "count": len(cameras),
-        "cameras": cameras,
-    }), 200
-
+        "ok": True,
+        "count": len(items),
+        "cameras": items,
+    })
 
 @cctv_bp.get("/cameras/<camera_id>")
 def get_camera(camera_id: str):
