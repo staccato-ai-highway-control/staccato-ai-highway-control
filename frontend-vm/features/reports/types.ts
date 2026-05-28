@@ -1,8 +1,32 @@
 export type ReportType = "GENERAL" | "ACCIDENT" | "LANE_STOP_REPORT" | "SHOULDER_STOP_REPORT" | "UNKNOWN_REPORT" | string;
 export type UploadPurpose = "ANALYSIS" | "REPORT" | "NORMAL_REFERENCE" | "TEST_DEMO" | string;
-export type AnalysisStatus = "WAITING" | "REQUESTED" | "ANALYZING" | "COMPLETED" | "FAILED" | string;
+export type AnalysisStatus = "WAITING" | "REQUESTED" | "QUEUED" | "ANALYZING" | "COMPLETED" | "FAILED" | string;
 export type ReportProcessingStatus = "SUBMITTED" | "REVIEWING" | "ANALYZING" | "CONVERTED_TO_INCIDENT" | "REJECTED" | "DELETED" | string;
 export type ReportPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "URGENT" | string;
+
+
+export interface ReportAnalysisJob {
+  id?: number | string;
+  analysis_job_id?: number | string;
+  status?: string | null;
+  summary?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ReportAttachment {
+  id?: number | string;
+  attachment_id?: number | string;
+  original_filename?: string | null;
+  filename?: string | null;
+  mime_type?: string | null;
+  file_type?: string | null;
+  file_url?: string | null;
+  preview_url?: string | null;
+  download_url?: string | null;
+  created_at?: string | null;
+  uploaded_at?: string | null;
+}
 
 export interface Report {
   id: number | string;
@@ -29,17 +53,26 @@ export interface Report {
   place_name?: string;
   latitude?: number | string | null;
   longitude?: number | string | null;
+  analysis_job_id?: number | string | null;
   analysis_status?: string;
   analysis_summary?: string | null;
+  analysis_jobs?: ReportAnalysisJob[];
   attachment_name?: string;
   attachment_type?: "image" | "video" | string;
   uploaded_at?: string;
+  attachments?: ReportAttachment[];
+  attachment_count?: number;
+  thumbnail_url?: string | null;
+  preview_url?: string | null;
+  download_url?: string | null;
 
   // Legacy aliases kept for existing backend variants during rollout.
   reportCode?: string;
   reportType?: string;
   purpose?: string;
+  analysisJobId?: number | string | null;
   analysisStatus?: string;
+  analysisJobs?: ReportAnalysisJob[];
   createdAt?: string;
   attachmentName?: string;
   attachmentType?: "image" | "video" | string;

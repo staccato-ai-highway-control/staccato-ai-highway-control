@@ -8,8 +8,7 @@ import { CameraSlotSettingsModal } from "@/components/cctv/CameraSlotSettingsMod
 import { CctvCard } from "@/components/cctv/CctvCard";
 import { CctvDetailModal } from "@/components/cctv/CctvDetailModal";
 import { RoiSettingsModal } from "@/components/cctv/RoiSettingsModal";
-import { mockCctvs } from "@/features/cctvs/mock";
-import { getCameraSlotConfig, saveCameraSlotConfig, type CameraSlotConfig } from "@/features/cctvs/api";
+import { getCameras, getCameraSlotConfig, getCctvSlots, saveCameraSlotConfig, type CameraSlotConfig } from "@/features/cctvs/api";
 import type { Cctv } from "@/types/cctv";
 import type { ManualIncident, ManualIncidentPayload } from "@/types/incident";
 
@@ -51,25 +50,54 @@ export default function CctvsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [selectedCctv, setSelectedCctv] = useState<Cctv | null>(null);
   const [manualIncidents, setManualIncidents] = useState<ManualIncident[]>([]);
+  const [cctvs, setCctvs] = useState<Cctv[]>([]);
   const [cameraSlotConfig, setCameraSlotConfig] = useState<CameraSlotConfig[]>(() => getCameraSlotConfig());
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCameraSettingsOpen, setIsCameraSettingsOpen] = useState(false);
   const [roiSlotNumber, setRoiSlotNumber] = useState<1 | 2 | null>(null);
 
+  async function loadCctvData() {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const [nextSlots, nextCctvs] = await Promise.all([
+        getCctvSlots().catch(() => getCameraSlotConfig()),
+        getCameras().catch(() => []),
+      ]);
+      setCameraSlotConfig(nextSlots);
+      setCctvs(nextCctvs);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "CCTV 정보를 불러오지 못했습니다.");
+      setCameraSlotConfig(getCameraSlotConfig());
+      setCctvs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
-    setCameraSlotConfig(getCameraSlotConfig());
+    loadCctvData();
   }, []);
 
-  const cctvById = useMemo(() => new Map(mockCctvs.map((cctv) => [cctv.id, cctv])), []);
+  const cctvById = useMemo(() => {
+    const map = new Map<string, Cctv>();
+    cctvs.forEach((cctv) => {
+      map.set(cctv.id, cctv);
+      map.set(cctv.cctvCode, cctv);
+    });
+    return map;
+  }, [cctvs]);
 
   const visibleCameraSlots = useMemo(() => {
     return cameraSlotConfig
-      .map((slot) => ({ slot, cctv: cctvById.get(slot.cctvId) }))
-      .filter((item): item is { slot: CameraSlotConfig; cctv: Cctv } => Boolean(item.cctv))
-      .filter(({ cctv }) => statusFilter === "ALL" || cctv.status === statusFilter);
+      .map((slot) => ({ slot, cctv: slot.cctvId ? cctvById.get(slot.cctvId) : undefined }))
+      .filter(({ cctv }) => !cctv || statusFilter === "ALL" || cctv.status === statusFilter);
   }, [cameraSlotConfig, cctvById, statusFilter]);
 
   const selectedCctvIndex = selectedCctv
-    ? visibleCameraSlots.findIndex(({ cctv }) => cctv.id === selectedCctv.id)
+    ? visibleCameraSlots.findIndex(({ cctv }) => cctv?.id === selectedCctv.id)
     : -1;
 
   const selectedCctvIncidents = selectedCctv
@@ -83,11 +111,17 @@ export default function CctvsPage() {
     window.alert("시연용 이벤트가 생성되었습니다.");
   }
 
-  function handleSaveCameraSlotConfig(config: CameraSlotConfig[]) {
-    const savedConfig = saveCameraSlotConfig(config);
-    setCameraSlotConfig(savedConfig);
-    setIsCameraSettingsOpen(false);
-    window.alert("관제 화면 카메라 순서 설정이 저장되었습니다.");
+  async function handleSaveCameraSlotConfig(config: CameraSlotConfig[]) {
+    setErrorMessage(null);
+
+    try {
+      const savedConfig = await saveCameraSlotConfig(config);
+      setCameraSlotConfig(savedConfig);
+      setIsCameraSettingsOpen(false);
+      window.alert("관제 화면 카메라 순서 설정이 저장되었습니다.");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "카메라 슬롯 설정을 저장하지 못했습니다.");
+    }
   }
 
   return (
@@ -132,22 +166,39 @@ export default function CctvsPage() {
         </div>
       </section>
 
+      {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
+      {isLoading ? <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">CCTV 슬롯 정보를 불러오는 중입니다.</div> : null}
+
       <section className="grid gap-5 md:grid-cols-2 2xl:grid-cols-4">
         {visibleCameraSlots.map(({ slot, cctv }, index) => (
-          <CctvCard
-            key={`${slot.slotNumber}-${cctv.id}`}
-            cctv={cctv}
-            index={index}
-            slotNumber={slot.slotNumber}
-            onSelect={setSelectedCctv}
-            onConfigureRoi={setRoiSlotNumber}
-          />
+          cctv ? (
+            <CctvCard
+              key={`${slot.slotNumber}-${cctv.id}`}
+              cctv={cctv}
+              index={index}
+              slotNumber={slot.slotNumber}
+              onSelect={setSelectedCctv}
+              onConfigureRoi={setRoiSlotNumber}
+            />
+          ) : (
+            <article key={`empty-${slot.slotNumber}`} className="grid min-h-[420px] content-between rounded-lg border-2 border-dashed border-slate-200 bg-white p-5 text-center shadow-sm">
+              <div className="grid min-h-64 place-items-center rounded-lg bg-slate-100 text-slate-400">
+                <div>
+                  <strong className="block text-lg text-slate-600">{slot.slotNumber}번 슬롯</strong>
+                  <p className="mt-2 text-sm font-semibold">카메라 미배정</p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-slate-500">설정에서 CCTV를 선택하면 이 슬롯에 영상이 표시됩니다.</p>
+              </div>
+            </article>
+          )
         ))}
       </section>
 
       {visibleCameraSlots.length === 0 ? (
         <p className="mt-8 rounded-lg border border-slate-200 bg-white p-5 text-center text-sm font-semibold text-slate-500">
-          선택한 상태에 맞는 CCTV가 없습니다.
+          선택한 상태에 맞는 CCTV 슬롯이 없습니다.
         </p>
       ) : null}
 
@@ -163,7 +214,7 @@ export default function CctvsPage() {
 
       {isCameraSettingsOpen ? (
         <CameraSlotSettingsModal
-          cctvs={mockCctvs}
+          cctvs={cctvs}
           config={cameraSlotConfig}
           onClose={() => setIsCameraSettingsOpen(false)}
           onSave={handleSaveCameraSlotConfig}
@@ -174,7 +225,7 @@ export default function CctvsPage() {
         <RoiSettingsModal
           initialSlotNumber={roiSlotNumber}
           slotConfig={cameraSlotConfig}
-          cctvs={mockCctvs}
+          cctvs={cctvs}
           onClose={() => setRoiSlotNumber(null)}
         />
       ) : null}

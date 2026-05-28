@@ -148,6 +148,13 @@ export default function Home() {
                 </Link>
 
                 <Link
+                  href="/bug-reports"
+                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  문의게시판
+                </Link>
+
+                <Link
                   href="/mypage"
                   className="inline-flex items-center gap-2 rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
                 >
@@ -166,6 +173,13 @@ export default function Home() {
               </div>
             ) : (
               <div className="flex gap-3">
+                <Link
+                  href="/bug-reports"
+                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
+                >
+                  문의게시판
+                </Link>
+
                 <Link
                   href="/login"
                   className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"

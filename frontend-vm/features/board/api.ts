@@ -51,13 +51,21 @@ async function parseBody(response: Response) {
   }
 }
 
+function isHtmlPayload(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html") || normalized.includes("werkzeug debugger");
+}
+
 function getErrorMessage(response: Response, payload: unknown) {
   if (typeof payload === "object" && payload !== null) {
     const message = (payload as ErrorPayload).message ?? (payload as ErrorPayload).error ?? (payload as ErrorPayload).detail;
     if (message) return message;
   }
 
-  if (typeof payload === "string" && payload.trim()) return payload;
+  if (typeof payload === "string" && payload.trim()) {
+    if (isHtmlPayload(payload)) return `게시판 API 요청 실패: ${response.status}`;
+    return payload;
+  }
   return `게시판 API 요청 실패: ${response.status}`;
 }
 

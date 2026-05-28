@@ -7,6 +7,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
 import { Badge } from "@/components/common/Badge";
+import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPreview";
 import { getMyReports, getReports, requestReportAnalysis } from "@/features/reports/api";
 import type { PaginatedReports, Report, ReportListParams } from "@/features/reports/types";
 
@@ -268,6 +269,7 @@ export default function ReportsPage() {
                       <td className="px-4 py-4">
                         <b className="text-slate-950">{getReportTitle(report)}</b>
                         <p className="mt-1 text-xs font-semibold text-slate-400">{getReportCode(report)} · {getReportLocation(report)}</p>
+                        <ReportAttachmentPreview report={report} compact />
                       </td>
                       <td className="px-4 py-4 font-semibold text-slate-600">{typeLabels[type] ?? type}</td>
                       <td className="px-4 py-4"><Badge tone={getBadgeTone(status)}>{statusLabels[status] ?? status}</Badge></td>
