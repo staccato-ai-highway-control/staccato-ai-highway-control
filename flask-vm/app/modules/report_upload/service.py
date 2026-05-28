@@ -467,6 +467,266 @@ class ReportUploadService:
 
         return location
 
+
+    @staticmethod
+    def _draft_title(data):
+        title = data.get("title") or data.get("subject")
+        if title is not None:
+            title = str(title).strip()
+        return title or f"임시저장 신고 {ReportUploadService._now().strftime('%Y%m%d')}"
+
+    @staticmethod
+    def _to_optional_int(value, field_name):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
+
+    @staticmethod
+    def _is_draft(report):
+        return report.status == "DRAFT"
+
+    @staticmethod
+    def create_report_draft(current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        now = ReportUploadService._now()
+
+        cctv_id = ReportUploadService._to_optional_int(data.get("cctv_id"), "cctv_id")
+
+        report = IncidentReport(
+            report_code=ReportUploadService._generate_report_code(now),
+            report_type=data.get("report_type") or "GENERAL",
+            upload_purpose=data.get("upload_purpose") or "DRAFT",
+            report_source_type=data.get("report_source_type") or "WEB",
+            title=ReportUploadService._draft_title(data),
+            description=data.get("description"),
+            reporter_id=current_user.id,
+            cctv_id=cctv_id,
+            status="DRAFT",
+            priority=data.get("priority") or "NORMAL",
+            is_demo_data=0,
+            submitted_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+        try:
+            db.session.add(report)
+            db.session.flush()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+        except ValueError:
+            db.session.rollback()
+            raise
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report draft creation failed")
+            raise
+
+        return {
+            "success": True,
+            "message": "신고가 임시저장되었습니다.",
+            "draft": ReportUploadService._report_response(report),
+            "draft_id": report.id,
+        }, 201
+
+    @staticmethod
+    def list_report_drafts(args, current_user):
+        from app.models import IncidentReport
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 10)),
+            10,
+            maximum=200,
+        )
+
+        query = (
+            IncidentReport.query
+            .filter(IncidentReport.status == "DRAFT")
+            .filter(IncidentReport.reporter_id == current_user.id)
+        )
+
+        if hasattr(IncidentReport, "deleted_at"):
+            query = query.filter(IncidentReport.deleted_at.is_(None))
+
+        pagination = query.order_by(IncidentReport.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        drafts = [
+            ReportUploadService._report_response(report, include_children=False)
+            for report in pagination.items
+        ]
+
+        return {
+            "success": True,
+            "data": {
+                "items": drafts,
+                "page": page,
+                "size": size,
+                "total_count": pagination.total,
+                "total_pages": pagination.pages,
+            },
+            "drafts": drafts,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }, 200
+
+    @staticmethod
+    def get_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, draft_id)
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 조회 권한이 없습니다.",
+            }, 403
+
+        return {
+            "success": True,
+            "draft": ReportUploadService._report_response(report),
+        }, 200
+
+    @staticmethod
+    def update_report_draft(draft_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 수정 권한이 없습니다.",
+            }, 403
+
+        try:
+            if "report_type" in data:
+                report.report_type = data.get("report_type") or report.report_type
+            if "upload_purpose" in data:
+                report.upload_purpose = data.get("upload_purpose") or report.upload_purpose
+            if "title" in data or "subject" in data:
+                report.title = ReportUploadService._draft_title(data)
+            if "description" in data:
+                report.description = data.get("description")
+            if "priority" in data:
+                report.priority = data.get("priority") or report.priority
+            if "cctv_id" in data:
+                report.cctv_id = ReportUploadService._to_optional_int(data.get("cctv_id"), "cctv_id")
+
+            report.updated_at = ReportUploadService._now()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+        except ValueError:
+            db.session.rollback()
+            raise
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report draft update failed", extra={"draft_id": draft_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 수정되었습니다.",
+            "draft": ReportUploadService._report_response(report),
+        }, 200
+
+    @staticmethod
+    def delete_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 삭제 권한이 없습니다.",
+            }, 403
+
+        now = ReportUploadService._now()
+        report.status = "DELETED"
+        report.deleted_at = now
+        report.deleted_by = current_user.id
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 삭제되었습니다.",
+        }, 200
+
+
     @staticmethod
     def list_reports(args, current_user=None, mine_only=False):
         from app.models import IncidentReport
