@@ -868,6 +868,7 @@ class ReportUploadService:
                 if (
                     existing_job.job_status == "QUEUED"
                     and existing_job.result_summary is None
+                    and existing_job.started_at is None
                     and existing_job.completed_at is None
                 ):
                     jobs_to_process.append((existing_job, attachment))
@@ -919,29 +920,61 @@ class ReportUploadService:
                         "raw_response": str(response)
                     }
 
-                    job.job_status = "COMPLETED"
-                    job.completed_at = completed_at
-                    job.updated_at = completed_at
-                    job.progress_percent = 100
-                    job.total_frames = 1
-                    job.processed_frames = 1
-                    job.result_summary = result_summary
-                    job.raw_result_path = None
-                    job.error_message = None
-                    job.failed_reason_code = None
-                    job.primary_model_name = "YOLO11"
-                    job.primary_model_version = "current.pt"
+                    response_status = str(result_summary.get("status", "")).upper()
+                    response_job_status = str(result_summary.get("job_status", "")).upper()
 
-                    db.session.add(job)
-                    db.session.commit()
-                    emit_report_analysis_updated(job)
+                    is_completed_result = (
+                        response_status == "OK"
+                        or "detections" in result_summary
+                        or "count" in result_summary
+                    )
 
-                    current_app.logger.info("AI analysis completed", extra={
-                        "report_id": report.id,
-                        "attachment_id": attachment.id,
-                        "job_id": job.id,
-                        "count": result_summary.get("count"),
-                    })
+                    if is_completed_result:
+                        job.job_status = "COMPLETED"
+                        job.completed_at = completed_at
+                        job.updated_at = completed_at
+                        job.progress_percent = 100
+                        job.total_frames = 1
+                        job.processed_frames = 1
+                        job.result_summary = result_summary
+                        job.raw_result_path = None
+                        job.error_message = None
+                        job.failed_reason_code = None
+                        job.primary_model_name = "YOLO11"
+                        job.primary_model_version = "current.pt"
+
+                        db.session.add(job)
+                        db.session.commit()
+                        emit_report_analysis_updated(job)
+
+                        current_app.logger.info("AI analysis completed", extra={
+                            "report_id": report.id,
+                            "attachment_id": attachment.id,
+                            "job_id": job.id,
+                            "count": result_summary.get("count"),
+                        })
+                    else:
+                        job.job_status = (
+                            response_job_status
+                            if response_job_status in ReportUploadService.ACTIVE_JOB_STATUSES
+                            else "QUEUED"
+                        )
+                        job.updated_at = completed_at
+                        job.progress_percent = job.progress_percent or 10
+                        job.result_summary = result_summary
+                        job.error_message = None
+                        job.failed_reason_code = None
+
+                        db.session.add(job)
+                        db.session.commit()
+                        emit_report_analysis_updated(job)
+
+                        current_app.logger.info("AI analysis request accepted", extra={
+                            "report_id": report.id,
+                            "attachment_id": attachment.id,
+                            "job_id": job.id,
+                            "status": result_summary.get("status"),
+                        })
                 else:
                     job.job_status = "FAILED"
                     job.completed_at = completed_at
