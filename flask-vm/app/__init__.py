@@ -1,5 +1,4 @@
 from flask import Flask
-from app.modules.chat.routes import chat_bp
 
 # ============================================================
 # Core / App Config
@@ -72,10 +71,6 @@ from app.modules.replay import replay_bp
 # - 담당: 사고 질의응답 챗봇
 # ============================================================
 # ============================================================
-# Chat Module
-# - 담당: 사고 대응 채팅
-# - 파일 위치: app/modules/chat/
-# ============================================================
 from app.modules.frontend_config.routes import frontend_config_bp
 
 
@@ -116,7 +111,6 @@ def register_blueprints(app):
     # ========================================================
     app.register_blueprint(health_bp)
     app.register_blueprint(ai_relay_bp)
-    app.register_blueprint(chat_bp)
 
 
 
