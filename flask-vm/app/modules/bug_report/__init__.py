@@ -1,11 +1,4 @@
-"""
-Bug Report module.
+from app.modules.bug_report.routes import bug_report_bp
 
-This package is reserved for bug report management.
 
-Planned responsibilities:
-- Bug report CRUD API
-- Bug report status, severity, priority management
-- Attachment upload/download
-- Reporter/admin permission checks
-"""
+__all__ = ["bug_report_bp"]
