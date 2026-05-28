@@ -174,6 +174,21 @@ def list_report_drafts():
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
+
+@report_upload_bp.route("/drafts/<int:draft_id>/submit", methods=["POST"])
+@require_auth
+def submit_report_draft(draft_id):
+    try:
+        result, status_code = ReportUploadService.submit_report_draft(
+            draft_id=draft_id,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except Exception:
+        logger.exception("임시저장 신고 최종 제출 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
 @report_upload_bp.route("/drafts/<int:draft_id>", methods=["GET"])
 @require_auth
 def get_report_draft(draft_id):
