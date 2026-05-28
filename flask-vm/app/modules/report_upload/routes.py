@@ -137,6 +137,92 @@ def delete_report_attachment(report_id, attachment_id):
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
+
+@report_upload_bp.route("/drafts", methods=["POST"])
+@require_auth
+def create_report_draft():
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
+        result, status_code = ReportUploadService.create_report_draft(
+            current_user=request.current_user,
+            data=data,
+        )
+        return jsonify(result), status_code
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        logger.exception("신고 임시저장 생성 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/drafts", methods=["GET"])
+@require_auth
+def list_report_drafts():
+    try:
+        result, status_code = ReportUploadService.list_report_drafts(
+            request.args,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        logger.exception("신고 임시저장 목록 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/drafts/<int:draft_id>", methods=["GET"])
+@require_auth
+def get_report_draft(draft_id):
+    try:
+        result, status_code = ReportUploadService.get_report_draft(
+            draft_id=draft_id,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except Exception:
+        logger.exception("신고 임시저장 상세 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/drafts/<int:draft_id>", methods=["PATCH"])
+@require_auth
+def update_report_draft(draft_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
+        result, status_code = ReportUploadService.update_report_draft(
+            draft_id=draft_id,
+            current_user=request.current_user,
+            data=data,
+        )
+        return jsonify(result), status_code
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        logger.exception("신고 임시저장 수정 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/drafts/<int:draft_id>", methods=["DELETE"])
+@require_auth
+def delete_report_draft(draft_id):
+    try:
+        result, status_code = ReportUploadService.delete_report_draft(
+            draft_id=draft_id,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except Exception:
+        logger.exception("신고 임시저장 삭제 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
 @report_upload_bp.route("/<int:report_id>", methods=["GET"])
 @require_auth
 def get_report(report_id):
