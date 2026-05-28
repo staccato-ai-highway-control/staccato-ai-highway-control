@@ -268,6 +268,24 @@ def _register_report_created_realtime_hook(app):
                 "occurred_at": created_at,
             }
 
+            from app.extensions import db
+            from app.models import RealtimeEvent
+
+            realtime_event = RealtimeEvent(
+                event_type="REPORT_CREATED",
+                event_name="incident.created",
+                target_resource_type="report",
+                target_resource_id=int(report_id),
+                incident_id=None,
+                payload=payload,
+                send_status="SENT",
+                error_message=None,
+                created_at=datetime.utcnow(),
+                sent_at=datetime.utcnow(),
+            )
+            db.session.add(realtime_event)
+            db.session.commit()
+
             from app.modules.socketio.emitters import (
                 emit_incident_created,
                 emit_report_created,
