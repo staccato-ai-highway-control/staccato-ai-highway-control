@@ -78,6 +78,7 @@ from app.models.chat_support_models import (
 from app.models.cctv_models import (
     Cctv,
     CctvRoi,
+    CctvSlot,
     CctvStatusLog,
 )
 
@@ -126,6 +127,7 @@ __all__ = [
     "ChatRoom",
     "Cctv",
     "CctvRoi",
+    "CctvSlot",
     "CctvStatusLog",
     "AiModel",
     "AiModelVersion",
