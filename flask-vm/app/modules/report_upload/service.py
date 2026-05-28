@@ -832,6 +832,134 @@ class ReportUploadService:
         }, 200
 
 
+
+    @staticmethod
+    def update_report_status(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        if not isinstance(data, dict):
+            return {"success": False, "error": "Request body must be a JSON object."}, 400
+
+        allowed_statuses = {
+            "SUBMITTED",
+            "REVIEWING",
+            "ANALYZING",
+            "CONVERTED_TO_INCIDENT",
+            "REJECTED",
+            "CLOSED",
+        }
+
+        raw_status = data.get("status")
+        status = str(raw_status or "").strip().upper()
+
+        if not status:
+            return {"success": False, "error": "status 값이 필요합니다."}, 400
+
+        if status not in allowed_statuses:
+            return {
+                "success": False,
+                "error": f"허용되지 않는 status입니다: {status}",
+                "allowed_statuses": sorted(allowed_statuses),
+            }, 400
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+        reason = str(data.get("reason") or data.get("reject_reason") or "").strip()
+
+        report.status = status
+        report.updated_at = now
+
+        if status in {"REVIEWING", "ANALYZING", "CONVERTED_TO_INCIDENT", "REJECTED"}:
+            report.reviewed_by = current_user.id
+            report.reviewed_at = report.reviewed_at or now
+
+        if status == "REJECTED":
+            if not reason:
+                return {"success": False, "error": "반려 사유가 필요합니다."}, 400
+            report.reject_reason = reason
+
+        if status == "CLOSED":
+            report.closed_by = current_user.id
+            report.closed_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(report)
+
+        return {
+            "success": True,
+            "message": "신고 상태가 변경되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
+    @staticmethod
+    def approve_report(report_id, current_user, data=None):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+
+        # MVP 기준 승인 상태는 운영자 검토 진입 상태로 정의합니다.
+        report.status = "REVIEWING"
+        report.reviewed_by = current_user.id
+        report.reviewed_at = report.reviewed_at or now
+        report.updated_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(report)
+
+        return {
+            "success": True,
+            "message": "신고가 승인되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
+    @staticmethod
+    def reject_report(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        if not isinstance(data, dict):
+            return {"success": False, "error": "Request body must be a JSON object."}, 400
+
+        reason = str(data.get("reason") or data.get("reject_reason") or "").strip()
+        if not reason:
+            return {"success": False, "error": "반려 사유가 필요합니다."}, 400
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+
+        report.status = "REJECTED"
+        report.reject_reason = reason
+        report.reviewed_by = current_user.id
+        report.reviewed_at = report.reviewed_at or now
+        report.updated_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(report)
+
+        return {
+            "success": True,
+            "message": "신고가 반려되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
     @staticmethod
     def get_analysis_status(report_id):
         from app.extensions import db
