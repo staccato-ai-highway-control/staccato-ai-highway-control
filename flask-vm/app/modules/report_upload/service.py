@@ -323,12 +323,10 @@ class ReportUploadService:
         if not include_children:
             return data
 
-        attachments = (
-            ReportAttachment.query
-            .filter_by(report_id=report.id)
-            .order_by(ReportAttachment.id.asc())
-            .all()
-        )
+        attachments_query = ReportAttachment.query.filter_by(report_id=report.id)
+        if hasattr(ReportAttachment, "deleted_at"):
+            attachments_query = attachments_query.filter(ReportAttachment.deleted_at.is_(None))
+        attachments = attachments_query.order_by(ReportAttachment.id.asc()).all()
         locations = (
             ReportLocation.query
             .filter_by(report_id=report.id)
@@ -832,6 +830,313 @@ class ReportUploadService:
         }, 200
 
     @staticmethod
+    def _is_report_admin(current_user):
+        return current_user.role in {"SUPER_ADMIN", "CONTROL_ADMIN"}
+
+    @staticmethod
+    def _require_report_admin(current_user):
+        if not ReportUploadService._is_report_admin(current_user):
+            return {
+                "success": False,
+                "error": "신고 운영 권한이 없습니다.",
+            }, 403
+        return None
+
+    @staticmethod
+    def _add_status_history(report, previous_status, new_status, changed_by, reason=None):
+        from app.models import ReportStatusHistory
+
+        history = ReportStatusHistory(
+            report_id=report.id,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=changed_by,
+            change_reason=reason,
+            created_at=ReportUploadService._now(),
+        )
+        return history
+
+    @staticmethod
+    def _apply_report_status(report, new_status, current_user, reason=None):
+        previous_status = report.status
+        now = ReportUploadService._now()
+
+        report.status = new_status
+        report.updated_at = now
+
+        if new_status in {"REVIEWING", "APPROVED", "REJECTED"}:
+            report.reviewed_by = current_user.id
+            report.reviewed_at = now
+
+        if new_status in {"CLOSED", "RESOLVED"}:
+            report.closed_by = current_user.id
+            report.closed_at = now
+
+        if new_status == "REJECTED":
+            report.reject_reason = reason
+
+        return ReportUploadService._add_status_history(
+            report=report,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=current_user.id,
+            reason=reason,
+        )
+
+    @staticmethod
+    def update_report_status(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        permission_error = ReportUploadService._require_report_admin(current_user)
+        if permission_error:
+            return permission_error
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        new_status = str(data.get("status") or "").strip().upper()
+        allowed_statuses = {
+            "SUBMITTED",
+            "REVIEWING",
+            "APPROVED",
+            "REJECTED",
+            "CLOSED",
+            "RESOLVED",
+            "CANCELLED",
+            "DELETED",
+        }
+        if new_status not in allowed_statuses:
+            return {
+                "success": False,
+                "error": "변경할 상태값이 올바르지 않습니다.",
+            }, 400
+
+        if report.status == new_status:
+            return {
+                "success": True,
+                "message": "이미 동일한 상태입니다.",
+                "data": ReportUploadService._report_response(report),
+            }, 200
+
+        if report.status in {"DELETED", "CANCELLED"}:
+            return {
+                "success": False,
+                "error": "삭제 또는 취소된 신고는 상태를 변경할 수 없습니다.",
+            }, 400
+
+        reason = data.get("memo") or data.get("reason") or data.get("change_reason")
+
+        try:
+            history = ReportUploadService._apply_report_status(
+                report=report,
+                new_status=new_status,
+                current_user=current_user,
+                reason=reason,
+            )
+            db.session.add(history)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report status update failed", extra={"report_id": report_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "신고 상태가 변경되었습니다.",
+            "data": ReportUploadService._report_response(report),
+        }, 200
+
+    @staticmethod
+    def approve_report(report_id, current_user, data):
+        data = dict(data or {})
+        data["status"] = "APPROVED"
+        if "memo" not in data and "reason" not in data:
+            data["memo"] = "신고 승인"
+
+        result, status_code = ReportUploadService.update_report_status(
+            report_id=report_id,
+            current_user=current_user,
+            data=data,
+        )
+        if result.get("success"):
+            result["message"] = "신고가 승인되었습니다."
+        return result, status_code
+
+    @staticmethod
+    def reject_report(report_id, current_user, data):
+        data = dict(data or {})
+        reject_reason = data.get("reject_reason") or data.get("reason") or data.get("memo")
+        if not reject_reason:
+            return {
+                "success": False,
+                "error": "반려 사유가 필요합니다.",
+            }, 400
+
+        data["status"] = "REJECTED"
+        data["reason"] = reject_reason
+
+        result, status_code = ReportUploadService.update_report_status(
+            report_id=report_id,
+            current_user=current_user,
+            data=data,
+        )
+        if result.get("success"):
+            result["message"] = "신고가 반려되었습니다."
+        return result, status_code
+
+    @staticmethod
+    def add_report_attachments(report_id, current_user, files):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 추가 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "첨부파일을 추가할 수 없는 신고 상태입니다.",
+            }, 400
+
+        files = [file for file in (files or []) if file and getattr(file, "filename", "")]
+        if not files:
+            return {
+                "success": False,
+                "error": "파일이 업로드되지 않았습니다.",
+            }, 400
+
+        saved_file_paths = []
+        attachments = []
+        now = ReportUploadService._now()
+
+        try:
+            for file in files:
+                file_info = ReportUploadService.process_file_upload(file)
+                saved_file_paths.append(file_info["file_path"])
+                attachment = ReportAttachment(
+                    report_id=report.id,
+                    file_type=file_info["file_type"],
+                    original_filename=file_info["original_filename"],
+                    stored_filename=file_info["stored_filename"],
+                    storage_type=file_info["storage_type"],
+                    file_path=file_info["file_path"],
+                    file_size=file_info["file_size"],
+                    file_hash=file_info["file_hash"],
+                    mime_type=file_info["mime_type"],
+                    scan_status=file_info["scan_status"],
+                    is_private=False,
+                    download_count=0,
+                    access_count=0,
+                    uploaded_by=current_user.id,
+                    uploaded_at=now,
+                    created_at=now,
+                )
+                db.session.add(attachment)
+                attachments.append(attachment)
+
+            report.updated_at = now
+            db.session.commit()
+
+        except Exception:
+            db.session.rollback()
+            for path in saved_file_paths:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        current_app.logger.exception("첨부파일 추가 실패 후 파일 정리 실패", extra={"file_path": path})
+            raise
+
+        attachment_items = [ReportUploadService._attachment_response(item) for item in attachments]
+        return {
+            "success": True,
+            "message": "첨부파일이 추가되었습니다.",
+            "data": {
+                "report_id": report.id,
+                "attachments": attachment_items,
+                "attachment_count": len(attachment_items),
+            },
+        }, 201
+
+    @staticmethod
+    def delete_report_attachment(report_id, attachment_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 삭제 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "첨부파일을 삭제할 수 없는 신고 상태입니다.",
+            }, 400
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if (
+            not attachment
+            or attachment.report_id != report.id
+            or getattr(attachment, "deleted_at", None)
+        ):
+            return {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        active_job = (
+            ReportAnalysisJob.query
+            .filter(
+                ReportAnalysisJob.report_id == report.id,
+                ReportAnalysisJob.attachment_id == attachment.id,
+                ReportAnalysisJob.job_status.in_(ReportUploadService.ACTIVE_JOB_STATUSES),
+            )
+            .first()
+        )
+        if active_job:
+            return {
+                "success": False,
+                "error": "분석 중인 첨부파일은 삭제할 수 없습니다.",
+            }, 409
+
+        now = ReportUploadService._now()
+        attachment.deleted_at = now
+        attachment.deleted_by = current_user.id
+        attachment.delete_reason = data.get("reason") or data.get("delete_reason")
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "첨부파일이 삭제 처리되었습니다.",
+        }, 200
+
+    @staticmethod
     def request_report_analysis(report_id, user_id):
         from app.extensions import db
         from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
@@ -849,7 +1154,10 @@ class ReportUploadService:
 
         attachments = (
             ReportAttachment.query
-            .filter_by(report_id=report.id)
+            .filter(
+                ReportAttachment.report_id == report.id,
+                ReportAttachment.deleted_at.is_(None),
+            )
             .order_by(ReportAttachment.id.asc())
             .all()
         )

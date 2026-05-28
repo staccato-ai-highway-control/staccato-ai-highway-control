@@ -8,7 +8,7 @@ from werkzeug.datastructures import FileStorage
 
 from app import create_app
 from app.extensions import db
-from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment, ReportLocation, User
+from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment, ReportLocation, ReportStatusHistory, User
 from app.modules.report_upload.service import ReportUploadService
 from db_cleanup import cleanup_database
 
@@ -149,3 +149,121 @@ def test_request_report_analysis_creates_job_and_is_idempotent(app, test_user, m
         assert second_result["job_id"] == job.id
         assert ReportAnalysisJob.query.filter_by(report_id=report.id).count() == 1
         assert calls == [(report.id, attachment.file_path)]
+
+
+
+def test_update_report_status_approve_and_reject_write_history(app, test_user):
+    with app.app_context():
+        user = db.session.get(User, test_user)
+        report = ReportUploadService.create_report(
+            user_id=test_user,
+            data={
+                "report_type": "ACCIDENT",
+                "upload_purpose": "REPORT",
+                "title": "상태 변경 테스트",
+                "description": "승인과 반려 상태 변경을 검증합니다.",
+            },
+            files=[make_file(filename="status-test.jpg")],
+        )
+
+        approve_result, approve_status = ReportUploadService.approve_report(
+            report_id=report.id,
+            current_user=user,
+            data={"memo": "승인 처리"},
+        )
+
+        assert approve_status == 200
+        assert approve_result["success"] is True
+        assert approve_result["data"]["status"] == "APPROVED"
+        assert approve_result["data"]["reviewed_by"] == test_user
+
+        reject_result, reject_status = ReportUploadService.reject_report(
+            report_id=report.id,
+            current_user=user,
+            data={"reject_reason": "자료 보완 필요"},
+        )
+
+        assert reject_status == 200
+        assert reject_result["success"] is True
+        assert reject_result["data"]["status"] == "REJECTED"
+        assert reject_result["data"]["reject_reason"] == "자료 보완 필요"
+
+        histories = ReportStatusHistory.query.filter_by(report_id=report.id).order_by(ReportStatusHistory.id.asc()).all()
+        assert [history.new_status for history in histories] == ["APPROVED", "REJECTED"]
+
+
+def test_update_report_status_rejects_non_admin(app, test_user):
+    with app.app_context():
+        admin = db.session.get(User, test_user)
+        suffix = uuid4().hex[:8]
+        normal_user = User(
+            login_id=f"normal_report_user_{suffix}",
+            email=f"normal_report_user_{suffix}@test.local",
+            password_hash="hashed_pw",
+            name="Normal User",
+            role="USER",
+            account_status="ACTIVE",
+            is_email_verified=1,
+            created_at=datetime.utcnow(),
+        )
+        db.session.add(normal_user)
+        db.session.commit()
+
+        report = ReportUploadService.create_report(
+            user_id=admin.id,
+            data={
+                "report_type": "ACCIDENT",
+                "upload_purpose": "REPORT",
+                "title": "권한 테스트",
+            },
+            files=[make_file(filename="permission-test.jpg")],
+        )
+
+        result, status_code = ReportUploadService.update_report_status(
+            report_id=report.id,
+            current_user=normal_user,
+            data={"status": "REVIEWING"},
+        )
+
+        assert status_code == 403
+        assert result["success"] is False
+
+
+def test_add_and_soft_delete_report_attachment(app, test_user):
+    with app.app_context():
+        user = db.session.get(User, test_user)
+        report = ReportUploadService.create_report(
+            user_id=test_user,
+            data={
+                "report_type": "ACCIDENT",
+                "upload_purpose": "REPORT",
+                "title": "첨부파일 추가 삭제 테스트",
+            },
+            files=[make_file(filename="initial.jpg")],
+        )
+
+        add_result, add_status = ReportUploadService.add_report_attachments(
+            report_id=report.id,
+            current_user=user,
+            files=[make_file(filename="extra.jpg", content=b"extra image")],
+        )
+
+        assert add_status == 201
+        assert add_result["success"] is True
+        assert add_result["data"]["attachment_count"] == 1
+
+        attachment_id = add_result["data"]["attachments"][0]["id"]
+        delete_result, delete_status = ReportUploadService.delete_report_attachment(
+            report_id=report.id,
+            attachment_id=attachment_id,
+            current_user=user,
+            data={"reason": "잘못 업로드"},
+        )
+
+        assert delete_status == 200
+        assert delete_result["success"] is True
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        assert attachment.deleted_at is not None
+        assert attachment.deleted_by == test_user
+        assert attachment.delete_reason == "잘못 업로드"
