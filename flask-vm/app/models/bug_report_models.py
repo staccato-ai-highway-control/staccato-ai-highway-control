@@ -100,5 +100,5 @@ class BugReportAttachment(db.Model):
             "height": self.height,
             "checksum_sha256": self.checksum_sha256,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "download_url": f"/api/bug-report-attachments/{self.id}/download",
+            "download_url": f"/api/bug-reports/attachments/{self.id}/download",
         }
