@@ -1178,6 +1178,135 @@ class ReportUploadService:
             "item": ReportUploadService._to_dict(job),
         }, 200
 
+
+    @staticmethod
+    def retry_analysis_job(job_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from app.modules.ai_gateway.service import AIGatewayService
+        from app.modules.socketio.emitters import emit_report_analysis_updated
+
+        job = db.session.get(ReportAnalysisJob, job_id)
+        if not job:
+            return {"success": False, "error": "분석 작업을 찾을 수 없습니다."}, 404
+
+        if job.job_status in ReportUploadService.ACTIVE_JOB_STATUSES:
+            return {
+                "success": False,
+                "error": "이미 진행 중인 분석 작업은 재시도할 수 없습니다.",
+                "job": ReportUploadService._to_dict(job),
+            }, 409
+
+        if job.job_status != "FAILED":
+            return {
+                "success": False,
+                "error": "FAILED 상태의 분석 작업만 재시도할 수 있습니다.",
+                "job": ReportUploadService._to_dict(job),
+            }, 400
+
+        report = db.session.get(IncidentReport, job.report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {"success": False, "error": "분석 작업 재시도 권한이 없습니다."}, 403
+
+        attachment = db.session.get(ReportAttachment, job.attachment_id)
+        if not attachment or getattr(attachment, "deleted_at", None):
+            return {"success": False, "error": "분석 대상 첨부파일을 찾을 수 없습니다."}, 404
+
+        retry_started_at = ReportUploadService._now()
+
+        job.job_status = "QUEUED"
+        job.retry_count = (job.retry_count or 0) + 1
+        job.progress_percent = 0
+        job.error_message = None
+        job.failed_reason_code = None
+        job.completed_at = None
+        job.started_at = None
+        job.updated_at = retry_started_at
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        processing_started_at = ReportUploadService._now()
+        job.job_status = "PROCESSING"
+        job.started_at = processing_started_at
+        job.updated_at = processing_started_at
+        job.progress_percent = 10
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        success, response = AIGatewayService.request_analysis(report.id, attachment.file_path)
+        completed_at = ReportUploadService._now()
+
+        if success:
+            result_summary = response if isinstance(response, dict) else {
+                "raw_response": str(response)
+            }
+
+            response_status = str(result_summary.get("status", "")).upper()
+            response_job_status = str(result_summary.get("job_status", "")).upper()
+
+            is_completed_result = (
+                response_status == "OK"
+                or "detections" in result_summary
+                or "count" in result_summary
+            )
+
+            if is_completed_result:
+                job.job_status = "COMPLETED"
+                job.completed_at = completed_at
+                job.updated_at = completed_at
+                job.progress_percent = 100
+                job.total_frames = job.total_frames or 1
+                job.processed_frames = job.processed_frames or 1
+                job.result_summary = result_summary
+                job.raw_result_path = None
+                job.error_message = None
+                job.failed_reason_code = None
+                job.primary_model_name = job.primary_model_name or "YOLO11"
+                job.primary_model_version = job.primary_model_version or "current.pt"
+            else:
+                job.job_status = (
+                    response_job_status
+                    if response_job_status in ReportUploadService.ACTIVE_JOB_STATUSES
+                    else "QUEUED"
+                )
+                job.updated_at = completed_at
+                job.progress_percent = job.progress_percent or 10
+                job.result_summary = result_summary
+                job.error_message = None
+                job.failed_reason_code = None
+        else:
+            job.job_status = "FAILED"
+            job.completed_at = completed_at
+            job.updated_at = completed_at
+            job.progress_percent = 100
+            job.failed_reason_code = (
+                response.get("status")
+                if isinstance(response, dict)
+                else "AI_REQUEST_FAILED"
+            )
+            job.error_message = str(response)[:2000]
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        job_data = ReportUploadService._to_dict(job)
+
+        return {
+            "success": success,
+            "message": "분석 작업을 재시도했습니다." if success else "분석 작업 재시도에 실패했습니다.",
+            "job": job_data,
+            "data": job_data,
+        }, 200 if success else 502
+
+
     @staticmethod
     def _is_report_admin(current_user):
         return current_user.role in {"SUPER_ADMIN", "CONTROL_ADMIN"}
