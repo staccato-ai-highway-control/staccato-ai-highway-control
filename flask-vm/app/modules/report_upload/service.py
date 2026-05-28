@@ -847,6 +847,7 @@ class ReportUploadService:
 
         jobs = []
         created_jobs = []
+        jobs_to_process = []
 
         for attachment in attachments:
             existing_job = (
@@ -862,6 +863,16 @@ class ReportUploadService:
 
             if existing_job:
                 jobs.append(existing_job)
+
+                # 시연/개발 환경에서는 QUEUED 상태로 남아 있는 작업도 즉시 처리합니다.
+                if (
+                    existing_job.job_status == "QUEUED"
+                    and existing_job.result_summary is None
+                    and existing_job.started_at is None
+                    and existing_job.completed_at is None
+                ):
+                    jobs_to_process.append((existing_job, attachment))
+
                 continue
 
             job = ReportAnalysisJob(
@@ -882,39 +893,132 @@ class ReportUploadService:
             db.session.add(job)
             jobs.append(job)
             created_jobs.append((job, attachment))
+            jobs_to_process.append((job, attachment))
 
         db.session.commit()
 
         for job in jobs:
             emit_report_analysis_updated(job)
 
-        for job, attachment in created_jobs:
+        for job, attachment in jobs_to_process:
             try:
+                started_at = ReportUploadService._now()
+
+                job.job_status = "PROCESSING"
+                job.started_at = job.started_at or started_at
+                job.updated_at = started_at
+                job.progress_percent = 10
+                db.session.add(job)
+                db.session.commit()
+                emit_report_analysis_updated(job)
+
                 success, response = AIGatewayService.request_analysis(report.id, attachment.file_path)
+                completed_at = ReportUploadService._now()
 
                 if success:
-                    current_app.logger.info("AI analysis request accepted", extra={
-                        "report_id": report.id,
-                        "attachment_id": attachment.id,
-                        "job_id": job.id,
-                    })
+                    result_summary = response if isinstance(response, dict) else {
+                        "raw_response": str(response)
+                    }
+
+                    response_status = str(result_summary.get("status", "")).upper()
+                    response_job_status = str(result_summary.get("job_status", "")).upper()
+
+                    is_completed_result = (
+                        response_status == "OK"
+                        or "detections" in result_summary
+                        or "count" in result_summary
+                    )
+
+                    if is_completed_result:
+                        job.job_status = "COMPLETED"
+                        job.completed_at = completed_at
+                        job.updated_at = completed_at
+                        job.progress_percent = 100
+                        job.total_frames = 1
+                        job.processed_frames = 1
+                        job.result_summary = result_summary
+                        job.raw_result_path = None
+                        job.error_message = None
+                        job.failed_reason_code = None
+                        job.primary_model_name = "YOLO11"
+                        job.primary_model_version = "current.pt"
+
+                        db.session.add(job)
+                        db.session.commit()
+                        emit_report_analysis_updated(job)
+
+                        current_app.logger.info("AI analysis completed", extra={
+                            "report_id": report.id,
+                            "attachment_id": attachment.id,
+                            "job_id": job.id,
+                            "count": result_summary.get("count"),
+                        })
+                    else:
+                        job.job_status = (
+                            response_job_status
+                            if response_job_status in ReportUploadService.ACTIVE_JOB_STATUSES
+                            else "QUEUED"
+                        )
+                        job.updated_at = completed_at
+                        job.progress_percent = job.progress_percent or 10
+                        job.result_summary = result_summary
+                        job.error_message = None
+                        job.failed_reason_code = None
+
+                        db.session.add(job)
+                        db.session.commit()
+                        emit_report_analysis_updated(job)
+
+                        current_app.logger.info("AI analysis request accepted", extra={
+                            "report_id": report.id,
+                            "attachment_id": attachment.id,
+                            "job_id": job.id,
+                            "status": result_summary.get("status"),
+                        })
                 else:
-                    current_app.logger.warning("AI analysis request failed", extra={
+                    job.job_status = "FAILED"
+                    job.completed_at = completed_at
+                    job.updated_at = completed_at
+                    job.progress_percent = 100
+                    job.failed_reason_code = (
+                        response.get("status")
+                        if isinstance(response, dict)
+                        else "AI_REQUEST_FAILED"
+                    )
+                    job.error_message = str(response)[:2000]
+
+                    db.session.add(job)
+                    db.session.commit()
+                    emit_report_analysis_updated(job)
+
+                    current_app.logger.warning("AI analysis failed", extra={
                         "report_id": report.id,
                         "attachment_id": attachment.id,
                         "job_id": job.id,
                         "response": response,
                     })
 
-            except Exception:
+            except Exception as exc:
                 current_app.logger.exception("AI analysis request raised exception", extra={
                     "report_id": report.id,
                     "attachment_id": attachment.id,
                     "job_id": job.id,
                 })
 
+                failed_at = ReportUploadService._now()
+                job.job_status = "FAILED"
+                job.completed_at = failed_at
+                job.updated_at = failed_at
+                job.progress_percent = 100
+                job.failed_reason_code = "AI_REQUEST_EXCEPTION"
+                job.error_message = str(exc)[:2000]
+
+                db.session.add(job)
+                db.session.commit()
+                emit_report_analysis_updated(job)
+
         status_code = 201 if created_jobs else 200
-        message = "분석 작업이 생성되었습니다." if created_jobs else "이미 분석 작업이 대기 또는 진행 중입니다."
+        message = "분석 작업이 생성되었습니다." if created_jobs else "기존 대기 작업을 처리했습니다."
 
         return {
             "success": True,
