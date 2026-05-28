@@ -704,6 +704,155 @@ class ReportUploadService:
             current_app.logger.exception("Report creation failed")
             raise
 
+
+    @staticmethod
+    def add_report_attachments(report_id, current_user, files):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None) or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {"success": False, "error": "첨부파일 추가 권한이 없습니다."}, 403
+
+        files = files or []
+        if not files:
+            return {"success": False, "error": "파일이 업로드되지 않았습니다."}, 400
+
+        upload_path = current_app.config.get("UPLOAD_BASE_PATH")
+        if not upload_path:
+            return {"success": False, "error": "UPLOAD_BASE_PATH 설정이 없습니다."}, 500
+
+        os.makedirs(upload_path, exist_ok=True)
+
+        now = ReportUploadService._now()
+        saved_file_paths = []
+        attachments = []
+
+        try:
+            for file in files:
+                if not file or file.filename == "":
+                    continue
+
+                original_filename = ReportUploadService._clean_original_filename(file.filename)
+                file_type = ReportUploadService._get_file_type(original_filename)
+
+                if file_type == "UNKNOWN":
+                    raise ValueError("지원하지 않는 파일 형식입니다.")
+
+                file.seek(0, os.SEEK_END)
+                file_length = file.tell()
+                file.seek(0)
+
+                ReportUploadService._validate_file_size(file_type, file_length)
+
+                file.seek(0)
+                file_hash = hashlib.md5(file.read()).hexdigest()
+                file.seek(0)
+
+                stored_filename = ReportUploadService._stored_filename(original_filename)
+                file_full_path = os.path.join(upload_path, stored_filename)
+
+                file.save(file_full_path)
+                saved_file_paths.append(file_full_path)
+
+                attachment = ReportAttachment(
+                    report_id=report.id,
+                    file_type=file_type,
+                    original_filename=original_filename,
+                    stored_filename=stored_filename,
+                    storage_type="LOCAL",
+                    file_path=file_full_path,
+                    file_size=file_length,
+                    file_hash=file_hash,
+                    mime_type=file.content_type or "application/octet-stream",
+                    scan_status="PENDING",
+                    is_private=False,
+                    download_count=0,
+                    access_count=0,
+                    uploaded_by=current_user.id,
+                    uploaded_at=now,
+                    created_at=now,
+                )
+                db.session.add(attachment)
+                attachments.append(attachment)
+
+            if not attachments:
+                raise ValueError("저장 가능한 파일이 없습니다.")
+
+            report.updated_at = now
+            db.session.add(report)
+            db.session.commit()
+
+            items = [ReportUploadService._attachment_response(item) for item in attachments]
+
+            return {
+                "success": True,
+                "message": "첨부파일이 추가되었습니다.",
+                "count": len(items),
+                "items": items,
+            }, 201
+
+        except Exception:
+            db.session.rollback()
+
+            for saved_path in saved_file_paths:
+                if saved_path and os.path.exists(saved_path):
+                    try:
+                        os.remove(saved_path)
+                    except OSError:
+                        current_app.logger.exception(
+                            "첨부파일 추가 실패 후 파일 정리 실패",
+                            extra={"file_path": saved_path},
+                        )
+
+            raise
+
+    @staticmethod
+    def delete_report_attachment(report_id, attachment_id, current_user, data=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None) or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if (
+            not attachment
+            or attachment.report_id != report.id
+            or getattr(attachment, "deleted_at", None)
+        ):
+            return {"success": False, "error": "첨부파일을 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {"success": False, "error": "첨부파일 삭제 권한이 없습니다."}, 403
+
+        data = data or {}
+        reason = ""
+        if isinstance(data, dict):
+            reason = str(data.get("reason") or data.get("delete_reason") or "").strip()
+
+        now = ReportUploadService._now()
+
+        attachment.deleted_by = current_user.id
+        attachment.delete_reason = reason or None
+        attachment.deleted_at = now
+        report.updated_at = now
+
+        db.session.add(attachment)
+        db.session.add(report)
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "첨부파일이 삭제되었습니다.",
+            "attachment_id": attachment.id,
+            "report_id": report.id,
+        }, 200
+
     @staticmethod
     def update_report(report_id, current_user, data):
         from app.extensions import db
