@@ -132,3 +132,5 @@ __all__ = [
     "TrainingDataset",
     "TrainingJob",
 ]
+
+from app.models.bug_report_models import BugReport, BugReportAttachment
