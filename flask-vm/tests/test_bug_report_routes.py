@@ -222,6 +222,8 @@ def test_bug_report_routes_are_registered():
 
     assert ("/api/bug-reports", ("GET",)) in routes
     assert ("/api/bug-reports", ("POST",)) in routes
+
+    assert ("/api/bug-reports/my", ("GET",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("GET",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("PATCH",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("DELETE",)) in routes
