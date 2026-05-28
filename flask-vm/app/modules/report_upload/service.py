@@ -342,11 +342,24 @@ class ReportUploadService:
             .all()
         )
 
-        data["attachments"] = [ReportUploadService._attachment_response(item) for item in attachments]
-        data["attachment_count"] = len(attachments)
+        attachment_items = [ReportUploadService._attachment_response(item) for item in attachments]
+        data["attachments"] = attachment_items
+        data["attachment_count"] = len(attachment_items)
         data["thumbnail_url"] = ReportUploadService._first_preview_url(attachments)
+
+        first_attachment = attachment_items[0] if attachment_items else None
+        data["attachment_id"] = first_attachment.get("id") if first_attachment else None
+        data["preview_url"] = first_attachment.get("preview_url") if first_attachment else None
+        data["download_url"] = first_attachment.get("download_url") if first_attachment else None
+
         data["locations"] = [ReportUploadService._to_dict(item) for item in locations]
-        data["analysis_jobs"] = [ReportUploadService._to_dict(item) for item in jobs]
+        analysis_jobs = [ReportUploadService._to_dict(item) for item in jobs]
+        data["analysis_jobs"] = analysis_jobs
+
+        latest_job = analysis_jobs[-1] if analysis_jobs else None
+        data["analysis_job_id"] = latest_job.get("id") if latest_job else None
+        data["analysis_status"] = latest_job.get("job_status") if latest_job else None
+        data["analysis_summary"] = latest_job.get("result_summary") if latest_job else None
 
         return data
 
@@ -563,9 +576,11 @@ class ReportUploadService:
                 "error": "리포트를 찾을 수 없습니다.",
             }, 404
 
+        report_data = ReportUploadService._report_response(report)
         return {
             "success": True,
-            "report": ReportUploadService._report_response(report),
+            "data": report_data,
+            "report": report_data,
         }, 200
 
     @staticmethod
@@ -1020,13 +1035,19 @@ class ReportUploadService:
         status_code = 201 if created_jobs else 200
         message = "분석 작업이 생성되었습니다." if created_jobs else "기존 대기 작업을 처리했습니다."
 
+        jobs_data = [ReportUploadService._to_dict(job) for job in jobs]
+        response_data = {
+            "report_id": report.id,
+            "jobs": jobs_data,
+            "job_id": jobs[0].id if len(jobs) == 1 else None,
+            "job_status": jobs[0].job_status if len(jobs) == 1 else None,
+        }
+
         return {
             "success": True,
             "message": message,
-            "report_id": report.id,
-            "jobs": [ReportUploadService._to_dict(job) for job in jobs],
-            "job_id": jobs[0].id if len(jobs) == 1 else None,
-            "job_status": jobs[0].job_status if len(jobs) == 1 else None,
+            "data": response_data,
+            **response_data,
         }, status_code
 
     @staticmethod
