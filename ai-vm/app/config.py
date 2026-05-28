@@ -45,8 +45,8 @@ CCTV_SOURCE_REFRESH_ENABLED = (
 CCTV_SOURCE_REFRESH_INTERVAL_SECONDS = float(os.environ.get("CCTV_SOURCE_REFRESH_INTERVAL_SECONDS", "3.0"))
 
 DEV_LOGIN_ID = os.environ.get("DEV_LOGIN_ID", "admin").strip()
-DEV_PASSWORD = os.environ.get("DEV_PASSWORD", "admin1234!").strip()
-DEV_ACCESS_TOKEN = os.environ.get("DEV_ACCESS_TOKEN", "dev-access-token").strip()
+DEV_PASSWORD = os.environ.get("DEV_PASSWORD", "").strip()
+DEV_ACCESS_TOKEN = os.environ.get("DEV_ACCESS_TOKEN", "").strip()
 
 CORS_ORIGINS = [
     origin.strip()
