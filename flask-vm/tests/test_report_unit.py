@@ -281,3 +281,67 @@ def test_report_draft_invalid_cctv_id_returns_bad_request(client, auth_header):
     body = res.get_json()
     assert body["success"] is False
 
+
+def test_submit_report_draft_changes_status_to_submitted(client, auth_header):
+    create_res = client.post(
+        "/api/reports/drafts",
+        json={
+            "subject": "제출할 임시저장 신고",
+            "report_type": "STALLED_VEHICLE",
+            "description": "최종 제출 테스트",
+            "priority": "NORMAL",
+        },
+        headers=auth_header,
+    )
+
+    assert create_res.status_code == 201
+    draft_id = create_res.get_json()["draft_id"]
+
+    submit_res = client.post(
+        f"/api/reports/drafts/{draft_id}/submit",
+        headers=auth_header,
+    )
+
+    if submit_res.status_code != 200:
+        print(f"\nSubmit draft response: {submit_res.get_json()}")
+
+    assert submit_res.status_code == 200
+    body = submit_res.get_json()
+    assert body["success"] is True
+    assert body["report_id"] == draft_id
+
+    report = db.session.get(IncidentReport, draft_id)
+    assert report.status == "SUBMITTED"
+    assert report.upload_purpose == "REPORT"
+    assert report.submitted_at is not None
+
+
+def test_submit_report_draft_rejects_non_draft_report(client, auth_header):
+    payload = {
+        'subject': 'Already Submitted Report',
+        'report_type': 'STALLED_VEHICLE',
+        'description': '이미 제출된 신고',
+        'files': (io.BytesIO(b"test content"), 'submitted_report.png')
+    }
+
+    create_res = client.post(
+        '/api/reports',
+        data=payload,
+        headers=auth_header,
+        content_type='multipart/form-data',
+    )
+
+    assert create_res.status_code == 201
+
+    report = IncidentReport.query.filter_by(title='Already Submitted Report').first()
+    assert report is not None
+
+    submit_res = client.post(
+        f"/api/reports/drafts/{report.id}/submit",
+        headers=auth_header,
+    )
+
+    assert submit_res.status_code == 400
+    body = submit_res.get_json()
+    assert body["success"] is False
+
