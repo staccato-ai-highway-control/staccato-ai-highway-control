@@ -831,6 +831,78 @@ class ReportUploadService:
             "message": "신고가 삭제 또는 취소 처리되었습니다.",
         }, 200
 
+
+    @staticmethod
+    def get_analysis_status(report_id):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        jobs = (
+            ReportAnalysisJob.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportAnalysisJob.id.desc())
+            .all()
+        )
+
+        latest_job = jobs[0] if jobs else None
+        latest_job_data = ReportUploadService._to_dict(latest_job) if latest_job else None
+
+        return {
+            "success": True,
+            "report_id": report.id,
+            "report_code": report.report_code,
+            "analysis_status": latest_job.job_status if latest_job else None,
+            "analysis_job_id": latest_job.id if latest_job else None,
+            "analysis_summary": latest_job.result_summary if latest_job else None,
+            "risk_level": report.risk_level,
+            "risk_score": report.risk_score,
+            "converted_incident_id": report.converted_incident_id,
+            "job_count": len(jobs),
+            "latest_job": latest_job_data,
+        }, 200
+
+    @staticmethod
+    def list_analysis_jobs(report_id):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        jobs = (
+            ReportAnalysisJob.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportAnalysisJob.id.desc())
+            .all()
+        )
+
+        return {
+            "success": True,
+            "report_id": report.id,
+            "report_code": report.report_code,
+            "count": len(jobs),
+            "items": [ReportUploadService._to_dict(job) for job in jobs],
+        }, 200
+
+    @staticmethod
+    def get_analysis_job(job_id):
+        from app.extensions import db
+        from app.models import ReportAnalysisJob
+
+        job = db.session.get(ReportAnalysisJob, job_id)
+        if not job:
+            return {"success": False, "error": "분석 작업을 찾을 수 없습니다."}, 404
+
+        return {
+            "success": True,
+            "item": ReportUploadService._to_dict(job),
+        }, 200
+
     @staticmethod
     def request_report_analysis(report_id, user_id):
         from app.extensions import db
