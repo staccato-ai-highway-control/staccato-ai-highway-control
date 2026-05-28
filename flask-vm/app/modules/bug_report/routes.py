@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from app.utils.security import require_auth
+
 from app.modules.bug_report.service import (
     close_bug_report,
     create_bug_report,
@@ -9,6 +11,7 @@ from app.modules.bug_report.service import (
     get_bug_report_attachment_file,
     get_bug_report_detail,
     list_bug_reports,
+    list_my_bug_reports,
     update_bug_report,
 )
 
@@ -29,6 +32,16 @@ def create_bug_report_api():
 @bug_report_bp.get("")
 def list_bug_reports_api():
     result, status_code = list_bug_reports(request.args)
+    return jsonify(result), status_code
+
+
+@bug_report_bp.get("/my")
+@require_auth
+def list_my_bug_reports_api():
+    result, status_code = list_my_bug_reports(
+        request.args,
+        request.current_user,
+    )
     return jsonify(result), status_code
 
 

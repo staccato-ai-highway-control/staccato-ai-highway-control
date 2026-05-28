@@ -168,6 +168,57 @@ def list_bug_reports(args) -> tuple[dict, int]:
     }, 200
 
 
+def list_my_bug_reports(args, current_user) -> tuple[dict, int]:
+    page = _positive_int(args.get("page"), DEFAULT_PAGE, maximum=100000)
+    size = _positive_int(args.get("size"), DEFAULT_SIZE, maximum=MAX_SIZE)
+
+    query = BugReport.query.filter(BugReport.reporter_id == current_user.id)
+
+    status = _normalize_choice(args.get("status"))
+    if status:
+        if status not in BUG_REPORT_STATUSES:
+            return _invalid_choice("status", BUG_REPORT_STATUSES), 400
+        query = query.filter(BugReport.status == status)
+
+    severity = _normalize_choice(args.get("severity"))
+    if severity:
+        if severity not in BUG_REPORT_SEVERITIES:
+            return _invalid_choice("severity", BUG_REPORT_SEVERITIES), 400
+        query = query.filter(BugReport.severity == severity)
+
+    category = _clean_text(args.get("category"))
+    if category:
+        query = query.filter(BugReport.category == category.upper())
+
+    keyword = _clean_text(args.get("keyword"))
+    if keyword:
+        like_keyword = f"%{keyword}%"
+        query = query.filter(or_(
+            BugReport.title.ilike(like_keyword),
+            BugReport.description.ilike(like_keyword),
+            BugReport.page_url.ilike(like_keyword),
+        ))
+
+    pagination = query.order_by(BugReport.created_at.desc(), BugReport.id.desc()).paginate(
+        page=page,
+        per_page=size,
+        error_out=False,
+    )
+
+    items = [item.to_dict(attachments=[]) for item in pagination.items]
+
+    return {
+        "success": True,
+        "data": {
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        },
+    }, 200
+
+
 def get_bug_report_detail(bug_report_id: int) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
