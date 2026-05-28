@@ -5,6 +5,8 @@ import type {
   MyReportListParams,
   PaginatedReports,
   Report,
+  ReportAnalysisJob,
+  ReportAnalysisStatus,
   ReportListParams,
   ReportPriority,
   ReportType,
@@ -229,6 +231,56 @@ export async function createIncidentReport(payload: CreateIncidentReportPayload)
     priority: payload.priority ?? "NORMAL",
     isDemoData: payload.isDemoData ?? payload.uploadPurpose === "TEST_DEMO",
   });
+}
+
+
+type RawReportAnalysisStatusResponse =
+  | FlexibleApiResponse<ReportAnalysisStatus>
+  | ReportAnalysisStatus;
+
+type RawReportAnalysisJobsResponse =
+  | FlexibleApiResponse<{ items?: ReportAnalysisJob[]; count?: number; report_id?: number | string; report_code?: string | null }>
+  | { success?: boolean; items?: ReportAnalysisJob[]; count?: number; report_id?: number | string; report_code?: string | null };
+
+type RawReportAnalysisJobResponse =
+  | FlexibleApiResponse<ReportAnalysisJob>
+  | { success?: boolean; item?: ReportAnalysisJob }
+  | ReportAnalysisJob;
+
+export async function getReportAnalysisStatus(reportId: string | number) {
+  const response = await apiClient<RawReportAnalysisStatusResponse>(`/api/reports/${reportId}/analysis-status`);
+
+  if (typeof response === "object" && response !== null && "report_id" in response) {
+    return response as ReportAnalysisStatus;
+  }
+
+  return getEnvelopeData<ReportAnalysisStatus>(response as FlexibleApiResponse<ReportAnalysisStatus>);
+}
+
+export async function getReportAnalysisJobs(reportId: string | number) {
+  const response = await apiClient<RawReportAnalysisJobsResponse>(`/api/reports/${reportId}/analysis-jobs`);
+
+  if (typeof response === "object" && response !== null && "items" in response) {
+    return response as { success?: boolean; items?: ReportAnalysisJob[]; count?: number; report_id?: number | string; report_code?: string | null };
+  }
+
+  return getEnvelopeData<{ items?: ReportAnalysisJob[]; count?: number; report_id?: number | string; report_code?: string | null }>(
+    response as FlexibleApiResponse<{ items?: ReportAnalysisJob[]; count?: number; report_id?: number | string; report_code?: string | null }>
+  );
+}
+
+export async function getReportAnalysisJob(jobId: string | number) {
+  const response = await apiClient<RawReportAnalysisJobResponse>(`/api/reports/analysis-jobs/${jobId}`);
+
+  if (typeof response === "object" && response !== null && "item" in response) {
+    return response.item as ReportAnalysisJob;
+  }
+
+  if (typeof response === "object" && response !== null && "id" in response) {
+    return response as ReportAnalysisJob;
+  }
+
+  return getEnvelopeData<ReportAnalysisJob>(response as FlexibleApiResponse<ReportAnalysisJob>);
 }
 
 export function requestReportAnalysis(reportId: string | number, payload?: Record<string, unknown>) {
