@@ -1369,6 +1369,402 @@ class ReportUploadService:
             "data": report_data,
         }, 200
 
+
+    @staticmethod
+    def _extract_analysis_metrics(result_summary):
+        from collections import Counter
+
+        if not isinstance(result_summary, dict):
+            return {
+                "detection_count": 0,
+                "avg_confidence": None,
+                "max_confidence": None,
+                "label_counts": {},
+            }
+
+        detections = result_summary.get("detections")
+        if detections is None:
+            detections = result_summary.get("objects")
+        if detections is None:
+            detections = result_summary.get("items")
+        if not isinstance(detections, list):
+            detections = []
+
+        confidence_values = []
+        labels = []
+
+        for item in detections:
+            if not isinstance(item, dict):
+                continue
+
+            raw_confidence = (
+                item.get("confidence")
+                if item.get("confidence") is not None
+                else item.get("score")
+                if item.get("score") is not None
+                else item.get("conf")
+                if item.get("conf") is not None
+                else item.get("probability")
+            )
+
+            try:
+                if raw_confidence is not None:
+                    confidence_values.append(float(raw_confidence))
+            except (TypeError, ValueError):
+                pass
+
+            label = (
+                item.get("label")
+                or item.get("class_name")
+                or item.get("class")
+                or item.get("name")
+                or item.get("type")
+            )
+            if label:
+                labels.append(str(label))
+
+        raw_count = (
+            result_summary.get("count")
+            if result_summary.get("count") is not None
+            else result_summary.get("detection_count")
+            if result_summary.get("detection_count") is not None
+            else result_summary.get("total_count")
+        )
+
+        try:
+            detection_count = int(raw_count) if raw_count is not None else len(detections)
+        except (TypeError, ValueError):
+            detection_count = len(detections)
+
+        avg_confidence = (
+            round(sum(confidence_values) / len(confidence_values), 4)
+            if confidence_values
+            else None
+        )
+        max_confidence = round(max(confidence_values), 4) if confidence_values else None
+
+        return {
+            "detection_count": detection_count,
+            "avg_confidence": avg_confidence,
+            "max_confidence": max_confidence,
+            "label_counts": dict(Counter(labels)),
+            "raw_status": result_summary.get("status"),
+        }
+
+    @staticmethod
+    def _analysis_comparison_item(job, report=None, attachment=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        if report is None:
+            report = db.session.get(IncidentReport, job.report_id)
+        if attachment is None:
+            attachment = db.session.get(ReportAttachment, job.attachment_id)
+
+        result_summary = job.result_summary if isinstance(job.result_summary, dict) else {}
+        metrics = ReportUploadService._extract_analysis_metrics(result_summary)
+
+        return {
+            "job_id": job.id,
+            "analysis_job_id": job.id,
+            "job_status": job.job_status,
+            "analysis_type": job.analysis_type,
+            "ai_engine_type": job.ai_engine_type,
+            "primary_model_name": job.primary_model_name,
+            "primary_model_version": job.primary_model_version,
+            "progress_percent": float(job.progress_percent) if job.progress_percent is not None else None,
+            "latency_ms": job.latency_ms,
+            "requested_at": job.requested_at.isoformat() if job.requested_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "report": {
+                "id": report.id if report else None,
+                "report_id": report.id if report else None,
+                "report_code": report.report_code if report else None,
+                "title": report.title if report else None,
+                "report_type": report.report_type if report else None,
+                "status": report.status if report else None,
+                "priority": report.priority if report else None,
+                "risk_level": report.risk_level if report else None,
+                "risk_score": report.risk_score if report else None,
+                "submitted_at": report.submitted_at.isoformat() if report and report.submitted_at else None,
+            },
+            "attachment": {
+                "id": attachment.id if attachment else None,
+                "attachment_id": attachment.id if attachment else None,
+                "file_type": attachment.file_type if attachment else None,
+                "original_filename": attachment.original_filename if attachment else None,
+                "mime_type": attachment.mime_type if attachment else None,
+                "file_size": attachment.file_size if attachment else None,
+                "preview_url": (
+                    f"/api/reports/attachments/{attachment.id}/preview"
+                    if attachment and ReportUploadService._is_previewable_attachment(attachment)
+                    else None
+                ),
+                "download_url": (
+                    f"/api/reports/attachments/{attachment.id}/download"
+                    if attachment
+                    else None
+                ),
+            },
+            "metrics": metrics,
+            "result_summary": result_summary,
+        }
+
+    @staticmethod
+    def _build_comparison_metrics(items):
+        metric_keys = [
+            "detection_count",
+            "avg_confidence",
+            "max_confidence",
+        ]
+
+        metrics = {}
+        for key in metric_keys:
+            values = []
+            for item in items:
+                value = item.get("metrics", {}).get(key)
+                if value is None:
+                    continue
+                try:
+                    values.append({
+                        "job_id": item["job_id"],
+                        "value": float(value),
+                    })
+                except (TypeError, ValueError):
+                    continue
+
+            if not values:
+                metrics[key] = {
+                    "values": [],
+                    "min": None,
+                    "max": None,
+                    "delta": None,
+                    "highest_job_id": None,
+                    "lowest_job_id": None,
+                }
+                continue
+
+            sorted_values = sorted(values, key=lambda item: item["value"])
+            min_value = sorted_values[0]["value"]
+            max_value = sorted_values[-1]["value"]
+
+            metrics[key] = {
+                "values": values,
+                "min": min_value,
+                "max": max_value,
+                "delta": max_value - min_value,
+                "highest_job_id": sorted_values[-1]["job_id"],
+                "lowest_job_id": sorted_values[0]["job_id"],
+            }
+
+        return metrics
+
+    @staticmethod
+    def list_analysis_comparison_candidates(args, current_user):
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from sqlalchemy import or_
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 20)),
+            20,
+            maximum=100,
+        )
+
+        status = str(args.get("status") or args.get("job_status") or "COMPLETED").strip().upper()
+        keyword = str(args.get("keyword") or "").strip()
+        report_id = args.get("report_id")
+
+        query = (
+            ReportAnalysisJob.query
+            .join(IncidentReport, ReportAnalysisJob.report_id == IncidentReport.id)
+            .outerjoin(ReportAttachment, ReportAnalysisJob.attachment_id == ReportAttachment.id)
+        )
+
+        if status and status != "ALL":
+            query = query.filter(ReportAnalysisJob.job_status == status)
+
+        query = query.filter(IncidentReport.deleted_at.is_(None))
+        query = query.filter(IncidentReport.status.notin_(("DELETED", "CANCELLED", "DRAFT")))
+
+        if current_user.role not in {"SUPER_ADMIN", "CONTROL_ADMIN"}:
+            query = query.filter(IncidentReport.reporter_id == current_user.id)
+
+        if report_id not in (None, ""):
+            try:
+                query = query.filter(ReportAnalysisJob.report_id == int(report_id))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("report_id 값이 올바르지 않습니다.") from exc
+
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            query = query.filter(or_(
+                IncidentReport.title.ilike(like_keyword),
+                IncidentReport.report_code.ilike(like_keyword),
+                ReportAttachment.original_filename.ilike(like_keyword),
+            ))
+
+        pagination = query.order_by(ReportAnalysisJob.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        jobs = list(pagination.items)
+        report_ids = {job.report_id for job in jobs}
+        attachment_ids = {job.attachment_id for job in jobs}
+
+        reports = {
+            report.id: report
+            for report in IncidentReport.query.filter(IncidentReport.id.in_(report_ids)).all()
+        } if report_ids else {}
+
+        attachments = {
+            attachment.id: attachment
+            for attachment in ReportAttachment.query.filter(ReportAttachment.id.in_(attachment_ids)).all()
+        } if attachment_ids else {}
+
+        items = [
+            ReportUploadService._analysis_comparison_item(
+                job,
+                report=reports.get(job.report_id),
+                attachment=attachments.get(job.attachment_id),
+            )
+            for job in jobs
+        ]
+
+        data = {
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }
+
+        return {
+            "success": True,
+            "data": data,
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }, 200
+
+    @staticmethod
+    def compare_analysis_jobs(data, current_user):
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+
+        raw_job_ids = data.get("job_ids") or data.get("analysis_job_ids")
+        if isinstance(raw_job_ids, str):
+            raw_job_ids = [item.strip() for item in raw_job_ids.split(",") if item.strip()]
+
+        if not isinstance(raw_job_ids, list):
+            raise ValueError("job_ids 배열이 필요합니다.")
+
+        job_ids = []
+        for raw_id in raw_job_ids:
+            try:
+                job_id = int(raw_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("job_ids에는 숫자 ID만 포함할 수 있습니다.") from exc
+
+            if job_id <= 0:
+                raise ValueError("job_ids에는 양수 ID만 포함할 수 있습니다.")
+
+            if job_id not in job_ids:
+                job_ids.append(job_id)
+
+        if len(job_ids) < 2:
+            raise ValueError("비교하려면 최소 2개의 분석 job이 필요합니다.")
+        if len(job_ids) > 5:
+            raise ValueError("한 번에 최대 5개의 분석 job만 비교할 수 있습니다.")
+
+        jobs = ReportAnalysisJob.query.filter(ReportAnalysisJob.id.in_(job_ids)).all()
+        job_map = {job.id: job for job in jobs}
+
+        missing_ids = [job_id for job_id in job_ids if job_id not in job_map]
+        if missing_ids:
+            return {
+                "success": False,
+                "error": "분석 작업을 찾을 수 없습니다.",
+                "missing_job_ids": missing_ids,
+            }, 404
+
+        ordered_jobs = [job_map[job_id] for job_id in job_ids]
+        not_completed_ids = [
+            job.id for job in ordered_jobs
+            if job.job_status != "COMPLETED"
+        ]
+
+        if not_completed_ids:
+            return {
+                "success": False,
+                "error": "COMPLETED 상태의 분석 job만 비교할 수 있습니다.",
+                "not_completed_job_ids": not_completed_ids,
+            }, 400
+
+        report_ids = {job.report_id for job in ordered_jobs}
+        attachment_ids = {job.attachment_id for job in ordered_jobs}
+
+        reports = {
+            report.id: report
+            for report in IncidentReport.query.filter(IncidentReport.id.in_(report_ids)).all()
+        }
+
+        attachments = {
+            attachment.id: attachment
+            for attachment in ReportAttachment.query.filter(ReportAttachment.id.in_(attachment_ids)).all()
+        } if attachment_ids else {}
+
+        unauthorized_job_ids = []
+        for job in ordered_jobs:
+            report = reports.get(job.report_id)
+            if not report or report.deleted_at is not None:
+                return {
+                    "success": False,
+                    "error": "분석 job에 연결된 신고를 찾을 수 없습니다.",
+                    "job_id": job.id,
+                }, 404
+
+            if not ReportUploadService._can_manage_report(report, current_user):
+                unauthorized_job_ids.append(job.id)
+
+        if unauthorized_job_ids:
+            return {
+                "success": False,
+                "error": "비교분석 조회 권한이 없는 분석 job이 포함되어 있습니다.",
+                "unauthorized_job_ids": unauthorized_job_ids,
+            }, 403
+
+        items = [
+            ReportUploadService._analysis_comparison_item(
+                job,
+                report=reports.get(job.report_id),
+                attachment=attachments.get(job.attachment_id),
+            )
+            for job in ordered_jobs
+        ]
+
+        comparison_metrics = ReportUploadService._build_comparison_metrics(items)
+
+        return {
+            "success": True,
+            "count": len(items),
+            "job_ids": job_ids,
+            "items": items,
+            "comparison": {
+                "metrics": comparison_metrics,
+                "report_ids": [item["report"]["id"] for item in items],
+            },
+            "data": {
+                "items": items,
+                "metrics": comparison_metrics,
+            },
+        }, 200
+
+
     @staticmethod
     def get_analysis_status(report_id):
         from app.extensions import db
