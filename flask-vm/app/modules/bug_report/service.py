@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import os
+import uuid
+from pathlib import Path
 
+from flask import current_app, send_file
+from werkzeug.utils import secure_filename
 from sqlalchemy import or_
 
 from app.extensions import db
@@ -183,6 +189,134 @@ def get_bug_report_detail(bug_report_id: int) -> tuple[dict, int]:
             attachments=[attachment.to_dict() for attachment in attachments]
         ),
     }, 200
+
+
+def create_bug_report_attachments(bug_report_id: int, files) -> tuple[dict, int]:
+    bug_report = db.session.get(BugReport, bug_report_id)
+    if bug_report is None:
+        return {
+            "success": False,
+            "error": "Bug report not found.",
+        }, 404
+
+    files = files or []
+    if not files:
+        return {
+            "success": False,
+            "error": "files are required.",
+        }, 400
+
+    upload_root = current_app.config.get("UPLOAD_BASE_PATH")
+    if not upload_root:
+        return {
+            "success": False,
+            "error": "UPLOAD_BASE_PATH is not configured.",
+        }, 500
+
+    upload_dir = os.path.join(upload_root, "bug_reports", str(bug_report.id))
+    os.makedirs(upload_dir, exist_ok=True)
+
+    now = _utc_now_naive()
+    saved_paths: list[str] = []
+    attachments: list[BugReportAttachment] = []
+
+    try:
+        for file in files:
+            if not file or not file.filename:
+                continue
+
+            original_filename = secure_filename(file.filename) or "attachment"
+            extension = Path(original_filename).suffix.lower().lstrip(".") or None
+            stored_filename = f"{uuid.uuid4().hex}_{original_filename}"
+            file_path = os.path.join(upload_dir, stored_filename)
+
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)
+
+            checksum = hashlib.sha256(file.read()).hexdigest()
+            file.seek(0)
+
+            file.save(file_path)
+            saved_paths.append(file_path)
+
+            attachment = BugReportAttachment(
+                bug_report_id=bug_report.id,
+                uploaded_by=None,
+                original_filename=original_filename,
+                stored_filename=stored_filename,
+                file_path=file_path,
+                file_size=file_size,
+                mime_type=file.content_type or "application/octet-stream",
+                file_ext=extension,
+                checksum_sha256=checksum,
+                created_at=now,
+            )
+            db.session.add(attachment)
+            attachments.append(attachment)
+
+        if not attachments:
+            return {
+                "success": False,
+                "error": "No valid files were uploaded.",
+            }, 400
+
+        bug_report.updated_at = now
+        db.session.add(bug_report)
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "Bug report attachments uploaded.",
+            "bug_report_id": bug_report.id,
+            "count": len(attachments),
+            "items": [attachment.to_dict() for attachment in attachments],
+        }, 201
+
+    except Exception:
+        db.session.rollback()
+
+        for saved_path in saved_paths:
+            if saved_path and os.path.exists(saved_path):
+                try:
+                    os.remove(saved_path)
+                except OSError:
+                    current_app.logger.exception(
+                        "Failed to clean up bug report attachment after upload failure.",
+                        extra={"file_path": saved_path},
+                    )
+
+        raise
+
+
+def get_bug_report_attachment_file(attachment_id: int):
+    attachment = db.session.get(BugReportAttachment, attachment_id)
+    if attachment is None:
+        return {
+            "success": False,
+            "error": "Bug report attachment not found.",
+        }, 404
+
+    if not attachment.file_path or not os.path.exists(attachment.file_path):
+        return {
+            "success": False,
+            "error": "Bug report attachment file not found.",
+        }, 404
+
+    download_name = secure_filename(attachment.original_filename or "") or attachment.stored_filename
+
+    response = send_file(
+        attachment.file_path,
+        mimetype=attachment.mime_type or "application/octet-stream",
+        as_attachment=True,
+        download_name=download_name,
+        conditional=True,
+        max_age=0,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, no-store"
+
+    return response, 200
 
 
 def _clean_text(value) -> str | None:
