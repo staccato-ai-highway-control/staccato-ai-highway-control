@@ -200,4 +200,103 @@ def create_app(test_config=None):
     # Register Socket.IO event handlers.
     from app.modules import socketio as socketio_module  # noqa: F401
 
+    _register_report_created_realtime_hook(app)
     return app
+
+
+
+def _register_report_created_realtime_hook(app):
+    if getattr(app, "_report_created_realtime_hook_registered", False):
+        return
+
+    app._report_created_realtime_hook_registered = True
+
+    @app.after_request
+    def _emit_report_created_after_request(response):
+        from datetime import datetime
+        from flask import request
+
+        if request.method != "POST":
+            return response
+
+        if request.path.rstrip("/") != "/api/reports":
+            return response
+
+        if response.status_code != 201:
+            return response
+
+        try:
+            body = response.get_json(silent=True) or {}
+            data = body.get("data") if isinstance(body.get("data"), dict) else {}
+            report = body.get("report") if isinstance(body.get("report"), dict) else {}
+
+            report_id = (
+                body.get("report_id")
+                or body.get("id")
+                or data.get("report_id")
+                or data.get("id")
+                or report.get("report_id")
+                or report.get("id")
+            )
+
+            if not report_id:
+                return response
+
+            created_at = (
+                body.get("created_at")
+                or data.get("created_at")
+                or report.get("created_at")
+                or datetime.utcnow().replace(microsecond=0).isoformat()
+            )
+
+            title = (
+                body.get("title")
+                or data.get("title")
+                or report.get("title")
+                or "새 신고가 등록되었습니다."
+            )
+
+            payload = {
+                "realtime_event_id": f"report-{report_id}",
+                "id": f"report-{report_id}",
+                "event_type": "REPORT_CREATED",
+                "severity": "INFO",
+                "incident_status": "REPORTED",
+                "incident_id": report_id,
+                "incident_code": f"REPORT-{report_id}",
+                "report_id": report_id,
+                "message": title,
+                "created_at": created_at,
+                "occurred_at": created_at,
+            }
+
+            from app.extensions import db
+            from app.models import RealtimeEvent
+
+            realtime_event = RealtimeEvent(
+                event_type="REPORT_CREATED",
+                event_name="incident.created",
+                target_resource_type="report",
+                target_resource_id=int(report_id),
+                incident_id=None,
+                payload=payload,
+                send_status="SENT",
+                error_message=None,
+                created_at=datetime.utcnow(),
+                sent_at=datetime.utcnow(),
+            )
+            db.session.add(realtime_event)
+            db.session.commit()
+
+            from app.modules.socketio.emitters import (
+                emit_incident_created,
+                emit_report_created,
+            )
+
+            emit_incident_created(payload)
+            emit_report_created(payload)
+
+        except Exception:
+            app.logger.exception("Failed to emit report.created after POST /api/reports")
+
+        return response
