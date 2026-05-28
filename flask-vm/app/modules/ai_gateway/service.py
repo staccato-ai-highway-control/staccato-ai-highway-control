@@ -1,18 +1,104 @@
 # app/modules/ai_gateway/service.py
 
+import os
+import requests
+from flask import current_app
+
+
 class AIGatewayService:
     @staticmethod
     def request_analysis(report_id, file_path):
         """
-        AI 서버가 준비될 때까지 가짜로 성공을 반환하는 Mock 함수
+        신고 첨부파일을 AI-vm /detect API로 전달합니다.
+        반환값:
+            (True, result_json)  - AI 분석 요청 성공
+            (False, error_json)  - 파일 없음 또는 AI 요청 실패
         """
-        # [임시] AI 서버가 아직 구축 중이므로 로그만 남기고 성공 처리
-        print(f"\n[🚧 AI-Gateway Mock] Report {report_id} 분석 요청 수신됨")
-        print(f"[🚧 AI-Gateway Mock] 대상 파일: {file_path}")
-        print(f"[🚧 AI-Gateway Mock] 현재 AI 서버 구축 중으로, 실제 요청은 건너뜁니다.")
 
-        # 나중에 서버 완공되면 아래 주석을 해제하세요!
-        # ai_url = f"{current_app.config.get('AI_SERVER_URL')}/analyze"
-        # response = requests.post(ai_url, json=payload, timeout=10)
+        ai_server_url = (
+            current_app.config.get("AI_SERVER_URL")
+            or os.getenv("AI_SERVER_URL")
+            or "http://192.168.0.186:8001"
+        )
 
-        return True, {"status": "mock_success", "message": "AI server is under construction"}
+        detect_url = f"{ai_server_url.rstrip('/')}/detect"
+
+        current_app.logger.info(
+            "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s",
+            report_id,
+            file_path,
+            detect_url,
+        )
+
+        if not file_path or not os.path.exists(file_path):
+            current_app.logger.error(
+                "[AI-Gateway] file not found. report_id=%s file_path=%s",
+                report_id,
+                file_path,
+            )
+            return False, {
+                "status": "file_not_found",
+                "message": f"File not found: {file_path}",
+            }
+
+        try:
+            with open(file_path, "rb") as f:
+                files = {
+                    "file": (
+                        os.path.basename(file_path),
+                        f,
+                        "application/octet-stream",
+                    )
+                }
+                data = {
+                    "report_id": str(report_id),
+                }
+
+                try:
+                    timeout_seconds = int(
+                        current_app.config.get("AI_DETECT_TIMEOUT_SECONDS")
+                        or os.getenv("AI_DETECT_TIMEOUT_SECONDS", "30")
+                    )
+                except (TypeError, ValueError):
+                    timeout_seconds = 30
+
+                timeout_seconds = max(1, timeout_seconds)
+
+                response = requests.post(
+                    detect_url,
+                    files=files,
+                    data=data,
+                    timeout=timeout_seconds,
+                )
+
+            response.raise_for_status()
+
+            result = response.json()
+
+            current_app.logger.info(
+                "[AI-Gateway] AI detect success. report_id=%s count=%s",
+                report_id,
+                result.get("count"),
+            )
+
+            return True, result
+
+        except requests.RequestException as e:
+            current_app.logger.exception(
+                "[AI-Gateway] AI detect request failed. report_id=%s",
+                report_id,
+            )
+            return False, {
+                "status": "ai_request_failed",
+                "message": str(e),
+            }
+
+        except ValueError as e:
+            current_app.logger.exception(
+                "[AI-Gateway] AI response json parse failed. report_id=%s",
+                report_id,
+            )
+            return False, {
+                "status": "ai_response_parse_failed",
+                "message": str(e),
+            }

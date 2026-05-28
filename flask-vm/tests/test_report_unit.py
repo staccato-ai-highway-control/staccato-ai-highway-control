@@ -193,3 +193,155 @@ def test_report_upload_with_invalid_coordinates_returns_bad_request(client, auth
     report = IncidentReport.query.filter_by(title='Invalid Coordinates Report').first()
     assert report is None
 
+
+def test_report_draft_lifecycle(client, auth_header):
+    create_payload = {
+        "subject": "임시저장 신고",
+        "report_type": "STALLED_VEHICLE",
+        "description": "작성 중인 신고입니다.",
+        "priority": "NORMAL",
+        "latitude": "37.5665",
+        "longitude": "126.9780",
+    }
+
+    create_res = client.post(
+        "/api/reports/drafts",
+        json=create_payload,
+        headers=auth_header,
+    )
+
+    if create_res.status_code != 201:
+        print(f"\nCreate draft response: {create_res.get_json()}")
+
+    assert create_res.status_code == 201
+    create_body = create_res.get_json()
+    assert create_body["success"] is True
+
+    draft_id = create_body["draft_id"]
+
+    report = IncidentReport.query.get(draft_id)
+    assert report is not None
+    assert report.status == "DRAFT"
+    assert report.title == "임시저장 신고"
+
+    list_res = client.get("/api/reports/drafts", headers=auth_header)
+    assert list_res.status_code == 200
+    list_body = list_res.get_json()
+    assert list_body["success"] is True
+    assert list_body["total_count"] >= 1
+
+    get_res = client.get(f"/api/reports/drafts/{draft_id}", headers=auth_header)
+    assert get_res.status_code == 200
+    get_body = get_res.get_json()
+    assert get_body["draft"]["id"] == draft_id
+    assert get_body["draft"]["status"] == "DRAFT"
+
+    update_res = client.patch(
+        f"/api/reports/drafts/{draft_id}",
+        json={
+            "title": "수정된 임시저장 신고",
+            "description": "수정된 설명입니다.",
+            "priority": "HIGH",
+            "cctv_id": "123",
+        },
+        headers=auth_header,
+    )
+
+    if update_res.status_code != 200:
+        print(f"\nUpdate draft response: {update_res.get_json()}")
+
+    assert update_res.status_code == 200
+
+    db.session.refresh(report)
+    assert report.title == "수정된 임시저장 신고"
+    assert report.description == "수정된 설명입니다."
+    assert report.priority == "HIGH"
+    assert report.cctv_id == 123
+
+    delete_res = client.delete(f"/api/reports/drafts/{draft_id}", headers=auth_header)
+    assert delete_res.status_code == 200
+
+    db.session.refresh(report)
+    assert report.status == "DELETED"
+    assert report.deleted_at is not None
+    assert report.deleted_by is not None
+
+
+def test_report_draft_invalid_cctv_id_returns_bad_request(client, auth_header):
+    res = client.post(
+        "/api/reports/drafts",
+        json={
+            "subject": "잘못된 CCTV ID 임시저장",
+            "cctv_id": "not-a-number",
+        },
+        headers=auth_header,
+    )
+
+    assert res.status_code == 400
+    body = res.get_json()
+    assert body["success"] is False
+
+
+def test_submit_report_draft_changes_status_to_submitted(client, auth_header):
+    create_res = client.post(
+        "/api/reports/drafts",
+        json={
+            "subject": "제출할 임시저장 신고",
+            "report_type": "STALLED_VEHICLE",
+            "description": "최종 제출 테스트",
+            "priority": "NORMAL",
+        },
+        headers=auth_header,
+    )
+
+    assert create_res.status_code == 201
+    draft_id = create_res.get_json()["draft_id"]
+
+    submit_res = client.post(
+        f"/api/reports/drafts/{draft_id}/submit",
+        headers=auth_header,
+    )
+
+    if submit_res.status_code != 200:
+        print(f"\nSubmit draft response: {submit_res.get_json()}")
+
+    assert submit_res.status_code == 200
+    body = submit_res.get_json()
+    assert body["success"] is True
+    assert body["report_id"] == draft_id
+
+    report = db.session.get(IncidentReport, draft_id)
+    assert report.status == "SUBMITTED"
+    assert report.upload_purpose == "REPORT"
+    assert report.submitted_at is not None
+
+
+def test_submit_report_draft_rejects_non_draft_report(client, auth_header):
+    payload = {
+        'subject': 'Already Submitted Report',
+        'report_type': 'STALLED_VEHICLE',
+        'description': '이미 제출된 신고',
+        'files': (io.BytesIO(b"test content"), 'submitted_report.png')
+    }
+
+    create_res = client.post(
+        '/api/reports',
+        data=payload,
+        headers=auth_header,
+        content_type='multipart/form-data',
+    )
+
+    assert create_res.status_code == 201
+
+    report = IncidentReport.query.filter_by(title='Already Submitted Report').first()
+    assert report is not None
+
+    submit_res = client.post(
+        f"/api/reports/drafts/{report.id}/submit",
+        headers=auth_header,
+    )
+
+    assert submit_res.status_code == 400
+    body = submit_res.get_json()
+    assert body["success"] is False
+

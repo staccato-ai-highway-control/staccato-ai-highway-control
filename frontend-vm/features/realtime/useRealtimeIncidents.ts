@@ -94,7 +94,7 @@ export function useRealtimeIncidents(limit = 30) {
     }
 
     const socket = io(socketBaseUrl, {
-      transports: ["websocket", "polling"],
+      transports: ["polling"],
       withCredentials: true,
       auth: {
         token: accessToken,
@@ -119,16 +119,23 @@ export function useRealtimeIncidents(limit = 30) {
       setErrorMessage("실시간 알림 서버에 연결할 수 없습니다.");
     });
 
-    socket.on("incident.created", (payload: RealtimeIncidentEvent | { data?: RealtimeIncidentEvent }) => {
+    function handleRealtimeEvent(payload: RealtimeIncidentEvent | { data?: RealtimeIncidentEvent }) {
       const event: RealtimeIncidentEvent =
         typeof payload === "object" && payload !== null && "data" in payload && payload.data
           ? payload.data
           : (payload as RealtimeIncidentEvent);
 
       setEvents((current) => mergeByEventId(current, [event]));
-    });
+    }
+
+    socket.on("incident.created", handleRealtimeEvent);
+    socket.on("report.created", handleRealtimeEvent);
+    socket.on("notification.created", handleRealtimeEvent);
 
     return () => {
+      socket.off("incident.created", handleRealtimeEvent);
+      socket.off("report.created", handleRealtimeEvent);
+      socket.off("notification.created", handleRealtimeEvent);
       socket.disconnect();
     };
   }, [socketBaseUrl]);

@@ -138,7 +138,7 @@ def test_request_report_analysis_creates_job_and_is_idempotent(app, test_user, m
         assert job.job_status == "QUEUED"
         assert job.analysis_type == "INCIDENT_DETECTION"
         assert job.requested_by == test_user
-        assert calls == [(report.id, attachment.file_path)]
+        assert calls == []
 
         second_result, second_status_code = ReportUploadService.request_report_analysis(
             report_id=report.id,
@@ -148,4 +148,58 @@ def test_request_report_analysis_creates_job_and_is_idempotent(app, test_user, m
         assert second_status_code == 200
         assert second_result["job_id"] == job.id
         assert ReportAnalysisJob.query.filter_by(report_id=report.id).count() == 1
+        assert calls == []
+
+
+def test_process_queued_report_analysis_jobs_completes_job(app, test_user, monkeypatch):
+    calls = []
+
+    def fake_request_analysis(report_id, file_path):
+        calls.append((report_id, file_path))
+        return True, {
+            "status": "OK",
+            "count": 1,
+            "detections": [{"label": "vehicle", "confidence": 0.9}],
+        }
+
+    monkeypatch.setattr(
+        "app.modules.ai_gateway.service.AIGatewayService.request_analysis",
+        fake_request_analysis,
+    )
+
+    with app.app_context():
+        report = ReportUploadService.create_report(
+            user_id=test_user,
+            data={
+                "report_type": "ACCIDENT",
+                "upload_purpose": "ANALYSIS",
+                "title": "worker 분석 테스트",
+                "latitude": "37.2636",
+                "longitude": "127.0286",
+            },
+            files=[make_file(filename="worker-test.jpg")],
+        )
+
+        result, status_code = ReportUploadService.request_report_analysis(
+            report_id=report.id,
+            user_id=test_user,
+        )
+
+        assert status_code == 201
+        assert result["success"] is True
+        assert calls == []
+
+        job = ReportAnalysisJob.query.filter_by(report_id=report.id).one()
+        attachment = ReportAttachment.query.filter_by(report_id=report.id).one()
+        assert job.job_status == "QUEUED"
+
+        worker_result, worker_status_code = ReportUploadService.process_queued_report_analysis_jobs(limit=1)
+
+        assert worker_status_code == 200
+        assert worker_result["processed_count"] == 1
+
+        db.session.refresh(job)
+        assert job.job_status == "COMPLETED"
+        assert job.progress_percent == 100
+        assert job.result_summary["count"] == 1
         assert calls == [(report.id, attachment.file_path)]
