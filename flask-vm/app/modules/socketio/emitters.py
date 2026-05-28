@@ -111,3 +111,21 @@ def emit_incident_created(payload: dict) -> bool:
             incident_id,
         )
         return False
+
+
+def emit_report_created(payload: dict) -> bool:
+    """
+    Emit realtime report creation notification.
+    """
+    from flask import current_app
+
+    try:
+        socketio.emit("report.created", payload)
+        socketio.emit("notification.created", payload)
+        return True
+    except Exception:
+        current_app.logger.exception(
+            "Failed to emit report.created. report_id=%s",
+            payload.get("report_id"),
+        )
+        return False
