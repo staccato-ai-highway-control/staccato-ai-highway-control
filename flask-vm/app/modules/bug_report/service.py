@@ -191,6 +191,109 @@ def get_bug_report_detail(bug_report_id: int) -> tuple[dict, int]:
     }, 200
 
 
+def update_bug_report(bug_report_id: int, payload: dict | None) -> tuple[dict, int]:
+    bug_report = db.session.get(BugReport, bug_report_id)
+    if bug_report is None:
+        return {
+            "success": False,
+            "error": "Bug report not found.",
+        }, 404
+
+    data = payload if isinstance(payload, dict) else {}
+
+    if not data:
+        return {
+            "success": False,
+            "error": "Request body must be a JSON object.",
+        }, 400
+
+    if "title" in data:
+        title = _clean_text(data.get("title"))
+        if not title:
+            return {
+                "success": False,
+                "error": "title is required.",
+            }, 400
+        bug_report.title = title
+
+    if "description" in data:
+        description = _clean_text(data.get("description"))
+        if not description:
+            return {
+                "success": False,
+                "error": "description is required.",
+            }, 400
+        bug_report.description = description
+
+    if "category" in data:
+        category = _clean_text(data.get("category"))
+        bug_report.category = category.upper() if category else DEFAULT_CATEGORY
+
+    if "severity" in data:
+        severity = _normalize_choice(data.get("severity"), DEFAULT_SEVERITY)
+        if severity not in BUG_REPORT_SEVERITIES:
+            return _invalid_choice("severity", BUG_REPORT_SEVERITIES), 400
+        bug_report.severity = severity
+
+    if "priority" in data:
+        priority = _normalize_choice(data.get("priority"), DEFAULT_PRIORITY)
+        if priority not in BUG_REPORT_PRIORITIES:
+            return _invalid_choice("priority", BUG_REPORT_PRIORITIES), 400
+        bug_report.priority = priority
+
+    if "status" in data:
+        status = _normalize_choice(data.get("status"), DEFAULT_STATUS)
+        if status not in BUG_REPORT_STATUSES:
+            return _invalid_choice("status", BUG_REPORT_STATUSES), 400
+        bug_report.status = status
+
+    for field_name in (
+        "page_url",
+        "steps_to_reproduce",
+        "expected_result",
+        "actual_result",
+        "browser",
+        "os",
+        "device",
+        "app_version",
+    ):
+        if field_name in data:
+            setattr(bug_report, field_name, _clean_text(data.get(field_name)))
+
+    bug_report.updated_at = _utc_now_naive()
+
+    db.session.add(bug_report)
+    db.session.commit()
+
+    return {
+        "success": True,
+        "message": "Bug report updated.",
+        "data": bug_report.to_dict(attachments=[]),
+    }, 200
+
+
+def close_bug_report(bug_report_id: int) -> tuple[dict, int]:
+    bug_report = db.session.get(BugReport, bug_report_id)
+    if bug_report is None:
+        return {
+            "success": False,
+            "error": "Bug report not found.",
+        }, 404
+
+    bug_report.status = "CLOSED"
+    bug_report.updated_at = _utc_now_naive()
+
+    db.session.add(bug_report)
+    db.session.commit()
+
+    return {
+        "success": True,
+        "message": "Bug report closed.",
+        "bug_report_id": bug_report.id,
+        "data": bug_report.to_dict(attachments=[]),
+    }, 200
+
+
 def create_bug_report_attachments(bug_report_id: int, files) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
