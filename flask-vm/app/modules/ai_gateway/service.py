@@ -54,11 +54,21 @@ class AIGatewayService:
                     "report_id": str(report_id),
                 }
 
+                try:
+                    timeout_seconds = int(
+                        current_app.config.get("AI_DETECT_TIMEOUT_SECONDS")
+                        or os.getenv("AI_DETECT_TIMEOUT_SECONDS", "30")
+                    )
+                except (TypeError, ValueError):
+                    timeout_seconds = 30
+
+                timeout_seconds = max(1, timeout_seconds)
+
                 response = requests.post(
                     detect_url,
                     files=files,
                     data=data,
-                    timeout=30,
+                    timeout=timeout_seconds,
                 )
 
             response.raise_for_status()
