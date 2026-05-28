@@ -11,6 +11,8 @@ type ApiErrorPayload = {
   success?: boolean;
   error_code?: string;
   message?: string;
+  error?: string;
+  detail?: string;
   details?: unknown;
 };
 
@@ -48,13 +50,25 @@ async function parseResponseBody(response: Response) {
   }
 }
 
+function isHtmlPayload(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html") || normalized.includes("werkzeug debugger");
+}
+
 function getErrorMessage(response: Response, payload: unknown) {
-  if (typeof payload === "object" && payload !== null && "message" in payload) {
-    const message = (payload as ApiErrorPayload).message;
+  if (typeof payload === "object" && payload !== null) {
+    const errorPayload = payload as ApiErrorPayload;
+    const message = errorPayload.message ?? errorPayload.error ?? errorPayload.detail;
     if (message) return message;
+
+    if (typeof errorPayload.details === "string" && errorPayload.details.trim()) return errorPayload.details;
+    if (errorPayload.error_code) return errorPayload.error_code;
   }
 
-  if (typeof payload === "string" && payload.trim()) return payload;
+  if (typeof payload === "string" && payload.trim()) {
+    if (isHtmlPayload(payload)) return statusMessages[response.status] ?? "서버 오류 페이지가 반환되었습니다. Flask 서버 상태를 확인해 주세요.";
+    return payload;
+  }
   return statusMessages[response.status] ?? `API 요청 실패: ${response.status}`;
 }
 

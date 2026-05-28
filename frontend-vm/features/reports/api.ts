@@ -1,4 +1,6 @@
 import { apiClient, getEnvelopeData, type FlexibleApiResponse } from "@/lib/apiClient";
+import { API_BASE_URL } from "@/lib/constants";
+import { getStoredAccessToken } from "@/lib/authStorage";
 import type {
   MyReportListParams,
   PaginatedReports,
@@ -60,10 +62,38 @@ export type LocationSearchItem = {
   longitude?: number | string;
 };
 
+type RawReportDetailResponse = FlexibleApiResponse<Report> | { success?: boolean; message?: string; data?: Report; report?: Report } | Report;
+
 type LocationSearchResponse =
   | FlexibleApiResponse<{ items?: LocationSearchItem[] }>
   | { items?: LocationSearchItem[] }
   | LocationSearchItem[];
+
+
+function joinUrl(path: string) {
+  if (/^https?:\/\//.test(path)) return path;
+  return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+}
+
+function isHtmlPayload(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html") || normalized.includes("werkzeug debugger");
+}
+
+async function fetchAttachmentBlob(path: string) {
+  const token = getStoredAccessToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(joinUrl(path), { headers });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    if (text && !isHtmlPayload(text)) throw new Error(text);
+    throw new Error(`첨부파일 요청 실패: ${response.status}`);
+  }
+
+  return response.blob();
+}
 
 function appendOptional(formData: FormData, key: string, value: string | number | boolean | null | undefined) {
   if (value !== null && value !== undefined && value !== "") formData.append(key, String(value));
@@ -130,8 +160,15 @@ export async function getMyReports(params: MyReportListParams = {}) {
 }
 
 export async function getReport(reportId: string | number) {
-  const response = await apiClient<FlexibleApiResponse<Report>>(`/api/reports/${reportId}`);
-  return getEnvelopeData<Report>(response);
+  const response = await apiClient<RawReportDetailResponse>(`/api/reports/${reportId}`);
+
+  if (typeof response === "object" && response !== null) {
+    const detail = response as { data?: Report; report?: Report };
+    if (detail.data) return detail.data;
+    if (detail.report) return detail.report;
+  }
+
+  return getEnvelopeData<Report>(response as FlexibleApiResponse<Report>);
 }
 
 export function createReport(payload: CreateReportPayload) {
@@ -148,7 +185,7 @@ export async function uploadReport(payload: UploadReportPayload) {
   appendOptional(formData, "subject", payload.subject);
   appendOptional(formData, "description", payload.description);
   appendOptional(formData, "priority", payload.priority ?? "NORMAL");
-  appendOptional(formData, "is_demo_data", Boolean(payload.isDemoData));
+  appendOptional(formData, "is_demo_data", payload.isDemoData ? 1 : undefined);
   appendOptional(formData, "location", payload.location);
   appendOptional(formData, "address", payload.address);
   appendOptional(formData, "place_name", payload.placeName);
@@ -199,4 +236,20 @@ export function requestReportAnalysis(reportId: string | number, payload?: Recor
     method: "POST",
     body: payload ?? {},
   });
+}
+
+export function previewReportAttachment(attachmentId: string | number) {
+  return fetchAttachmentBlob(`/api/reports/attachments/${attachmentId}/preview`);
+}
+
+export function previewReportAttachmentUrl(path: string) {
+  return fetchAttachmentBlob(path);
+}
+
+export function downloadReportAttachment(attachmentId: string | number) {
+  return fetchAttachmentBlob(`/api/reports/attachments/${attachmentId}/download`);
+}
+
+export function downloadReportAttachmentUrl(path: string) {
+  return fetchAttachmentBlob(path);
 }
