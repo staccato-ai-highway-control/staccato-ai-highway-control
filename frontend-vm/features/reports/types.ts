@@ -8,10 +8,37 @@ export type ReportPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "URGENT" | s
 export interface ReportAnalysisJob {
   id?: number | string;
   analysis_job_id?: number | string;
+  report_id?: number | string;
+  attachment_id?: number | string;
+  job_status?: string | null;
   status?: string | null;
+  analysis_type?: string | null;
+  ai_engine_type?: string | null;
+  progress_percent?: number | string | null;
+  result_summary?: unknown;
   summary?: string | null;
+  error_message?: string | null;
+  failed_reason_code?: string | null;
+  created_incident_id?: number | string | null;
+  requested_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface ReportAnalysisStatus {
+  success?: boolean;
+  report_id?: number | string;
+  report_code?: string | null;
+  analysis_status?: string | null;
+  analysis_job_id?: number | string | null;
+  analysis_summary?: unknown;
+  risk_level?: string | null;
+  risk_score?: number | string | null;
+  converted_incident_id?: number | string | null;
+  job_count?: number;
+  latest_job?: ReportAnalysisJob | null;
 }
 
 export interface ReportAttachment {

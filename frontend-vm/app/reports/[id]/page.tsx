@@ -11,8 +11,8 @@ import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPre
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { deleteReport, getReport, requestReportAnalysis, updateReport } from "@/features/reports/api";
-import type { Report, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
+import { deleteReport, getReport, getReportAnalysisStatus, requestReportAnalysis, updateReport } from "@/features/reports/api";
+import type { Report, ReportAnalysisStatus, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
 
 const reportTypeLabels: Record<string, string> = {
   GENERAL: "일반",
@@ -49,6 +49,62 @@ const priorityLabels: Record<string, string> = {
 const reportTypeOptions = ["GENERAL", "ACCIDENT", "LANE_STOP_REPORT", "SHOULDER_STOP_REPORT", "UNKNOWN_REPORT"];
 const purposeOptions = ["ANALYSIS", "REPORT", "NORMAL_REFERENCE", "TEST_DEMO"];
 const priorityOptions = ["LOW", "NORMAL", "MEDIUM", "HIGH", "URGENT"];
+
+
+const ACTIVE_ANALYSIS_STATUSES = new Set(["WAITING", "REQUESTED", "QUEUED", "PENDING", "RUNNING", "PROCESSING", "ANALYZING"]);
+const FINAL_ANALYSIS_STATUSES = new Set(["COMPLETED", "FAILED"]);
+
+function normalizeAnalysisStatusValue(status?: string | null) {
+  return status ? status.trim().toUpperCase() : "";
+}
+
+function shouldPollAnalysisStatus(status?: string | null) {
+  const normalized = normalizeAnalysisStatusValue(status);
+  return normalized !== "" && ACTIVE_ANALYSIS_STATUSES.has(normalized) && !FINAL_ANALYSIS_STATUSES.has(normalized);
+}
+
+function stringifyAnalysisSummary(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function mergeAnalysisStatusIntoReport(report: Report, status: ReportAnalysisStatus, fallbackId: string): Report {
+  const latestJob = status.latest_job;
+  const latestJobId = latestJob?.id ?? latestJob?.analysis_job_id;
+  const existingJobs = report.analysis_jobs ?? [];
+  const mergedJobs = latestJob
+    ? [
+        ...existingJobs.filter((job) => String(job.id ?? job.analysis_job_id) !== String(latestJobId)),
+        latestJob,
+      ]
+    : existingJobs;
+
+  return normalizeReport(
+    {
+      ...report,
+      analysis_status: status.analysis_status ?? report.analysis_status,
+      analysis_job_id: status.analysis_job_id ?? report.analysis_job_id,
+      analysis_summary:
+        stringifyAnalysisSummary(status.analysis_summary) ??
+        stringifyAnalysisSummary(latestJob?.result_summary) ??
+        latestJob?.summary ??
+        report.analysis_summary,
+      risk_level: status.risk_level ?? report.risk_level,
+      risk_score: typeof status.risk_score === "number" ? status.risk_score : report.risk_score,
+      converted_incident_id: status.converted_incident_id ?? report.converted_incident_id,
+      analysis_jobs: mergedJobs,
+    },
+    fallbackId
+  );
+}
+
 
 type ReportWithAliases = Report & {
   report_id?: number | string | null;
@@ -324,6 +380,8 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [requestingAnalysis, setRequestingAnalysis] = useState(false);
+  const [pollingAnalysis, setPollingAnalysis] = useState(false);
+  const [analysisPollingError, setAnalysisPollingError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -365,6 +423,53 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     loadReport();
   }, [id]);
 
+
+  useEffect(() => {
+    const reportId = report ? getReportId(report) : "";
+    const currentStatus = report ? getAnalysisStatus(report) : "";
+
+    if (!reportId || !shouldPollAnalysisStatus(currentStatus)) {
+      setPollingAnalysis(false);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    async function refreshAnalysisStatus() {
+      try {
+        setPollingAnalysis(true);
+        const status = await getReportAnalysisStatus(reportId);
+
+        if (cancelled) return;
+
+        setAnalysisPollingError(null);
+        setReport((current) => {
+          if (!current) return current;
+          return mergeAnalysisStatusIntoReport(current, status, id);
+        });
+
+        if (!shouldPollAnalysisStatus(status.analysis_status)) {
+          setPollingAnalysis(false);
+          if (timer) clearInterval(timer);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAnalysisPollingError(error instanceof Error ? error.message : "분석 상태를 갱신하지 못했습니다.");
+        }
+      }
+    }
+
+    refreshAnalysisStatus();
+    timer = setInterval(refreshAnalysisStatus, 3000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [id, report?.id, report?.analysis_status]);
+
+
   async function handleRequestAnalysis() {
     if (!report) return;
     setRequestingAnalysis(true);
@@ -372,6 +477,18 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
     try {
       await requestReportAnalysis(getReportId(report));
+      setAnalysisPollingError(null);
+      setReport((current) =>
+        current
+          ? normalizeReport(
+              {
+                ...current,
+                analysis_status: "QUEUED",
+              },
+              id
+            )
+          : current
+      );
       await loadReport();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "AI 분석 요청에 실패했습니다.");
