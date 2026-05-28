@@ -483,6 +483,43 @@ def list_report_analysis_jobs(report_id):
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
+
+@report_upload_bp.route("/analysis-comparisons/candidates", methods=["GET"])
+@require_auth
+def list_analysis_comparison_candidates():
+    try:
+        result, status_code = ReportUploadService.list_analysis_comparison_candidates(
+            request.args,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        logger.exception("비교분석 후보 목록 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/analysis-comparisons", methods=["POST"])
+@require_auth
+def compare_analysis_jobs():
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
+        result, status_code = ReportUploadService.compare_analysis_jobs(
+            data=data,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception:
+        logger.exception("분석 job 비교 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
 @report_upload_bp.route("/analysis-jobs/<int:job_id>", methods=["GET"])
 @require_auth
 def get_report_analysis_job(job_id):
