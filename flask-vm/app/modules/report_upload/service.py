@@ -5,7 +5,7 @@ from datetime import UTC, datetime, time
 from decimal import Decimal
 from pathlib import PurePath
 
-from flask import current_app
+from flask import current_app, send_file
 from werkzeug.utils import secure_filename
 
 
@@ -85,6 +85,220 @@ class ReportUploadService:
             data[column.name] = value
         return data
 
+
+    @staticmethod
+    def _is_previewable_attachment(attachment):
+        mime_type = (getattr(attachment, "mime_type", None) or "").lower()
+        file_type = (getattr(attachment, "file_type", None) or "").upper()
+
+        return (
+            file_type in {"IMAGE", "VIDEO"}
+            or mime_type.startswith("image/")
+            or mime_type.startswith("video/")
+        )
+
+    @staticmethod
+    def _attachment_response(attachment):
+        data = ReportUploadService._to_dict(attachment)
+
+        is_previewable = ReportUploadService._is_previewable_attachment(attachment)
+        preview_url = (
+            f"/api/reports/attachments/{attachment.id}/preview"
+            if is_previewable
+            else None
+        )
+        download_url = f"/api/reports/attachments/{attachment.id}/download"
+
+        data["preview_url"] = preview_url
+        data["download_url"] = download_url
+
+        # 기존 DB 컬럼이 NULL이어도 프론트가 사용할 수 있는 URL을 보강합니다.
+        if not data.get("thumbnail_url") and preview_url:
+            data["thumbnail_url"] = preview_url
+        if not data.get("file_url"):
+            data["file_url"] = download_url
+
+        return data
+
+    @staticmethod
+    def _first_preview_url(attachments):
+        for attachment in attachments:
+            if ReportUploadService._is_previewable_attachment(attachment):
+                return f"/api/reports/attachments/{attachment.id}/preview"
+        return None
+
+    @staticmethod
+    def _attach_list_attachment_summaries(reports, items):
+        from app.models import ReportAttachment
+
+        report_ids = [report.id for report in reports]
+        if not report_ids:
+            return items
+
+        query = ReportAttachment.query.filter(ReportAttachment.report_id.in_(report_ids))
+
+        if hasattr(ReportAttachment, "deleted_at"):
+            query = query.filter(ReportAttachment.deleted_at.is_(None))
+
+        attachments = (
+            query
+            .order_by(ReportAttachment.report_id.asc(), ReportAttachment.id.asc())
+            .all()
+        )
+
+        grouped = {}
+        for attachment in attachments:
+            grouped.setdefault(attachment.report_id, []).append(attachment)
+
+        for item in items:
+            report_attachments = grouped.get(item.get("id"), [])
+            attachment_items = [
+                ReportUploadService._attachment_response(attachment)
+                for attachment in report_attachments
+            ]
+
+            item["attachments"] = attachment_items
+            item["attachment_count"] = len(attachment_items)
+            item["thumbnail_url"] = ReportUploadService._first_preview_url(report_attachments)
+
+        return items
+
+    @staticmethod
+    def _resolve_attachment_path(attachment):
+        raw_path = getattr(attachment, "file_path", None)
+        if not raw_path:
+            return None, {
+                "success": False,
+                "error": "첨부파일 경로가 없습니다.",
+            }, 404
+
+        file_path = os.path.abspath(raw_path)
+        upload_base = current_app.config.get("UPLOAD_BASE_PATH")
+
+        if not upload_base:
+            return None, {
+                "success": False,
+                "error": "UPLOAD_BASE_PATH 설정이 없습니다.",
+            }, 500
+
+        upload_base = os.path.abspath(upload_base)
+
+        try:
+            is_inside_upload_base = os.path.commonpath([upload_base, file_path]) == upload_base
+        except ValueError:
+            is_inside_upload_base = False
+
+        if not is_inside_upload_base:
+            current_app.logger.warning(
+                "Unsafe report attachment path blocked",
+                extra={
+                    "attachment_id": getattr(attachment, "id", None),
+                    "file_path": file_path,
+                    "upload_base": upload_base,
+                },
+            )
+            return None, {
+                "success": False,
+                "error": "허용되지 않은 첨부파일 경로입니다.",
+            }, 403
+
+        if not os.path.isfile(file_path):
+            current_app.logger.warning(
+                "Report attachment file missing",
+                extra={
+                    "attachment_id": getattr(attachment, "id", None),
+                    "file_path": file_path,
+                },
+            )
+            return None, {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        return file_path, None, 200
+
+    @staticmethod
+    def get_attachment_file(attachment_id, current_user, as_download=False):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        try:
+            attachment_id = int(attachment_id)
+        except (TypeError, ValueError):
+            return {
+                "success": False,
+                "error": "첨부파일 ID가 올바르지 않습니다.",
+            }, 400
+
+        if attachment_id <= 0:
+            return {
+                "success": False,
+                "error": "첨부파일 ID가 올바르지 않습니다.",
+            }, 400
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if not attachment or getattr(attachment, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        report = db.session.get(IncidentReport, attachment.report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 접근 권한이 없습니다.",
+            }, 403
+
+        if not as_download and not ReportUploadService._is_previewable_attachment(attachment):
+            return {
+                "success": False,
+                "error": "미리보기를 지원하지 않는 파일 형식입니다.",
+            }, 415
+
+        file_path, error_response, status_code = ReportUploadService._resolve_attachment_path(attachment)
+        if error_response:
+            return error_response, status_code
+
+        try:
+            if as_download:
+                attachment.download_count = (attachment.download_count or 0) + 1
+            else:
+                attachment.access_count = (attachment.access_count or 0) + 1
+
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception(
+                "Report attachment access counter update failed",
+                extra={"attachment_id": attachment.id},
+            )
+
+        original_filename = getattr(attachment, "original_filename", None)
+        stored_filename = getattr(attachment, "stored_filename", None)
+        download_name = secure_filename(original_filename or "") or stored_filename or f"attachment-{attachment.id}"
+
+        mimetype = getattr(attachment, "mime_type", None) or "application/octet-stream"
+
+        response = send_file(
+            file_path,
+            mimetype=mimetype,
+            as_attachment=as_download,
+            download_name=download_name,
+            conditional=True,
+            max_age=0,
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Cache-Control"] = "private, no-store"
+
+        return response, 200
+
     @staticmethod
     def _to_optional_decimal(value, field_name):
         if value is None:
@@ -128,7 +342,9 @@ class ReportUploadService:
             .all()
         )
 
-        data["attachments"] = [ReportUploadService._to_dict(item) for item in attachments]
+        data["attachments"] = [ReportUploadService._attachment_response(item) for item in attachments]
+        data["attachment_count"] = len(attachments)
+        data["thumbnail_url"] = ReportUploadService._first_preview_url(attachments)
         data["locations"] = [ReportUploadService._to_dict(item) for item in locations]
         data["analysis_jobs"] = [ReportUploadService._to_dict(item) for item in jobs]
 
@@ -310,10 +526,12 @@ class ReportUploadService:
             error_out=False,
         )
 
+        reports = list(pagination.items)
         items = [
             ReportUploadService._report_response(report, include_children=False)
-            for report in pagination.items
+            for report in reports
         ]
+        ReportUploadService._attach_list_attachment_summaries(reports, items)
 
         data = {
             "items": items,
