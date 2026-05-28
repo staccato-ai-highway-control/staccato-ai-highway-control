@@ -51,21 +51,30 @@ async function parseBody(response: Response) {
   }
 }
 
-function isHtmlPayload(value: string) {
+function isUnsafeErrorText(value: string) {
   const normalized = value.trim().toLowerCase();
-  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html") || normalized.includes("werkzeug debugger");
+  return (
+    normalized.startsWith("<!doctype html") ||
+    normalized.startsWith("<html") ||
+    normalized.includes("werkzeug debugger") ||
+    normalized.includes("traceback") ||
+    normalized.includes("sqlalchemy") ||
+    normalized.includes("internal server error") ||
+    normalized.includes("axioserror") ||
+    normalized.includes("typeerror:") ||
+    /https?:\/\//i.test(value) ||
+    /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(value) ||
+    /\/(?:home|var|usr|tmp)\//.test(value)
+  );
 }
 
 function getErrorMessage(response: Response, payload: unknown) {
   if (typeof payload === "object" && payload !== null) {
     const message = (payload as ErrorPayload).message ?? (payload as ErrorPayload).error ?? (payload as ErrorPayload).detail;
-    if (message) return message;
+    if (message) return isUnsafeErrorText(message) ? `게시판 API 요청 실패: ${response.status}` : message;
   }
 
-  if (typeof payload === "string" && payload.trim()) {
-    if (isHtmlPayload(payload)) return `게시판 API 요청 실패: ${response.status}`;
-    return payload;
-  }
+  if (typeof payload === "string" && payload.trim()) return isUnsafeErrorText(payload) ? `게시판 API 요청 실패: ${response.status}` : payload;
   return `게시판 API 요청 실패: ${response.status}`;
 }
 

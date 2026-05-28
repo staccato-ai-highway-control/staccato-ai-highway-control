@@ -20,7 +20,7 @@ export function AppLayout({ title, children }: { title: string; children: ReactN
           isMobileMenuOpen={isMobileMenuOpen}
           onMobileMenuToggle={() => setIsMobileMenuOpen((isOpen) => !isOpen)}
         />
-        <div className="p-5">{children}</div>
+        <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-5">{children}</div>
       </main>
     </div>
   );

@@ -7,9 +7,21 @@ import type {
   Report,
   ReportListParams,
   ReportPriority,
+  PaginatedReportDrafts,
+  ReportDraft,
+  ReportDraftPayload,
+  ReportDraftResponse,
+  ReportDraftSubmitResponse,
   ReportType,
+  ReportAnalysisJob,
+  ReportAnalysisRequestResponse,
+  ReportAnalysisComparisonCandidate,
+  ReportAnalysisComparisonCandidatesResult,
+  ReportAnalysisComparisonResult,
+  ReportAnalysisStatus,
   ReportUploadResponse,
   UpdateReportPayload,
+  UpdateReportStatusPayload,
   UploadPurpose,
 } from "./types";
 
@@ -48,6 +60,33 @@ type RawReportListResponse =
       total_pages?: number;
     };
 
+type RawReportDetailResponse = FlexibleApiResponse<Report> | { success?: boolean; message?: string; data?: Report; report?: Report } | Report;
+
+type RawReportDraftListResponse =
+  | ReportDraft[]
+  | FlexibleApiResponse<Partial<PaginatedReportDrafts> | ReportDraft[]>
+  | {
+      success?: boolean;
+      data?: Partial<PaginatedReportDrafts> | ReportDraft[];
+      drafts?: ReportDraft[];
+      items?: ReportDraft[];
+      page?: number;
+      size?: number;
+      total_count?: number;
+      total_pages?: number;
+    };
+
+type RawReportDraftDetailResponse = FlexibleApiResponse<ReportDraft> | { success?: boolean; message?: string; draft?: ReportDraft; data?: ReportDraft } | ReportDraft;
+
+type RawAnalysisComparisonCandidatesResponse =
+  | ReportAnalysisComparisonCandidate[]
+  | FlexibleApiResponse<ReportAnalysisComparisonCandidatesResult | ReportAnalysisComparisonCandidate[]>
+  | { candidates?: ReportAnalysisComparisonCandidate[]; items?: ReportAnalysisComparisonCandidate[] };
+
+type RawAnalysisComparisonResponse =
+  | FlexibleApiResponse<ReportAnalysisComparisonResult>
+  | { comparison?: ReportAnalysisComparisonResult };
+
 export type LocationSearchItem = {
   id?: string | number;
   location?: string;
@@ -62,22 +101,31 @@ export type LocationSearchItem = {
   longitude?: number | string;
 };
 
-type RawReportDetailResponse = FlexibleApiResponse<Report> | { success?: boolean; message?: string; data?: Report; report?: Report } | Report;
-
 type LocationSearchResponse =
   | FlexibleApiResponse<{ items?: LocationSearchItem[] }>
   | { items?: LocationSearchItem[] }
   | LocationSearchItem[];
-
 
 function joinUrl(path: string) {
   if (/^https?:\/\//.test(path)) return path;
   return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
 }
 
-function isHtmlPayload(value: string) {
+function isUnsafeErrorText(value: string) {
   const normalized = value.trim().toLowerCase();
-  return normalized.startsWith("<!doctype html") || normalized.startsWith("<html") || normalized.includes("werkzeug debugger");
+  return (
+    normalized.startsWith("<!doctype html") ||
+    normalized.startsWith("<html") ||
+    normalized.includes("werkzeug debugger") ||
+    normalized.includes("traceback") ||
+    normalized.includes("sqlalchemy") ||
+    normalized.includes("internal server error") ||
+    normalized.includes("axioserror") ||
+    normalized.includes("typeerror:") ||
+    /https?:\/\//i.test(value) ||
+    /\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(value) ||
+    /\/(?:home|var|usr|tmp)\//.test(value)
+  );
 }
 
 async function fetchAttachmentBlob(path: string) {
@@ -88,7 +136,7 @@ async function fetchAttachmentBlob(path: string) {
   const response = await fetch(joinUrl(path), { headers });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    if (text && !isHtmlPayload(text)) throw new Error(text);
+    if (text && !isUnsafeErrorText(text)) throw new Error(text);
     throw new Error(`첨부파일 요청 실패: ${response.status}`);
   }
 
@@ -112,6 +160,46 @@ function buildQuery(params: ReportListParams | MyReportListParams | Record<strin
 
   const queryString = query.toString();
   return queryString ? `?${queryString}` : "";
+}
+
+function normalizeReportDraftList(response: RawReportDraftListResponse): PaginatedReportDrafts {
+  if (Array.isArray(response)) {
+    return { items: response, page: 1, size: response.length, total_count: response.length, total_pages: 1 };
+  }
+
+  const draftResponse = response as {
+    data?: Partial<PaginatedReportDrafts> | ReportDraft[];
+    drafts?: ReportDraft[];
+    items?: ReportDraft[];
+    page?: number;
+    size?: number;
+    total_count?: number;
+    total_pages?: number;
+  };
+  const data = draftResponse.data;
+
+  if (Array.isArray(data)) {
+    return { items: data, page: draftResponse.page ?? 1, size: draftResponse.size ?? data.length, total_count: draftResponse.total_count ?? data.length, total_pages: draftResponse.total_pages ?? 1 };
+  }
+
+  if (data && Array.isArray(data.items)) {
+    return {
+      items: data.items,
+      page: data.page ?? draftResponse.page ?? 1,
+      size: data.size ?? draftResponse.size ?? data.items.length,
+      total_count: data.total_count ?? draftResponse.total_count ?? data.items.length,
+      total_pages: data.total_pages ?? draftResponse.total_pages ?? 1,
+    };
+  }
+
+  const items = draftResponse.drafts ?? draftResponse.items ?? [];
+  return {
+    items,
+    page: draftResponse.page ?? 1,
+    size: draftResponse.size ?? items.length,
+    total_count: draftResponse.total_count ?? items.length,
+    total_pages: draftResponse.total_pages ?? 1,
+  };
 }
 
 function normalizeReportList(response: RawReportListResponse): PaginatedReports {
@@ -169,6 +257,50 @@ export async function getReport(reportId: string | number) {
   }
 
   return getEnvelopeData<Report>(response as FlexibleApiResponse<Report>);
+}
+
+export async function createReportDraft(payload: ReportDraftPayload) {
+  const response = await apiClient<ReportDraftResponse>("/api/reports/drafts", {
+    method: "POST",
+    body: payload,
+  });
+  return response;
+}
+
+export async function getMyReportDrafts(params: { page?: number; size?: number } = {}) {
+  const response = await apiClient<RawReportDraftListResponse>("/api/reports/drafts" + buildQuery(params));
+  return normalizeReportDraftList(response);
+}
+
+export async function getReportDraft(draftId: string | number) {
+  const response = await apiClient<RawReportDraftDetailResponse>("/api/reports/drafts/" + draftId);
+
+  if (typeof response === "object" && response !== null) {
+    const detail = response as { data?: ReportDraft; draft?: ReportDraft };
+    if (detail.draft) return detail.draft;
+    if (detail.data) return detail.data;
+  }
+
+  return getEnvelopeData<ReportDraft>(response as FlexibleApiResponse<ReportDraft>);
+}
+
+export async function updateReportDraft(draftId: string | number, payload: ReportDraftPayload) {
+  const response = await apiClient<ReportDraftResponse>("/api/reports/drafts/" + draftId, {
+    method: "PATCH",
+    body: payload,
+  });
+  return response;
+}
+
+export function deleteReportDraft(draftId: string | number) {
+  return apiClient<{ success?: boolean; message?: string }>("/api/reports/drafts/" + draftId, { method: "DELETE" });
+}
+
+export function submitReportDraft(draftId: string | number) {
+  return apiClient<ReportDraftSubmitResponse>("/api/reports/drafts/" + draftId + "/submit", {
+    method: "POST",
+    body: {},
+  });
 }
 
 export function createReport(payload: CreateReportPayload) {
@@ -232,9 +364,107 @@ export async function createIncidentReport(payload: CreateIncidentReportPayload)
 }
 
 export function requestReportAnalysis(reportId: string | number, payload?: Record<string, unknown>) {
-  return apiClient<{ ok?: boolean; success?: boolean; message?: string }>(`/api/reports/${reportId}/analyze`, {
+  return apiClient<ReportAnalysisRequestResponse>(`/api/reports/${reportId}/analyze`, {
     method: "POST",
     body: payload ?? {},
+  });
+}
+
+export async function getAnalysisComparisonCandidates(params: { report_id?: string | number; selectedJobId?: string | number }) {
+  const response = await apiClient<RawAnalysisComparisonCandidatesResponse>("/api/reports/analysis-comparisons/candidates" + buildQuery(params));
+  if (Array.isArray(response)) return response;
+
+  const direct = response as { candidates?: ReportAnalysisComparisonCandidate[]; items?: ReportAnalysisComparisonCandidate[] };
+  if (direct.candidates) return direct.candidates;
+  if (direct.items) return direct.items;
+
+  const data = getEnvelopeData<ReportAnalysisComparisonCandidatesResult | ReportAnalysisComparisonCandidate[]>(response as FlexibleApiResponse<ReportAnalysisComparisonCandidatesResult | ReportAnalysisComparisonCandidate[]>);
+  if (Array.isArray(data)) return data;
+  return data.items ?? [];
+}
+
+export async function createAnalysisComparison(jobIds: Array<string | number>) {
+  const response = await apiClient<RawAnalysisComparisonResponse>("/api/reports/analysis-comparisons", {
+    method: "POST",
+    body: { job_ids: jobIds },
+  });
+
+  if (typeof response === "object" && response !== null && "comparison" in response && (response as { comparison?: ReportAnalysisComparisonResult }).comparison) {
+    return (response as { comparison: ReportAnalysisComparisonResult }).comparison;
+  }
+
+  return getEnvelopeData<ReportAnalysisComparisonResult>(response as FlexibleApiResponse<ReportAnalysisComparisonResult>);
+}
+export async function getReportAnalysisStatus(reportId: string | number) {
+  const response = await apiClient<FlexibleApiResponse<ReportAnalysisStatus> | { report?: ReportAnalysisStatus }>(`/api/reports/${reportId}/analysis-status`);
+  if (typeof response === "object" && response !== null && "report" in response && (response as { report?: ReportAnalysisStatus }).report) {
+    return (response as { report: ReportAnalysisStatus }).report;
+  }
+  return getEnvelopeData<ReportAnalysisStatus>(response as FlexibleApiResponse<ReportAnalysisStatus>);
+}
+
+export async function getReportAnalysisJobs(reportId: string | number) {
+  const response = await apiClient<FlexibleApiResponse<ReportAnalysisJob[]> | { jobs?: ReportAnalysisJob[] }>(`/api/reports/${reportId}/analysis-jobs`);
+  if (typeof response === "object" && response !== null && "jobs" in response) return (response as { jobs?: ReportAnalysisJob[] }).jobs ?? [];
+  return getEnvelopeData<ReportAnalysisJob[]>(response as FlexibleApiResponse<ReportAnalysisJob[]>);
+}
+
+export async function getReportAnalysisJob(jobId: string | number) {
+  const response = await apiClient<FlexibleApiResponse<ReportAnalysisJob>>(`/api/reports/analysis-jobs/${jobId}`);
+  return getEnvelopeData<ReportAnalysisJob>(response);
+}
+
+export async function retryReportAnalysisJob(jobId: string | number) {
+  const response = await apiClient<FlexibleApiResponse<ReportAnalysisJob> | { job?: ReportAnalysisJob }>(`/api/reports/analysis-jobs/${jobId}/retry`, {
+    method: "POST",
+    body: {},
+  });
+  if (typeof response === "object" && response !== null && "job" in response && (response as { job?: ReportAnalysisJob }).job) {
+    return (response as { job: ReportAnalysisJob }).job;
+  }
+  return getEnvelopeData<ReportAnalysisJob>(response as FlexibleApiResponse<ReportAnalysisJob>);
+}
+
+export async function updateReportStatus(reportId: string | number, payload: UpdateReportStatusPayload) {
+  const response = await apiClient<FlexibleApiResponse<Report> | { report?: Report }>(`/api/reports/${reportId}/status`, {
+    method: "PATCH",
+    body: payload,
+  });
+  if (typeof response === "object" && response !== null && "report" in response && (response as { report?: Report }).report) {
+    return (response as { report: Report }).report;
+  }
+  return getEnvelopeData<Report>(response as FlexibleApiResponse<Report>);
+}
+
+export function approveReport(reportId: string | number, memo = "") {
+  return apiClient<FlexibleApiResponse<Report> | { report?: Report }>(`/api/reports/${reportId}/approve`, {
+    method: "POST",
+    body: { memo },
+  });
+}
+
+export function rejectReport(reportId: string | number, reason: string) {
+  return apiClient<FlexibleApiResponse<Report> | { report?: Report }>(`/api/reports/${reportId}/reject`, {
+    method: "POST",
+    body: { reason },
+  });
+}
+
+
+export async function uploadReportAttachments(reportId: string | number, files: File[]) {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+
+  return apiClient<{ success?: boolean; message?: string; data?: unknown }>(`/api/reports/${reportId}/attachments`, {
+    method: "POST",
+    formData,
+  });
+}
+
+export function deleteReportAttachment(reportId: string | number, attachmentId: string | number, reason?: string) {
+  return apiClient<{ success?: boolean; message?: string }>(`/api/reports/${reportId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+    body: reason ? { reason } : undefined,
   });
 }
 

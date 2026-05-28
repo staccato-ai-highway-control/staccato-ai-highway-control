@@ -114,9 +114,9 @@ export function useRealtimeIncidents(limit = 30) {
       setStatus("disconnected");
     });
 
-    socket.on("connect_error", (error) => {
+    socket.on("connect_error", () => {
       setStatus("error");
-      setErrorMessage(error.message);
+      setErrorMessage("실시간 알림 서버에 연결할 수 없습니다.");
     });
 
     socket.on("incident.created", (payload: RealtimeIncidentEvent | { data?: RealtimeIncidentEvent }) => {
