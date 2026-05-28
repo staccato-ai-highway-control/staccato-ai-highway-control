@@ -3,11 +3,13 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from app.modules.bug_report.service import (
+    close_bug_report,
     create_bug_report,
     create_bug_report_attachments,
     get_bug_report_attachment_file,
     get_bug_report_detail,
     list_bug_reports,
+    update_bug_report,
 )
 
 
@@ -33,6 +35,21 @@ def list_bug_reports_api():
 @bug_report_bp.get("/<int:bug_report_id>")
 def get_bug_report_detail_api(bug_report_id: int):
     result, status_code = get_bug_report_detail(bug_report_id)
+    return jsonify(result), status_code
+
+
+@bug_report_bp.patch("/<int:bug_report_id>")
+def update_bug_report_api(bug_report_id: int):
+    result, status_code = update_bug_report(
+        bug_report_id,
+        request.get_json(silent=True),
+    )
+    return jsonify(result), status_code
+
+
+@bug_report_bp.delete("/<int:bug_report_id>")
+def close_bug_report_api(bug_report_id: int):
+    result, status_code = close_bug_report(bug_report_id)
     return jsonify(result), status_code
 
 

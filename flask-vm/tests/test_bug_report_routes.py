@@ -101,6 +101,73 @@ def test_get_bug_report_detail_route(monkeypatch):
     assert body["data"]["attachments"] == []
 
 
+def test_update_bug_report_route(monkeypatch):
+    app = create_app({"TESTING": True})
+
+    def fake_update_bug_report(bug_report_id, payload):
+        assert bug_report_id == 10
+        assert payload["title"] == "수정된 버그"
+        return {
+            "success": True,
+            "message": "Bug report updated.",
+            "data": {
+                "id": bug_report_id,
+                "title": payload["title"],
+                "status": "IN_PROGRESS",
+            },
+        }, 200
+
+    monkeypatch.setattr(
+        "app.modules.bug_report.routes.update_bug_report",
+        fake_update_bug_report,
+    )
+
+    with app.test_client() as client:
+        response = client.patch(
+            "/api/bug-reports/10",
+            json={
+                "title": "수정된 버그",
+                "status": "IN_PROGRESS",
+            },
+        )
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert body["data"]["id"] == 10
+    assert body["data"]["title"] == "수정된 버그"
+
+
+def test_close_bug_report_route(monkeypatch):
+    app = create_app({"TESTING": True})
+
+    def fake_close_bug_report(bug_report_id):
+        assert bug_report_id == 10
+        return {
+            "success": True,
+            "message": "Bug report closed.",
+            "bug_report_id": bug_report_id,
+            "data": {
+                "id": bug_report_id,
+                "status": "CLOSED",
+            },
+        }, 200
+
+    monkeypatch.setattr(
+        "app.modules.bug_report.routes.close_bug_report",
+        fake_close_bug_report,
+    )
+
+    with app.test_client() as client:
+        response = client.delete("/api/bug-reports/10")
+
+    body = response.get_json()
+    assert response.status_code == 200
+    assert body["success"] is True
+    assert body["bug_report_id"] == 10
+    assert body["data"]["status"] == "CLOSED"
+
+
 def test_bug_report_attachment_route_uploads_files(monkeypatch):
     app = create_app({"TESTING": True})
 
@@ -156,6 +223,8 @@ def test_bug_report_routes_are_registered():
     assert ("/api/bug-reports", ("GET",)) in routes
     assert ("/api/bug-reports", ("POST",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("GET",)) in routes
+    assert ("/api/bug-reports/<int:bug_report_id>", ("PATCH",)) in routes
+    assert ("/api/bug-reports/<int:bug_report_id>", ("DELETE",)) in routes
     assert (
         "/api/bug-reports/<int:bug_report_id>/attachments",
         ("POST",),
