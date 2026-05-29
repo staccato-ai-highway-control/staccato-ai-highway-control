@@ -74,3 +74,75 @@ def get_recent_incident_events():
         "count": len(events),
         "items": [_normalize_incident_payload(event) for event in events],
     }), 200
+
+
+def _parse_preview_limit(raw_value, default=5, maximum=20):
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+    if value < 1:
+        return default
+
+    return min(value, maximum)
+
+
+def _normalize_event_preview(event: RealtimeEvent) -> dict:
+    item = _normalize_incident_payload(event)
+
+    snapshot_url = item.get("snapshot_path")
+    video_url = item.get("clip_path")
+    incident_id = item.get("incident_id")
+
+    return {
+        "realtime_event_id": item.get("realtime_event_id"),
+        "event_type": item.get("event_type"),
+        "message": item.get("message"),
+        "severity": item.get("severity"),
+        "source_cctv_id": item.get("source_cctv_id"),
+        "snapshot_url": snapshot_url,
+        "video_url": video_url,
+        "preview_url": video_url or snapshot_url,
+        "preview_type": "video" if video_url else "image" if snapshot_url else None,
+        "has_video": bool(video_url),
+        "has_snapshot": bool(snapshot_url),
+        "occurred_at": item.get("occurred_at"),
+        "created_at": item.get("created_at"),
+        "target_url": f"/incidents/{incident_id}" if incident_id else None,
+    }
+
+
+@realtime_bp.route("/events/preview", methods=["GET"])
+def get_realtime_event_previews():
+    limit = _parse_preview_limit(request.args.get("limit"))
+
+    # 일부 이벤트에는 미디어가 없을 수 있으므로 limit보다 넉넉하게 조회한 뒤
+    # snapshot_path 또는 clip_path가 있는 항목만 미리보기로 반환한다.
+    query_limit = min(limit * 5, 100)
+
+    events = (
+        RealtimeEvent.query
+        .filter(RealtimeEvent.event_name == RECENT_INCIDENT_EVENT_NAME)
+        .order_by(RealtimeEvent.created_at.desc(), RealtimeEvent.id.desc())
+        .limit(query_limit)
+        .all()
+    )
+
+    items = []
+    for event in events:
+        preview = _normalize_event_preview(event)
+        if not preview["preview_url"]:
+            continue
+
+        items.append(preview)
+
+        if len(items) >= limit:
+            break
+
+    return jsonify({
+        "success": True,
+        "count": len(items),
+        "items": items,
+    })
+
