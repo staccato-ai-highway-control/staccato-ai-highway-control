@@ -167,6 +167,39 @@ function getRetryErrorMessage(error: unknown) {
   return "분석 작업 재시도에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+
+function normalizeAnalysisJobs(value: unknown): ReportAnalysisJob[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    const objectValue = value as {
+      analysisJobs?: unknown;
+      jobs?: unknown;
+      data?: unknown;
+      items?: unknown;
+      results?: unknown;
+    };
+
+    const candidates = [
+      objectValue.analysisJobs,
+      objectValue.jobs,
+      objectValue.data,
+      objectValue.items,
+      objectValue.results,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate as ReportAnalysisJob[];
+      }
+    }
+  }
+
+  return [];
+}
+
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -213,7 +246,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       setReport(nextReport);
       setAnalysisStatusResult(null);
       try {
-        setAnalysisJobs(await getReportAnalysisJobs(getReportId(nextReport)));
+        setAnalysisJobs(normalizeAnalysisJobs(await getReportAnalysisJobs(getReportId(nextReport))));
       } catch {
         setAnalysisJobs([]);
       }
@@ -239,7 +272,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     try {
       const reportId = getReportId(report);
       const response = await requestReportAnalysis(reportId);
-      const jobs = response.jobs ?? response.data?.jobs ?? [];
+      const jobs = normalizeAnalysisJobs(response.jobs ?? response.data?.jobs ?? response);
       const requestedJobId = response.job_id ?? response.data?.job_id ?? jobs[0]?.analysis_job_id ?? jobs[0]?.id;
       const latestJob = jobs[0] ? { ...jobs[0], job_status: jobs[0].job_status ?? jobs[0].status ?? "QUEUED" } : null;
 
@@ -251,7 +284,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       });
 
       try {
-        const nextJobs = await getReportAnalysisJobs(reportId);
+        const nextJobs = normalizeAnalysisJobs(await getReportAnalysisJobs(reportId));
         setAnalysisJobs(nextJobs.length > 0 ? nextJobs : jobs);
       } catch {
         setAnalysisJobs(jobs);
@@ -326,14 +359,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         getReportAnalysisJobs(getReportId(report)),
       ]);
       setAnalysisStatusResult(nextStatus);
-      setAnalysisJobs(nextJobs);
+      setAnalysisJobs(normalizeAnalysisJobs(nextJobs));
 
       const retriedStatus = getJobStatus(retriedJob);
       if (!isAnalysisRunning(retriedStatus)) await loadReport();
     } catch (error) {
       setActionError(getRetryErrorMessage(error));
       try {
-        setAnalysisJobs(await getReportAnalysisJobs(getReportId(report)));
+        setAnalysisJobs(normalizeAnalysisJobs(await getReportAnalysisJobs(getReportId(report))));
       } catch {
         setAnalysisJobs([]);
       }
