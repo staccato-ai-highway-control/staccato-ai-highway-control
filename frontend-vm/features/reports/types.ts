@@ -1,45 +1,8 @@
 export type ReportType = "GENERAL" | "ACCIDENT" | "LANE_STOP_REPORT" | "SHOULDER_STOP_REPORT" | "UNKNOWN_REPORT" | string;
 export type UploadPurpose = "ANALYSIS" | "REPORT" | "NORMAL_REFERENCE" | "TEST_DEMO" | string;
-export type AnalysisStatus = "WAITING" | "REQUESTED" | "QUEUED" | "ANALYZING" | "COMPLETED" | "FAILED" | string;
-export type ReportProcessingStatus = "SUBMITTED" | "REVIEWING" | "ANALYZING" | "CONVERTED_TO_INCIDENT" | "REJECTED" | "DELETED" | string;
+export type AnalysisStatus = "WAITING" | "REQUESTED" | "QUEUED" | "PROCESSING" | "ANALYZING" | "COMPLETED" | "FAILED" | string;
+export type ReportProcessingStatus = "SUBMITTED" | "REVIEWING" | "ANALYZING" | "CONVERTED_TO_INCIDENT" | "REJECTED" | "CLOSED" | "DELETED" | string;
 export type ReportPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "URGENT" | string;
-
-
-export interface ReportAnalysisJob {
-  id?: number | string;
-  analysis_job_id?: number | string;
-  report_id?: number | string;
-  attachment_id?: number | string;
-  job_status?: string | null;
-  status?: string | null;
-  analysis_type?: string | null;
-  ai_engine_type?: string | null;
-  progress_percent?: number | string | null;
-  result_summary?: unknown;
-  summary?: string | null;
-  error_message?: string | null;
-  failed_reason_code?: string | null;
-  created_incident_id?: number | string | null;
-  requested_at?: string | null;
-  started_at?: string | null;
-  completed_at?: string | null;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface ReportAnalysisStatus {
-  success?: boolean;
-  report_id?: number | string;
-  report_code?: string | null;
-  analysis_status?: string | null;
-  analysis_job_id?: number | string | null;
-  analysis_summary?: unknown;
-  risk_level?: string | null;
-  risk_score?: number | string | null;
-  converted_incident_id?: number | string | null;
-  job_count?: number;
-  latest_job?: ReportAnalysisJob | null;
-}
 
 export interface ReportAttachment {
   id?: number | string;
@@ -53,6 +16,81 @@ export interface ReportAttachment {
   download_url?: string | null;
   created_at?: string | null;
   uploaded_at?: string | null;
+}
+
+export interface ReportAnalysisJob {
+  id?: number | string;
+  analysis_job_id?: number | string;
+  job_status?: string | null;
+  status?: string | null;
+  summary?: string | null;
+  risk_level?: string | null;
+  risk_score?: number | null;
+  converted_incident_id?: number | string | null;
+  retry_count?: number | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ReportAnalysisStatus {
+  report_id?: number | string;
+  analysis_job_id?: number | string | null;
+  analysis_status?: string;
+  status?: string;
+  analysis_summary?: string | null;
+  summary?: string | null;
+  latest_job?: ReportAnalysisJob | null;
+  risk_level?: string | null;
+  risk_score?: number | null;
+  converted_incident_id?: number | string | null;
+}
+
+export interface ReportAnalysisRequestResponse {
+  ok?: boolean;
+  success?: boolean;
+  message?: string;
+  report_id?: number | string;
+  job_id?: number | string;
+  jobs?: ReportAnalysisJob[];
+  data?: {
+    report_id?: number | string;
+    job_id?: number | string;
+    jobs?: ReportAnalysisJob[];
+  };
+}
+
+export interface ReportAnalysisComparisonCandidate extends ReportAnalysisJob {
+  job_id?: number | string;
+  report_id?: number | string;
+  attachment_id?: number | string | null;
+  engine_name?: string | null;
+  model_name?: string | null;
+  created_at?: string | null;
+}
+
+export interface ReportAnalysisComparisonCandidatesResult {
+  items: ReportAnalysisComparisonCandidate[];
+}
+
+export interface ReportAnalysisComparisonMetric {
+  key?: string;
+  name?: string;
+  label?: string;
+  value?: string | number | null;
+  values?: Record<string, string | number | null | undefined>;
+  unit?: string | null;
+  description?: string | null;
+}
+
+export interface ReportAnalysisComparisonResult {
+  id?: number | string;
+  comparison_id?: number | string;
+  job_ids?: Array<number | string>;
+  summary?: string | null;
+  metrics?: ReportAnalysisComparisonMetric[] | Record<string, unknown>;
+  items?: ReportAnalysisComparisonCandidate[];
+  created_at?: string | null;
 }
 
 export interface Report {
@@ -84,13 +122,15 @@ export interface Report {
   analysis_status?: string;
   analysis_summary?: string | null;
   analysis_jobs?: ReportAnalysisJob[];
+  latest_job?: ReportAnalysisJob | null;
   attachment_name?: string;
   attachment_type?: "image" | "video" | string;
   uploaded_at?: string;
   attachments?: ReportAttachment[];
   attachment_count?: number;
-  thumbnail_url?: string | null;
+  attachment_id?: number | string | null;
   preview_url?: string | null;
+  thumbnail_url?: string | null;
   download_url?: string | null;
 
   // Legacy aliases kept for existing backend variants during rollout.
@@ -134,6 +174,11 @@ export interface PaginatedReports {
   total_pages: number;
 }
 
+export interface UpdateReportStatusPayload {
+  status: "SUBMITTED" | "REVIEWING" | "ANALYZING" | "CONVERTED_TO_INCIDENT" | "REJECTED" | "CLOSED" | string;
+  reason?: string;
+}
+
 export interface UpdateReportPayload {
   report_type?: string;
   upload_purpose?: string;
@@ -147,6 +192,52 @@ export interface UpdateReportPayload {
   latitude?: number;
   longitude?: number;
 }
+
+export interface ReportDraftPayload {
+  title?: string;
+  subject?: string;
+  report_type?: string;
+  upload_purpose?: string;
+  description?: string;
+  priority?: string;
+  cctv_id?: number | string | null;
+  latitude?: string | number;
+  longitude?: string | number;
+  location?: string;
+  address?: string;
+  place_name?: string;
+}
+
+export interface ReportDraft extends Report {
+  draft_id?: number | string;
+}
+
+export interface PaginatedReportDrafts {
+  items: ReportDraft[];
+  page: number;
+  size: number;
+  total_count: number;
+  total_pages: number;
+}
+
+export type ReportDraftResponse = {
+  success?: boolean;
+  message?: string;
+  draft_id?: number | string;
+  draft?: ReportDraft;
+  data?: ReportDraft;
+};
+
+export type ReportDraftSubmitResponse = {
+  success?: boolean;
+  message?: string;
+  report_id?: number | string;
+  report?: Report;
+  data?: {
+    report_id?: number | string;
+    id?: number | string;
+  };
+};
 
 export type ReportUploadResponse = {
   success?: boolean;

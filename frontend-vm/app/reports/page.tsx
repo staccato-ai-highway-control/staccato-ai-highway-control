@@ -7,7 +7,6 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
 import { Badge } from "@/components/common/Badge";
-import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPreview";
 import { getMyReports, getReports, requestReportAnalysis } from "@/features/reports/api";
 import type { PaginatedReports, Report, ReportListParams } from "@/features/reports/types";
 
@@ -267,9 +266,8 @@ export default function ReportsPage() {
                   return (
                     <tr key={getReportId(report)} className="border-t border-slate-100">
                       <td className="px-4 py-4">
-                        <b className="text-slate-950">{getReportTitle(report)}</b>
-                        <p className="mt-1 text-xs font-semibold text-slate-400">{getReportCode(report)} · {getReportLocation(report)}</p>
-                        <ReportAttachmentPreview report={report} compact />
+                        <b className="block max-w-[360px] truncate text-slate-950">{getReportTitle(report)}</b>
+                        <p className="mt-1 max-w-[420px] truncate text-xs font-semibold text-slate-400">{getReportCode(report)} · {getReportLocation(report)}</p>
                       </td>
                       <td className="px-4 py-4 font-semibold text-slate-600">{typeLabels[type] ?? type}</td>
                       <td className="px-4 py-4"><Badge tone={getBadgeTone(status)}>{statusLabels[status] ?? status}</Badge></td>
@@ -279,6 +277,7 @@ export default function ReportsPage() {
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
                           <Link href={`/reports/${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
+                          <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
                           <button type="button" onClick={() => handleRequestAnalysis(report)} disabled={analyzingId === getReportId(report)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
                             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                             분석
