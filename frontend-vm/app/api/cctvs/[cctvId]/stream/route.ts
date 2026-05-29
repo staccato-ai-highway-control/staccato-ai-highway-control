@@ -5,48 +5,38 @@ export const dynamic = "force-dynamic";
 const AI_VM_BASE_URL =
   process.env.AI_VM_BASE_URL ||
   process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
-  "http://127.0.0.1:5005";
+  "http://192.168.0.186:5001";
 
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ cctvId: string }> }
 ) {
   const { cctvId } = await context.params;
-  const sourceUrl = request.nextUrl.searchParams.get("source_url");
-
-  const upstream = new URL(
+  const upstreamUrl = new URL(
     `/streams/${encodeURIComponent(cctvId)}.mjpeg`,
-    AI_VM_BASE_URL
+    AI_VM_BASE_URL.replace(/\/$/, "")
   );
 
-  if (sourceUrl) {
-    upstream.searchParams.set("source_url", sourceUrl);
-  }
+  request.nextUrl.searchParams.forEach((value, key) => {
+    upstreamUrl.searchParams.set(key, value);
+  });
 
-  const response = await fetch(upstream.toString(), {
+  const response = await fetch(upstreamUrl, {
     method: "GET",
     cache: "no-store",
-    headers: {
-      Accept: "multipart/x-mixed-replace,image/jpeg,*/*",
-    },
   });
 
   if (!response.ok || !response.body) {
-    return new Response(`AI stream proxy failed: ${response.status} ${upstream.toString()}`, {
-      status: 502,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
+    return new Response("Failed to fetch CCTV stream", {
+      status: response.status || 502,
     });
   }
 
   return new Response(response.body, {
-    status: 200,
+    status: response.status,
     headers: {
-      "Content-Type": response.headers.get("Content-Type") || "multipart/x-mixed-replace; boundary=frame",
+      "Content-Type": response.headers.get("content-type") || "multipart/x-mixed-replace",
       "Cache-Control": "no-store",
-      "X-Accel-Buffering": "no",
     },
   });
 }

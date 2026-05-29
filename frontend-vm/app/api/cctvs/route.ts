@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 const AI_VM_BASE_URL =
   process.env.AI_VM_BASE_URL ||
   process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
-  "http://192.168.0.186:5003";
+  "http://192.168.0.186:5001";
 
 const PLAYABLE_CACHE_TTL_MS = 5 * 60 * 1000;
 

@@ -106,11 +106,3 @@ __pycache__/
 venv/
 .next/
 node_modules/
-
-# local env / runtime
-.env
-.env.local
-*.bak
-venv/
-.next/
-node_modules/

@@ -44,7 +44,6 @@ export function CctvFrame({
 }) {
   return (
     <div className={`relative overflow-hidden bg-gradient-to-br ${getCctvSceneClass(index)} ${large ? "h-[420px]" : "h-64"}`}>
-      {/* STACCATO_STREAM_IN_MEDIA_PATCH */}
         {cctv.streamUrl ? (
           <img
             src={cctv.streamUrl}
@@ -55,7 +54,7 @@ export function CctvFrame({
             }}
           />
         ) : null}
-<div className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(110deg,transparent_0_28%,rgba(15,23,42,0.45)_28%_34%,transparent_34%_45%,rgba(15,23,42,0.42)_45%_51%,transparent_51%_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(110deg,transparent_0_28%,rgba(15,23,42,0.45)_28%_34%,transparent_34%_45%,rgba(15,23,42,0.42)_45%_51%,transparent_51%_100%)]" />
       <div className="absolute inset-x-12 bottom-0 h-2/3 bg-slate-800/35 [clip-path:polygon(44%_0,56%_0,100%_100%,0_100%)]" />
       <div className="absolute left-3 top-3 flex gap-2">
         {cctv.isLive ? <span className="rounded bg-red-600 px-2 py-1 text-xs font-black text-white">LIVE</span> : null}
