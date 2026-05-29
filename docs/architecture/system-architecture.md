@@ -21,7 +21,7 @@ The following features are excluded from the final MVP:
 
 - Map API
 - GPS-based frontend display
-- Full Docker Compose deployment
+- VM-based deployment; Docker Compose deployment is deprecated
 - Reinforcement learning
 - Automatic retraining
 
@@ -119,6 +119,6 @@ The following architecture elements are excluded from the final MVP:
 
 - Map API
 - GPS-based frontend display
-- Full Docker Compose deployment
+- VM-based deployment; Docker Compose deployment is deprecated
 - Reinforcement learning
 - Automatic retraining pipeline
