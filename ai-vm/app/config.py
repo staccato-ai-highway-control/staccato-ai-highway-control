@@ -3,12 +3,13 @@ import os
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+ENV_ROOT = Path(__file__).resolve().parents[1]
 EVENT_MEDIA_DIR = Path(os.environ.get("EVENT_MEDIA_DIR", REPO_ROOT / "event_media"))
 ROI_SETTINGS_PATH = Path(os.environ.get("ROI_SETTINGS_PATH", REPO_ROOT / "roi_settings.json"))
 
 
 def load_env_file(path: Path | str | None = None) -> None:
-    env_path = Path(path) if path else REPO_ROOT / ".env"
+    env_path = Path(path) if path else ENV_ROOT / ".env"
     if not env_path.exists():
         return
 
