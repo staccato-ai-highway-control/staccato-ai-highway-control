@@ -21,6 +21,9 @@ export type Incident = {
   roiType: "LANE" | "SHOULDER";
   movementDeltaPx: number;
   memo?: string;
+  analysis_job_id?: string | number | null;
+  job_id?: string | number | null;
+  report_id?: string | number | null;
   its: {
     weather: string;
     trafficVolume: string;

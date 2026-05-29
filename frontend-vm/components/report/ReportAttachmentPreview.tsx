@@ -10,16 +10,16 @@ type ReportAttachmentPreviewProps = {
   compact?: boolean;
 };
 
-function getAttachmentId(attachment: ReportAttachment) {
-  return attachment.attachment_id ?? attachment.id;
+function getAttachmentId(attachment?: ReportAttachment, report?: Report) {
+  return attachment?.attachment_id ?? attachment?.id ?? report?.attachment_id;
 }
 
-function getAttachmentName(attachment?: ReportAttachment) {
-  return attachment?.original_filename ?? attachment?.filename ?? "첨부파일";
+function getAttachmentName(attachment?: ReportAttachment, report?: Report) {
+  return attachment?.original_filename ?? attachment?.filename ?? report?.attachment_name ?? report?.attachmentName ?? "첨부파일";
 }
 
-function getAttachmentType(attachment?: ReportAttachment) {
-  return attachment?.mime_type ?? attachment?.file_type ?? "";
+function getAttachmentType(attachment?: ReportAttachment, report?: Report) {
+  return attachment?.mime_type ?? attachment?.file_type ?? report?.attachment_type ?? report?.attachmentType ?? "";
 }
 
 function getPreviewUrl(report: Report, attachment?: ReportAttachment) {
@@ -37,13 +37,13 @@ function isImageType(type: string) {
 export function ReportAttachmentPreview({ report, compact = false }: ReportAttachmentPreviewProps) {
   const attachments = report.attachments ?? [];
   const firstAttachment = attachments[0];
-  const attachmentId = firstAttachment ? getAttachmentId(firstAttachment) : undefined;
+  const attachmentId = getAttachmentId(firstAttachment, report);
   const previewUrl = getPreviewUrl(report, firstAttachment);
   const downloadUrl = getDownloadUrl(report, firstAttachment);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [blobType, setBlobType] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
-  const attachmentType = getAttachmentType(firstAttachment) || blobType;
+  const attachmentType = getAttachmentType(firstAttachment, report) || blobType;
   const hasAttachment = Boolean(attachmentId || previewUrl || downloadUrl || (report.attachment_count ?? 0) > 0);
 
   useEffect(() => {
@@ -53,6 +53,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
     async function loadPreview() {
       setErrorMessage("");
       setObjectUrl(null);
+      setBlobType("");
 
       if (!attachmentId && !previewUrl) {
         if (hasAttachment) setErrorMessage("미리보기 URL이 없습니다.");
@@ -91,7 +92,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = getAttachmentName(firstAttachment);
+      link.download = getAttachmentName(firstAttachment, report);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -125,7 +126,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
     <div className="grid gap-3">
       <div className="grid min-h-80 place-items-center overflow-hidden rounded-lg bg-slate-950 text-white">
         {objectUrl && isImageType(attachmentType) ? (
-          <img src={objectUrl} alt={getAttachmentName(firstAttachment)} className="h-full max-h-[520px] w-full object-contain" />
+          <img src={objectUrl} alt={getAttachmentName(firstAttachment, report)} className="h-full max-h-[520px] w-full object-contain" />
         ) : objectUrl ? (
           <video src={objectUrl} controls className="h-full max-h-[520px] w-full bg-black object-contain" />
         ) : (

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Pencil, Save, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, CheckCircle, Pencil, RotateCcw, Save, Sparkles, Trash2, X, XCircle } from "lucide-react";
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
@@ -11,8 +11,8 @@ import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPre
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
-import { deleteReport, getReport, getReportAnalysisStatus, requestReportAnalysis, updateReport } from "@/features/reports/api";
-import type { Report, ReportAnalysisStatus, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
+import { approveReport, deleteReport, deleteReportAttachment, getReport, getReportAnalysisJobs, getReportAnalysisStatus, rejectReport, requestReportAnalysis, retryReportAnalysisJob, updateReport, updateReportStatus, uploadReportAttachments } from "@/features/reports/api";
+import type { Report, ReportAnalysisJob, ReportAnalysisStatus, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
 
 const reportTypeLabels: Record<string, string> = {
   GENERAL: "일반",
@@ -35,6 +35,7 @@ const statusLabels: Record<string, string> = {
   ANALYZING: "분석중",
   CONVERTED_TO_INCIDENT: "이벤트 전환",
   REJECTED: "반려",
+  CLOSED: "종료",
   DELETED: "삭제됨",
 };
 
@@ -50,324 +51,120 @@ const reportTypeOptions = ["GENERAL", "ACCIDENT", "LANE_STOP_REPORT", "SHOULDER_
 const purposeOptions = ["ANALYSIS", "REPORT", "NORMAL_REFERENCE", "TEST_DEMO"];
 const priorityOptions = ["LOW", "NORMAL", "MEDIUM", "HIGH", "URGENT"];
 
-
-const ACTIVE_ANALYSIS_STATUSES = new Set(["WAITING", "REQUESTED", "QUEUED", "PENDING", "RUNNING", "PROCESSING", "ANALYZING"]);
-const FINAL_ANALYSIS_STATUSES = new Set(["COMPLETED", "FAILED"]);
-
-function normalizeAnalysisStatusValue(status?: string | null) {
-  return status ? status.trim().toUpperCase() : "";
-}
-
-function shouldPollAnalysisStatus(status?: string | null) {
-  const normalized = normalizeAnalysisStatusValue(status);
-  return normalized !== "" && ACTIVE_ANALYSIS_STATUSES.has(normalized) && !FINAL_ANALYSIS_STATUSES.has(normalized);
-}
-
-function stringifyAnalysisSummary(value: unknown) {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "string") return value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function mergeAnalysisStatusIntoReport(report: Report, status: ReportAnalysisStatus, fallbackId: string): Report {
-  const latestJob = status.latest_job;
-  const latestJobId = latestJob?.id ?? latestJob?.analysis_job_id;
-  const existingJobs = report.analysis_jobs ?? [];
-  const mergedJobs = latestJob
-    ? [
-        ...existingJobs.filter((job) => String(job.id ?? job.analysis_job_id) !== String(latestJobId)),
-        latestJob,
-      ]
-    : existingJobs;
-
-  return normalizeReport(
-    {
-      ...report,
-      analysis_status: status.analysis_status ?? report.analysis_status,
-      analysis_job_id: status.analysis_job_id ?? report.analysis_job_id,
-      analysis_summary:
-        stringifyAnalysisSummary(status.analysis_summary) ??
-        stringifyAnalysisSummary(latestJob?.result_summary) ??
-        latestJob?.summary ??
-        report.analysis_summary,
-      risk_level: status.risk_level ?? report.risk_level,
-      risk_score: typeof status.risk_score === "number" ? status.risk_score : report.risk_score,
-      converted_incident_id: status.converted_incident_id ?? report.converted_incident_id,
-      analysis_jobs: mergedJobs,
-    },
-    fallbackId
-  );
-}
-
-
-type ReportWithAliases = Report & {
-  report_id?: number | string | null;
-  reportCode?: string | null;
-  reportType?: string | null;
-  riskLevel?: string | null;
-  cctvId?: number | string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  reporterName?: string | null;
-  reporterId?: number | string | null;
-  placeName?: string | null;
-  attachment_id?: number | string | null;
-  attachmentId?: number | string | null;
-  attachment_count?: number | null;
-  attachmentCount?: number | null;
-  attachment_name?: string | null;
-  attachmentName?: string | null;
-  original_filename?: string | null;
-  filename?: string | null;
-  attachment_type?: string | null;
-  attachmentType?: string | null;
-  mime_type?: string | null;
-  file_type?: string | null;
-  file_url?: string | null;
-  previewUrl?: string | null;
-  thumbnailUrl?: string | null;
-  downloadUrl?: string | null;
-  uploadedAt?: string | null;
-  analysis_job_id?: number | string | null;
-  analysisJobId?: number | string | null;
-  analysis_jobs?: Report["analysis_jobs"];
-  analysisJobs?: Report["analysis_jobs"];
-};
-
-function hasDisplayValue(value: unknown) {
-  if (value === null || value === undefined) return false;
-  if (typeof value !== "string") return true;
-  const normalized = value.trim().toLowerCase();
-  return normalized !== "" && normalized !== "undefined" && normalized !== "null";
-}
-
-function pickValue<T>(...values: Array<T | null | undefined>) {
-  return values.find(hasDisplayValue);
-}
-
-function pickString(...values: Array<string | number | null | undefined>) {
-  const value = pickValue(...values);
-  return value === undefined ? undefined : String(value).trim();
-}
-
-function getReportLocationDraftValue(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.location, normalized.address, normalized.place_name, normalized.locationName, normalized.placeName) ?? "";
-}
-
-function getReportLatitudeValue(report: Report) {
-  const value = pickString(report.latitude);
-  if (!value) return undefined;
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : undefined;
-}
-
-function getReportLongitudeValue(report: Report) {
-  const value = pickString(report.longitude);
-  if (!value) return undefined;
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : undefined;
-}
-
-function normalizeAttachments(report: ReportWithAliases): ReportAttachment[] | undefined {
-  const attachments = report.attachments?.filter(Boolean) ?? [];
-  const fallbackAttachmentId = pickString(report.attachment_id, report.attachmentId);
-  const fallbackPreviewUrl = pickString(report.preview_url, report.previewUrl, report.thumbnail_url, report.thumbnailUrl, report.file_url);
-  const fallbackDownloadUrl = pickString(report.download_url, report.downloadUrl);
-  const fallbackFileName = pickString(report.original_filename, report.filename, report.attachment_name, report.attachmentName);
-  const fallbackFileType = pickString(report.mime_type, report.file_type, report.attachment_type, report.attachmentType);
-  const fallbackUploadedAt = pickString(report.uploaded_at, report.uploadedAt);
-
-  if (!fallbackAttachmentId && !fallbackPreviewUrl && !fallbackDownloadUrl && !fallbackFileName && attachments.length === 0) {
-    return attachments.length > 0 ? attachments : undefined;
-  }
-
-  const fallbackAttachment: ReportAttachment = {
-    id: fallbackAttachmentId,
-    attachment_id: fallbackAttachmentId,
-    original_filename: fallbackFileName,
-    filename: fallbackFileName,
-    mime_type: fallbackFileType,
-    file_type: fallbackFileType,
-    file_url: pickString(report.file_url),
-    preview_url: fallbackPreviewUrl,
-    download_url: fallbackDownloadUrl,
-    uploaded_at: fallbackUploadedAt,
-  };
-
-  if (attachments.length === 0) return [fallbackAttachment];
-
-  const [firstAttachment, ...restAttachments] = attachments;
-  return [
-    {
-      ...fallbackAttachment,
-      ...firstAttachment,
-      id: pickString(firstAttachment.id, firstAttachment.attachment_id, fallbackAttachmentId),
-      attachment_id: pickString(firstAttachment.attachment_id, firstAttachment.id, fallbackAttachmentId),
-      original_filename: pickString(firstAttachment.original_filename, firstAttachment.filename, fallbackFileName),
-      filename: pickString(firstAttachment.filename, firstAttachment.original_filename, fallbackFileName),
-      mime_type: pickString(firstAttachment.mime_type, firstAttachment.file_type, fallbackFileType),
-      file_type: pickString(firstAttachment.file_type, firstAttachment.mime_type, fallbackFileType),
-      preview_url: pickString(firstAttachment.preview_url, firstAttachment.file_url, fallbackPreviewUrl),
-      download_url: pickString(firstAttachment.download_url, fallbackDownloadUrl),
-      uploaded_at: pickString(firstAttachment.uploaded_at, firstAttachment.created_at, fallbackUploadedAt),
-    },
-    ...restAttachments,
-  ];
-}
-
-function normalizeReport(rawReport: Report, fallbackId: string): Report {
-  const report = rawReport as ReportWithAliases;
-  const normalizedId = pickValue(report.id, report.report_id, fallbackId);
-  const attachments = normalizeAttachments(report);
-  const attachmentCount = pickValue(report.attachment_count, report.attachmentCount, attachments?.length);
-
-  return {
-    ...rawReport,
-    id: normalizedId as Report["id"],
-    report_code: pickString(report.report_code, report.reportCode, normalizedId),
-    title: pickString(report.title, report.subject),
-    report_type: pickString(report.report_type, report.reportType, "GENERAL"),
-    upload_purpose: pickString(report.upload_purpose, report.purpose, "ANALYSIS"),
-    status: pickString(report.status, "SUBMITTED"),
-    priority: pickString(report.priority, "NORMAL"),
-    location: getReportLocationDraftValue(report),
-    cctv_id: pickValue(report.cctv_id, report.cctvId) as Report["cctv_id"],
-    risk_level: pickString(report.risk_level, report.riskLevel),
-    created_at: pickString(report.created_at, report.createdAt, report.submitted_at),
-    updated_at: pickString(report.updated_at, report.updatedAt),
-    reporter_name: pickString(report.reporter_name, report.reporterName, report.reporter),
-    reporter_id: pickValue(report.reporter_id, report.reporterId) as Report["reporter_id"],
-    converted_incident_id: pickValue(report.converted_incident_id, report.convertedIncidentCode) as Report["converted_incident_id"],
-    analysis_job_id: pickValue(report.analysis_job_id, report.analysisJobId) as Report["analysis_job_id"],
-    analysis_status: pickString(report.analysis_status, report.analysisStatus, report.analysis_jobs?.[0]?.status, report.analysisJobs?.[0]?.status),
-    analysis_summary: pickString(report.analysis_summary, report.analysisSummary, report.analysis_jobs?.[0]?.summary, report.analysisJobs?.[0]?.summary),
-    analysis_jobs: report.analysis_jobs ?? report.analysisJobs,
-    attachments,
-    attachment_count: attachmentCount === undefined ? undefined : Number(attachmentCount),
-    attachment_name: pickString(report.attachment_name, report.attachmentName, attachments?.[0]?.original_filename, attachments?.[0]?.filename),
-    attachment_type: pickString(report.attachment_type, report.attachmentType, attachments?.[0]?.mime_type, attachments?.[0]?.file_type),
-    uploaded_at: pickString(report.uploaded_at, report.uploadedAt, attachments?.[0]?.uploaded_at, attachments?.[0]?.created_at),
-    preview_url: pickString(report.preview_url, report.previewUrl, report.thumbnail_url, report.thumbnailUrl, attachments?.[0]?.preview_url, attachments?.[0]?.file_url),
-    thumbnail_url: pickString(report.thumbnail_url, report.thumbnailUrl),
-    download_url: pickString(report.download_url, report.downloadUrl, attachments?.[0]?.download_url),
-  };
-}
-
 function getReportId(report: Report) {
-  return pickString(report.id) ?? "";
+  return String(report.id);
 }
 
 function getReportCode(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.reportCode, normalized.report_code, normalized.id) ?? "-";
+  return report.report_code ?? report.reportCode ?? String(report.id ?? "-");
 }
 
 function getReportTitle(report: Report) {
-  return pickString(report.title, report.subject) ?? "제목 없음";
+  return report.title ?? report.subject ?? "제목 없음";
 }
 
 function getReportType(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.report_type, normalized.reportType) ?? "GENERAL";
+  return report.report_type ?? report.reportType ?? "GENERAL";
 }
 
 function getUploadPurpose(report: Report) {
-  return pickString(report.upload_purpose, report.purpose) ?? "ANALYSIS";
+  return report.upload_purpose ?? report.purpose ?? "ANALYSIS";
 }
 
 function getReportStatus(report: Report) {
-  return pickString(report.status) ?? "SUBMITTED";
+  return report.status ?? "SUBMITTED";
 }
 
 function getReportPriority(report: Report) {
-  return pickString(report.priority) ?? "NORMAL";
+  return report.priority ?? "NORMAL";
 }
 
 function getReportLocation(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.location, normalized.address, normalized.place_name, normalized.locationName, normalized.placeName) ?? "-";
+  return report.location ?? report.address ?? report.place_name ?? report.locationName ?? "";
 }
 
 function getReportDescription(report: Report) {
-  return pickString(report.description) ?? "";
+  return report.description ?? "";
 }
 
 function getReportCreatedAt(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.created_at, normalized.createdAt, normalized.submitted_at);
-}
-
-function getReportUpdatedAt(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.updated_at, normalized.updatedAt);
-}
-
-function getReportReporter(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.reporter_name, normalized.reporterName, normalized.reporter, normalized.reporter_id, normalized.reporterId) ?? "-";
-}
-
-function getReportCctvId(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.cctv_id, normalized.cctvId) ?? "-";
-}
-
-function getReportRiskLevel(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.risk_level, normalized.riskLevel) ?? "-";
-}
-
-function getConvertedIncident(report: Report) {
-  return pickString(report.converted_incident_id, report.convertedIncidentCode);
-}
-
-function getAnalysisJobId(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.analysis_job_id, normalized.analysisJobId, normalized.analysis_jobs?.[0]?.analysis_job_id, normalized.analysis_jobs?.[0]?.id, normalized.analysisJobs?.[0]?.analysis_job_id, normalized.analysisJobs?.[0]?.id);
+  return report.submitted_at ?? report.created_at ?? report.createdAt ?? "-";
 }
 
 function getAnalysisStatus(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.analysis_status, normalized.analysisStatus, normalized.analysis_jobs?.[0]?.status, normalized.analysisJobs?.[0]?.status) ?? "WAITING";
+  return report.analysis_status ?? report.analysisStatus ?? "WAITING";
 }
 
 function getAnalysisSummary(report: Report) {
-  const normalized = report as ReportWithAliases;
-  return pickString(normalized.analysis_summary, normalized.analysisSummary, normalized.analysis_jobs?.[0]?.summary, normalized.analysisJobs?.[0]?.summary) ?? "분석 결과가 아직 없습니다.";
+  return report.analysis_summary ?? report.analysisSummary ?? "분석 결과가 아직 없습니다.";
+}
+
+function getAnalysisStatusValue(report: Report, status?: ReportAnalysisStatus | null) {
+  return status?.analysis_status ?? status?.status ?? status?.latest_job?.job_status ?? status?.latest_job?.status ?? report.analysis_status ?? report.analysisStatus ?? "WAITING";
+}
+
+function getAnalysisSummaryValue(report: Report, status?: ReportAnalysisStatus | null) {
+  return status?.analysis_summary ?? status?.summary ?? status?.latest_job?.summary ?? report.analysis_summary ?? report.analysisSummary ?? "분석 결과가 아직 없습니다.";
+}
+
+function isAnalysisRunning(status: string) {
+  return ["QUEUED", "PROCESSING", "ANALYZING", "REQUESTED"].includes(status);
+}
+
+function isAnalysisTerminal(status: string) {
+  return ["COMPLETED", "FAILED"].includes(status);
 }
 
 function getBadgeTone(value: string): "slate" | "blue" | "green" | "amber" | "red" {
   if (["REJECTED", "DELETED", "URGENT", "HIGH", "CRITICAL", "FAILED"].includes(value)) return "red";
-  if (["ANALYZING", "QUEUED", "MEDIUM"].includes(value)) return "amber";
+  if (["QUEUED", "PROCESSING", "ANALYZING", "MEDIUM"].includes(value)) return "amber";
   if (["CONVERTED_TO_INCIDENT", "COMPLETED", "LOW"].includes(value)) return "green";
   if (["REVIEWING", "REQUESTED", "WAITING", "NORMAL"].includes(value)) return "blue";
   return "slate";
 }
 
 function formatDateTime(value: string | null | undefined) {
-  const safeValue = pickString(value);
-  if (!safeValue) return "-";
-  const date = new Date(safeValue);
-  if (Number.isNaN(date.getTime())) return safeValue;
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number | null | undefined }) {
-  const displayValue = pickString(value) ?? "-";
-
   return (
     <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
       <dt className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 text-sm font-bold text-slate-800">{displayValue}</dd>
+      <dd className="mt-1 text-sm font-bold text-slate-800">{value === null || value === undefined || value === "" ? "-" : value}</dd>
     </div>
   );
+}
+
+function getAttachmentId(attachment?: ReportAttachment) {
+  return attachment?.attachment_id ?? attachment?.id;
+}
+
+function getAttachmentName(attachment?: ReportAttachment) {
+  return attachment?.original_filename ?? attachment?.filename ?? "첨부파일";
+}
+
+function getAttachmentType(attachment?: ReportAttachment) {
+  return attachment?.mime_type ?? attachment?.file_type ?? "-";
+}
+
+function getJobId(job: ReportAnalysisJob) {
+  return job.analysis_job_id ?? job.id;
+}
+
+function getJobStatus(job: ReportAnalysisJob) {
+  return job.job_status ?? job.status ?? "-";
+}
+
+function getRetryErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes("409")) return "이미 진행 중인 분석 작업입니다.";
+  if (message.includes("403") || message.includes("권한")) return "권한이 없습니다.";
+  if (message.includes("404") || message.includes("찾을 수")) return "분석 대상 정보를 찾을 수 없습니다.";
+  return "분석 작업 재시도에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -380,8 +177,13 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [requestingAnalysis, setRequestingAnalysis] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+  const [analysisStatusResult, setAnalysisStatusResult] = useState<ReportAnalysisStatus | null>(null);
+  const [analysisJobs, setAnalysisJobs] = useState<ReportAnalysisJob[]>([]);
+  const [retryingJobId, setRetryingJobId] = useState<string | null>(null);
   const [pollingAnalysis, setPollingAnalysis] = useState(false);
-  const [analysisPollingError, setAnalysisPollingError] = useState<string | null>(null);
+  const [updatingOperation, setUpdatingOperation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -394,9 +196,9 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       subject: getReportTitle(nextReport),
       description: getReportDescription(nextReport),
       priority: getReportPriority(nextReport),
-      location: getReportLocationDraftValue(nextReport),
-      latitude: getReportLatitudeValue(nextReport),
-      longitude: getReportLongitudeValue(nextReport),
+      location: getReportLocation(nextReport),
+      latitude: nextReport.latitude === null || nextReport.latitude === undefined ? undefined : Number(nextReport.latitude),
+      longitude: nextReport.longitude === null || nextReport.longitude === undefined ? undefined : Number(nextReport.longitude),
     });
     setIsEditing(true);
   }
@@ -408,12 +210,18 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
     try {
       const nextReport = await getReport(id);
-      const normalizedReport = normalizeReport(nextReport, id);
-      setReport(normalizedReport);
-      if (isEditing) beginEdit(normalizedReport);
+      setReport(nextReport);
+      setAnalysisStatusResult(null);
+      try {
+        setAnalysisJobs(await getReportAnalysisJobs(getReportId(nextReport)));
+      } catch {
+        setAnalysisJobs([]);
+      }
+      if (isEditing) beginEdit(nextReport);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "신고 상세를 불러오지 못했습니다.");
       setReport(null);
+      setAnalysisJobs([]);
     } finally {
       setLoading(false);
     }
@@ -423,77 +231,209 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     loadReport();
   }, [id]);
 
-
-  useEffect(() => {
-    const reportId = report ? getReportId(report) : "";
-    const currentStatus = report ? getAnalysisStatus(report) : "";
-
-    if (!reportId || !shouldPollAnalysisStatus(currentStatus)) {
-      setPollingAnalysis(false);
-      return;
-    }
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-
-    async function refreshAnalysisStatus() {
-      try {
-        setPollingAnalysis(true);
-        const status = await getReportAnalysisStatus(reportId);
-
-        if (cancelled) return;
-
-        setAnalysisPollingError(null);
-        setReport((current) => {
-          if (!current) return current;
-          return mergeAnalysisStatusIntoReport(current, status, id);
-        });
-
-        if (!shouldPollAnalysisStatus(status.analysis_status)) {
-          setPollingAnalysis(false);
-          if (timer) clearInterval(timer);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setAnalysisPollingError(error instanceof Error ? error.message : "분석 상태를 갱신하지 못했습니다.");
-        }
-      }
-    }
-
-    refreshAnalysisStatus();
-    timer = setInterval(refreshAnalysisStatus, 3000);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [id, report?.id, report?.analysis_status]);
-
-
   async function handleRequestAnalysis() {
     if (!report) return;
     setRequestingAnalysis(true);
     setActionError(null);
 
     try {
-      await requestReportAnalysis(getReportId(report));
-      setAnalysisPollingError(null);
-      setReport((current) =>
-        current
-          ? normalizeReport(
-              {
-                ...current,
-                analysis_status: "QUEUED",
-              },
-              id
-            )
-          : current
-      );
-      await loadReport();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "AI 분석 요청에 실패했습니다.");
+      const reportId = getReportId(report);
+      const response = await requestReportAnalysis(reportId);
+      const jobs = response.jobs ?? response.data?.jobs ?? [];
+      const requestedJobId = response.job_id ?? response.data?.job_id ?? jobs[0]?.analysis_job_id ?? jobs[0]?.id;
+      const latestJob = jobs[0] ? { ...jobs[0], job_status: jobs[0].job_status ?? jobs[0].status ?? "QUEUED" } : null;
+
+      setAnalysisStatusResult({
+        report_id: reportId,
+        analysis_job_id: requestedJobId,
+        analysis_status: latestJob?.job_status ?? "QUEUED",
+        latest_job: latestJob,
+      });
+
+      try {
+        const nextJobs = await getReportAnalysisJobs(reportId);
+        setAnalysisJobs(nextJobs.length > 0 ? nextJobs : jobs);
+      } catch {
+        setAnalysisJobs(jobs);
+      }
+    } catch {
+      setActionError("분석 요청을 처리하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setRequestingAnalysis(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!report) return;
+
+    const currentReport = report;
+    const reportId = getReportId(currentReport);
+    const currentStatus = getAnalysisStatusValue(currentReport, analysisStatusResult);
+    if (!isAnalysisRunning(currentStatus)) {
+      setPollingAnalysis(false);
+      return;
+    }
+
+    let disposed = false;
+    let timer: number | undefined;
+
+    async function pollAnalysisStatus() {
+      try {
+        const nextStatus = await getReportAnalysisStatus(reportId);
+        if (disposed) return;
+        setAnalysisStatusResult(nextStatus);
+
+        const statusValue = getAnalysisStatusValue(currentReport, nextStatus);
+        if (isAnalysisTerminal(statusValue)) {
+          setPollingAnalysis(false);
+          await loadReport();
+          return;
+        }
+
+        timer = window.setTimeout(pollAnalysisStatus, 3000);
+      } catch (error) {
+        if (!disposed) {
+          setPollingAnalysis(false);
+          setActionError("분석 상태를 불러오지 못했습니다.");
+        }
+      }
+    }
+
+    setPollingAnalysis(true);
+    timer = window.setTimeout(pollAnalysisStatus, 3000);
+
+    return () => {
+      disposed = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [report?.id, report?.analysis_status, analysisStatusResult?.analysis_status, analysisStatusResult?.status]);
+
+  async function handleRetryAnalysisJob(job: ReportAnalysisJob) {
+    if (!report) return;
+    const jobId = getJobId(job);
+    if (!jobId || getJobStatus(job) !== "FAILED") return;
+
+    const confirmed = window.confirm("실패한 분석 작업을 재시도하시겠습니까?");
+    if (!confirmed) return;
+
+    setRetryingJobId(String(jobId));
+    setActionError(null);
+
+    try {
+      const retriedJob = await retryReportAnalysisJob(jobId);
+      const [nextStatus, nextJobs] = await Promise.all([
+        getReportAnalysisStatus(getReportId(report)),
+        getReportAnalysisJobs(getReportId(report)),
+      ]);
+      setAnalysisStatusResult(nextStatus);
+      setAnalysisJobs(nextJobs);
+
+      const retriedStatus = getJobStatus(retriedJob);
+      if (!isAnalysisRunning(retriedStatus)) await loadReport();
+    } catch (error) {
+      setActionError(getRetryErrorMessage(error));
+      try {
+        setAnalysisJobs(await getReportAnalysisJobs(getReportId(report)));
+      } catch {
+        setAnalysisJobs([]);
+      }
+    } finally {
+      setRetryingJobId(null);
+    }
+  }
+
+  async function handleChangeStatus(nextStatus: string, reason: string) {
+    if (!report) return;
+    setUpdatingOperation(true);
+    setActionError(null);
+
+    try {
+      await updateReportStatus(getReportId(report), { status: nextStatus, reason });
+      await loadReport();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "신고 상태 변경에 실패했습니다.");
+    } finally {
+      setUpdatingOperation(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!report) return;
+    const memo = window.prompt("승인 메모를 입력해 주세요.", "신고 내용 확인 완료");
+    if (memo === null) return;
+
+    setUpdatingOperation(true);
+    setActionError(null);
+    try {
+      await approveReport(getReportId(report), memo);
+      await loadReport();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "신고 승인에 실패했습니다.");
+    } finally {
+      setUpdatingOperation(false);
+    }
+  }
+
+  async function handleReject() {
+    if (!report) return;
+    const reason = window.prompt("반려 사유를 입력해 주세요.", "");
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setActionError("반려 사유를 입력해 주세요.");
+      return;
+    }
+
+    setUpdatingOperation(true);
+    setActionError(null);
+    try {
+      await rejectReport(getReportId(report), reason.trim());
+      await loadReport();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "신고 반려에 실패했습니다.");
+    } finally {
+      setUpdatingOperation(false);
+    }
+  }
+
+  async function handleUploadAttachments(files: FileList | null) {
+    if (!report || !files || files.length === 0) return;
+    setUploadingAttachment(true);
+    setActionError(null);
+
+    try {
+      await uploadReportAttachments(getReportId(report), Array.from(files));
+      await loadReport();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "첨부파일 추가에 실패했습니다.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  async function handleDeleteAttachment(attachment: ReportAttachment) {
+    if (!report) return;
+    const attachmentId = getAttachmentId(attachment);
+    if (!attachmentId) {
+      setActionError("삭제할 첨부파일 ID가 없습니다.");
+      return;
+    }
+
+    const confirmed = window.confirm(`${getAttachmentName(attachment)} 파일을 삭제하시겠습니까?`);
+    if (!confirmed) return;
+
+    const reason = window.prompt("삭제 사유를 입력해 주세요. 비워두면 사유 없이 삭제됩니다.", "");
+    if (reason === null) return;
+
+    setDeletingAttachmentId(String(attachmentId));
+    setActionError(null);
+
+    try {
+      await deleteReportAttachment(getReportId(report), attachmentId, reason.trim() || undefined);
+      await loadReport();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "첨부파일 삭제에 실패했습니다.");
+    } finally {
+      setDeletingAttachmentId(null);
     }
   }
 
@@ -505,15 +445,12 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     try {
       const payload: UpdateReportPayload = {
         ...editDraft,
-        title: pickString(editDraft.title),
-        subject: pickString(editDraft.subject, editDraft.title),
-        description: pickString(editDraft.description),
-        location: pickString(editDraft.location),
+        subject: editDraft.subject ?? editDraft.title,
         latitude: editDraft.latitude === undefined || Number.isNaN(Number(editDraft.latitude)) ? undefined : Number(editDraft.latitude),
         longitude: editDraft.longitude === undefined || Number.isNaN(Number(editDraft.longitude)) ? undefined : Number(editDraft.longitude),
       };
       const nextReport = await updateReport(getReportId(report), payload);
-      setReport(normalizeReport(nextReport, id));
+      setReport(nextReport);
       setIsEditing(false);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "신고 수정에 실패했습니다.");
@@ -564,9 +501,11 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const priority = getReportPriority(report);
   const reportType = getReportType(report);
   const purpose = getUploadPurpose(report);
-  const analysisStatus = getAnalysisStatus(report);
-  const analysisJobId = getAnalysisJobId(report);
-  const convertedIncident = getConvertedIncident(report);
+  const analysisStatus = getAnalysisStatusValue(report, analysisStatusResult);
+  const analysisSummary = getAnalysisSummaryValue(report, analysisStatusResult);
+  const riskLevel = analysisStatusResult?.risk_level ?? analysisStatusResult?.latest_job?.risk_level ?? report.risk_level;
+  const riskScore = analysisStatusResult?.risk_score ?? analysisStatusResult?.latest_job?.risk_score ?? report.risk_score;
+  const convertedIncidentId = analysisStatusResult?.converted_incident_id ?? analysisStatusResult?.latest_job?.converted_incident_id ?? report.converted_incident_id ?? report.convertedIncidentCode;
 
   return (
     <RequireAuth>
@@ -602,6 +541,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex h-10 items-center gap-2 rounded-lg border border-red-200 px-4 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                     삭제
+                  </button>
+                  <button type="button" onClick={handleApprove} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 px-4 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
+                    <CheckCircle className="h-4 w-4" aria-hidden="true" />
+                    승인
+                  </button>
+                  <button type="button" onClick={handleReject} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 px-4 text-sm font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50">
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    반려
                   </button>
                 </div>
               </div>
@@ -659,14 +606,15 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   <InfoRow label="title" value={getReportTitle(report)} />
                   <InfoRow label="reportType" value={reportTypeLabels[reportType] ?? reportType} />
                   <InfoRow label="purpose" value={purposeLabels[purpose] ?? purpose} />
-                  <InfoRow label="reporter" value={getReportReporter(report)} />
+                  <InfoRow label="reporter" value={report.reporter_name ?? report.reporter ?? report.reporter_id} />
                   <InfoRow label="location" value={getReportLocation(report)} />
-                  <InfoRow label="cctvId" value={getReportCctvId(report)} />
+                  <InfoRow label="cctvId" value={report.cctv_id} />
                   <InfoRow label="status" value={statusLabels[status] ?? status} />
                   <InfoRow label="priority" value={priorityLabels[priority] ?? priority} />
-                  <InfoRow label="riskLevel" value={getReportRiskLevel(report)} />
+                  <InfoRow label="riskLevel" value={riskLevel} />
+                  <InfoRow label="riskScore" value={riskScore} />
                   <InfoRow label="createdAt" value={formatDateTime(getReportCreatedAt(report))} />
-                  <InfoRow label="updatedAt" value={formatDateTime(getReportUpdatedAt(report))} />
+                  <InfoRow label="updatedAt" value={formatDateTime(report.updated_at)} />
                 </dl>
               )}
             </Card>
@@ -675,12 +623,47 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               <div className="border-b border-slate-200 p-5"><h3 className="text-lg font-black text-slate-950">첨부파일</h3></div>
               <div className="grid gap-5 p-5 lg:grid-cols-[1fr_280px]">
                 <ReportAttachmentPreview report={report} />
-                <dl className="grid content-start gap-3">
+                <div className="grid content-start gap-3">
                   <InfoRow label="첨부 개수" value={report.attachment_count ?? report.attachments?.length ?? 0} />
                   <InfoRow label="파일명" value={report.attachments?.[0]?.original_filename ?? report.attachments?.[0]?.filename ?? report.attachment_name ?? report.attachmentName} />
                   <InfoRow label="파일 유형" value={report.attachments?.[0]?.mime_type ?? report.attachments?.[0]?.file_type ?? report.attachment_type ?? report.attachmentType} />
                   <InfoRow label="업로드 시간" value={formatDateTime(report.uploaded_at ?? report.uploadedAt)} />
-                </dl>
+                  <label className="grid gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3 text-sm font-bold text-slate-700">
+                    첨부파일 추가
+                    <input
+                      type="file"
+                      multiple
+                      disabled={uploadingAttachment}
+                      onChange={(event) => {
+                        handleUploadAttachments(event.target.files);
+                        event.target.value = "";
+                      }}
+                      className="text-xs font-semibold text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white disabled:opacity-50"
+                    />
+                    {uploadingAttachment ? <span className="text-xs font-semibold text-slate-500">업로드 중입니다.</span> : null}
+                  </label>
+                  {(report.attachments ?? []).length > 0 ? (
+                    <div className="grid gap-2">
+                      {(report.attachments ?? []).map((attachment, index) => {
+                        const attachmentId = getAttachmentId(attachment);
+                        return (
+                          <div key={attachmentId ?? `${getAttachmentName(attachment)}-${index}`} className="rounded-lg border border-slate-100 bg-white p-3">
+                            <p className="truncate text-xs font-black text-slate-800">{getAttachmentName(attachment)}</p>
+                            <p className="mt-1 text-xs font-semibold text-slate-400">{getAttachmentType(attachment)}</p>
+                            <button
+                              type="button"
+                              disabled={!attachmentId || deletingAttachmentId === String(attachmentId)}
+                              onClick={() => handleDeleteAttachment(attachment)}
+                              className="mt-3 h-8 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {deletingAttachmentId === String(attachmentId) ? "삭제 중" : "삭제"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </Card>
 
@@ -688,18 +671,66 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-950">AI 분석</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">{getAnalysisSummary(report)}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">{analysisSummary}</p>
+                  {pollingAnalysis ? <p className="mt-2 text-xs font-bold text-amber-600">3초 간격으로 분석 상태를 확인 중입니다.</p> : null}
                 </div>
                 <Badge tone={getBadgeTone(analysisStatus)}>{analysisStatus}</Badge>
               </div>
-              <dl className="mb-4 grid gap-3 md:grid-cols-2">
-                <InfoRow label="analysisJobId" value={analysisJobId} />
+              <div className="mb-4 grid gap-3 md:grid-cols-3">
                 <InfoRow label="analysisStatus" value={analysisStatus} />
-              </dl>
-              <button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
-                <Sparkles className="h-4 w-4" aria-hidden="true" />
-                {requestingAnalysis ? "요청 중" : "분석 요청"}
-              </button>
+                <InfoRow label="riskLevel" value={riskLevel} />
+                <InfoRow label="riskScore" value={riskScore} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis || isAnalysisRunning(analysisStatus)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  {requestingAnalysis ? "요청 중" : "분석 요청"}
+                </button>
+                <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-10 items-center rounded-lg border border-sky-200 px-4 text-sm font-bold text-sky-700 no-underline transition hover:bg-sky-50">
+                  비교분석
+                </Link>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-4">
+                <h4 className="text-sm font-black text-slate-800">분석 작업 목록</h4>
+                {analysisJobs.length === 0 ? (
+                  <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">분석 작업 내역이 없습니다.</p>
+                ) : (
+                  <div className="mt-3 grid gap-2">
+                    {analysisJobs.map((job, index) => {
+                      const jobId = getJobId(job);
+                      const jobStatus = getJobStatus(job);
+                      const canRetry = jobStatus === "FAILED" && Boolean(jobId);
+
+                      return (
+                        <div key={jobId ?? `analysis-job-${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-black text-slate-800">Job {jobId ?? "-"}</p>
+                              <p className="mt-1 text-xs font-semibold text-slate-500">재시도 {job.retry_count ?? 0}회 · {formatDateTime(job.updated_at ?? job.created_at)}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge tone={getBadgeTone(jobStatus)}>{jobStatus}</Badge>
+                              {canRetry ? (
+                                <button
+                                  type="button"
+                                  disabled={retryingJobId === String(jobId)}
+                                  onClick={() => handleRetryAnalysisJob(job)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {retryingJobId === String(jobId) ? "재시도 중" : "재시도"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          {job.summary ? <p className="mt-2 text-xs font-semibold text-slate-600">{job.summary}</p> : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </Card>
           </div>
 
@@ -715,11 +746,22 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             </Card>
 
             <Card className="p-5">
+              <h3 className="text-lg font-black text-slate-950">운영 상태 변경</h3>
+              <div className="mt-4 grid gap-2">
+                {["SUBMITTED", "REVIEWING", "ANALYZING", "CONVERTED_TO_INCIDENT", "REJECTED", "CLOSED"].map((nextStatus) => (
+                  <button key={nextStatus} type="button" disabled={updatingOperation || status === nextStatus} onClick={() => handleChangeStatus(nextStatus, `상태를 ${nextStatus}로 변경`)} className="h-9 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+                    {statusLabels[nextStatus] ?? nextStatus}
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            <Card className="p-5">
               <h3 className="text-lg font-black text-slate-950">이벤트 전환 결과</h3>
-              {convertedIncident ? (
+              {convertedIncidentId ? (
                 <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                   <p className="text-sm font-semibold text-emerald-700">이벤트로 전환됨</p>
-                  <strong className="mt-1 block text-lg text-emerald-900">{convertedIncident}</strong>
+                  <strong className="mt-1 block text-lg text-emerald-900">{convertedIncidentId}</strong>
                 </div>
               ) : <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-500">아직 이벤트로 전환되지 않음</p>}
             </Card>

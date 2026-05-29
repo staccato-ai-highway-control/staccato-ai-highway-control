@@ -14,7 +14,7 @@ export const mockSystemSettings: SystemSettingsData = {
       label: "Flask API",
       status: "ONLINE",
       description: "프론트엔드가 호출하는 단일 백엔드 API Gateway",
-      maskedValue: "http://localhost:****",
+      maskedValue: "환경변수 사용",
     },
   ],
   socketStatus: {
@@ -22,7 +22,7 @@ export const mockSystemSettings: SystemSettingsData = {
     label: "Socket.IO",
     status: "READY",
     description: "실시간 사고/알림 이벤트 수신 대기 상태",
-    maskedValue: "ws://localhost:****",
+    maskedValue: "환경변수 사용",
   },
   aiServerStatus: {
     id: "ai-server",

@@ -45,6 +45,10 @@ const statusOptions: Array<{ label: string; value: IncidentStatusFilter }> = [
   { label: "종결", value: "CLOSED" },
 ];
 
+function getIncidentAnalysisJobId(incident: Incident) {
+  return incident.analysis_job_id ?? incident.job_id;
+}
+
 function matchesSearch(incident: Incident, keyword: string) {
   const normalizedKeyword = keyword.trim().toLowerCase();
   if (!normalizedKeyword) return true;
@@ -170,15 +174,15 @@ export default function IncidentsPage() {
               <tbody>
                 {filteredIncidents.map((incident) => (
                   <tr key={incident.id} className="border-t border-slate-100 align-top">
-                    <td className="px-4 py-4 font-bold text-slate-700">{incident.code}</td>
+                    <td className="px-4 py-4 font-bold text-slate-700"><span className="block max-w-[140px] truncate">{incident.code}</span></td>
                     <td className="px-4 py-4 font-semibold text-slate-600">{incidentTypeLabels[incident.eventType]}</td>
                     <td className="px-4 py-4">
-                      <b className="text-slate-950">{incident.title}</b>
+                      <b className="block max-w-[260px] truncate text-slate-950">{incident.title}</b>
                       <p className="mt-1 text-xs font-semibold text-slate-400">신뢰도 {Math.round(incident.confidence * 100)}%</p>
                     </td>
                     <td className="px-4 py-4">
-                      <b className="text-slate-700">{incident.roadName}</b>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">{incident.location}</p>
+                      <b className="block max-w-[220px] truncate text-slate-700">{incident.roadName}</b>
+                      <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-slate-500">{incident.location}</p>
                     </td>
                     <td className="px-4 py-4"><RiskLevelBadge level={incident.riskLevel} /></td>
                     <td className="px-4 py-4"><IncidentStatusBadge status={incident.status} /></td>
@@ -189,6 +193,11 @@ export default function IncidentsPage() {
                         <Link href={`/incidents/${incident.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
                         <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "REVIEWING")} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50 disabled:opacity-50">검토중</button>
                         <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "FALSE_POSITIVE")} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">오탐 처리</button>
+                        {getIncidentAnalysisJobId(incident) ? (
+                          <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
+                        ) : (
+                          <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
+                        )}
                         <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "RESOLVED")} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">처리 완료</button>
                       </div>
                     </td>
