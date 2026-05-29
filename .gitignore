@@ -98,3 +98,11 @@ ai-vm/**/.env
 # Python cache
 __pycache__/
 *.py[cod]
+
+# local env / runtime
+.env
+.env.local
+*.bak
+venv/
+.next/
+node_modules/
