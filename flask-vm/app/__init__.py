@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory, abort
 
 # ============================================================
 # Core / App Config
@@ -201,6 +201,38 @@ def create_app(test_config=None):
     from app.modules import socketio as socketio_module  # noqa: F401
 
     _register_report_created_realtime_hook(app)
+
+    @app.route("/storage/<path:filename>", methods=["GET", "HEAD"])
+    def serve_storage_file(filename):
+        """Serve local storage files such as generated incident media."""
+        from pathlib import Path
+
+        storage_roots = []
+
+        configured_storage_root = app.config.get("STORAGE_ROOT")
+        if configured_storage_root:
+            storage_roots.append(Path(configured_storage_root))
+
+        storage_roots.extend([
+            Path(app.root_path).parent / "storage",
+            Path("/home/staccato/staccato/storage"),
+            Path("/home/staccato/staccato-flask/storage"),
+        ])
+
+        for storage_root in storage_roots:
+            root = storage_root.resolve()
+            target_path = (root / filename).resolve()
+
+            try:
+                target_path.relative_to(root)
+            except ValueError:
+                continue
+
+            if target_path.exists() and target_path.is_file():
+                return send_from_directory(root, filename)
+
+        abort(404)
+
     return app
 
 
