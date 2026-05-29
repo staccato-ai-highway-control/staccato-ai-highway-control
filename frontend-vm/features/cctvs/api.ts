@@ -159,8 +159,18 @@ export async function getCctvByCode(code: string) {
 }
 
 export async function getCameras(params: CctvListParams = {}) {
-  const response = await apiClient<CctvListResponse>(`/api/cameras${buildQuery(params as Record<string, string | number | boolean | undefined>)}`, { auth: false });
-  return normalizeCctvList(response);
+  const query = buildQuery(params as Record<string, string | number | boolean | undefined>);
+  const response = await fetch(`/api/cctvs${query}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`CCTV 목록 조회 실패: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return normalizeCctvList(data as CctvListResponse);
 }
 
 export async function getCamera(cameraId: string | number) {
