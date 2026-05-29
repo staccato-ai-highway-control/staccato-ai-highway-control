@@ -167,6 +167,92 @@ function getRetryErrorMessage(error: unknown) {
   return "분석 작업 재시도에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+
+function normalizeAnalysisJobs(value: unknown): ReportAnalysisJob[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === "object") {
+    const objectValue = value as {
+      analysisJobs?: unknown;
+      jobs?: unknown;
+      data?: unknown;
+      items?: unknown;
+      results?: unknown;
+    };
+
+    const candidates = [
+      objectValue.analysisJobs,
+      objectValue.jobs,
+      objectValue.data,
+      objectValue.items,
+      objectValue.results,
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) {
+        return candidate as ReportAnalysisJob[];
+      }
+    }
+  }
+
+  return [];
+}
+
+
+function formatReportDisplayValue(value: unknown, fallback = "-"): string {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length}개` : fallback;
+  }
+
+  if (typeof value === "object") {
+    const objectValue = value as {
+      status?: unknown;
+      count?: unknown;
+      frames_processed?: unknown;
+      filename?: unknown;
+      message?: unknown;
+      summary?: unknown;
+    };
+
+    const summary = objectValue.summary ?? objectValue.message;
+    if (summary) {
+      return formatReportDisplayValue(summary, fallback);
+    }
+
+    const parts: string[] = [];
+
+    if (objectValue.status) {
+      parts.push(`상태 ${formatReportDisplayValue(objectValue.status, "")}`);
+    }
+
+    if (objectValue.count !== undefined) {
+      parts.push(`감지 ${formatReportDisplayValue(objectValue.count, "0")}건`);
+    }
+
+    if (objectValue.frames_processed !== undefined) {
+      parts.push(`처리 프레임 ${formatReportDisplayValue(objectValue.frames_processed, "0")}`);
+    }
+
+    if (objectValue.filename) {
+      parts.push(`파일 ${formatReportDisplayValue(objectValue.filename, "")}`);
+    }
+
+    return parts.length > 0 ? parts.join(" · ") : JSON.stringify(value);
+  }
+
+  return fallback;
+}
+
 export default function ReportDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -213,7 +299,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       setReport(nextReport);
       setAnalysisStatusResult(null);
       try {
-        setAnalysisJobs(await getReportAnalysisJobs(getReportId(nextReport)));
+        setAnalysisJobs(normalizeAnalysisJobs(await getReportAnalysisJobs(getReportId(nextReport))));
       } catch {
         setAnalysisJobs([]);
       }
@@ -239,7 +325,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     try {
       const reportId = getReportId(report);
       const response = await requestReportAnalysis(reportId);
-      const jobs = response.jobs ?? response.data?.jobs ?? [];
+      const jobs = normalizeAnalysisJobs(response.jobs ?? response.data?.jobs ?? response);
       const requestedJobId = response.job_id ?? response.data?.job_id ?? jobs[0]?.analysis_job_id ?? jobs[0]?.id;
       const latestJob = jobs[0] ? { ...jobs[0], job_status: jobs[0].job_status ?? jobs[0].status ?? "QUEUED" } : null;
 
@@ -251,7 +337,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       });
 
       try {
-        const nextJobs = await getReportAnalysisJobs(reportId);
+        const nextJobs = normalizeAnalysisJobs(await getReportAnalysisJobs(reportId));
         setAnalysisJobs(nextJobs.length > 0 ? nextJobs : jobs);
       } catch {
         setAnalysisJobs(jobs);
@@ -326,14 +412,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
         getReportAnalysisJobs(getReportId(report)),
       ]);
       setAnalysisStatusResult(nextStatus);
-      setAnalysisJobs(nextJobs);
+      setAnalysisJobs(normalizeAnalysisJobs(nextJobs));
 
       const retriedStatus = getJobStatus(retriedJob);
       if (!isAnalysisRunning(retriedStatus)) await loadReport();
     } catch (error) {
       setActionError(getRetryErrorMessage(error));
       try {
-        setAnalysisJobs(await getReportAnalysisJobs(getReportId(report)));
+        setAnalysisJobs(normalizeAnalysisJobs(await getReportAnalysisJobs(getReportId(report))));
       } catch {
         setAnalysisJobs([]);
       }
@@ -671,7 +757,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-950">AI 분석</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">{analysisSummary}</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-500">{formatReportDisplayValue(analysisSummary, "분석 결과가 아직 없습니다.")}</p>
                   {pollingAnalysis ? <p className="mt-2 text-xs font-bold text-amber-600">3초 간격으로 분석 상태를 확인 중입니다.</p> : null}
                 </div>
                 <Badge tone={getBadgeTone(analysisStatus)}>{analysisStatus}</Badge>
@@ -724,7 +810,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                               ) : null}
                             </div>
                           </div>
-                          {job.summary ? <p className="mt-2 text-xs font-semibold text-slate-600">{job.summary}</p> : null}
+                          {job.summary ? <p className="mt-2 text-xs font-semibold text-slate-600">{formatReportDisplayValue(job.summary, "")}</p> : null}
                         </div>
                       );
                     })}

@@ -4,6 +4,7 @@ import requests
 from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi import File, Form, UploadFile
 
 from .bbox_store import (
     STREAM_ONLY_BBOX_MESSAGE,
@@ -462,3 +463,103 @@ def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
         return None
 
     return worker.get_latest_empty_bbox_metadata()
+
+
+@app.post("/detect")
+async def detect_legacy_report_file(
+    file: UploadFile = File(...),
+    report_id: str = Form(default=""),
+):
+    """Legacy Flask report-analysis compatibility endpoint.
+
+    Flask AIGatewayService sends multipart/form-data:
+    - file
+    - report_id
+
+    Flask marks a report analysis job as completed when this response includes
+    either "detections" or "count".
+    """
+    import os
+    import tempfile
+    import uuid
+    from pathlib import Path
+
+    import cv2
+    import numpy as np
+
+    filename = file.filename or "upload"
+    suffix = Path(filename).suffix.lower()
+    content_type = file.content_type or ""
+
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty file.")
+
+    video_extensions = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+    is_video = content_type.startswith("video/") or suffix in video_extensions
+
+    max_frames = int(os.getenv("REPORT_DETECT_MAX_FRAMES", "30"))
+    frame_stride = int(os.getenv("REPORT_DETECT_FRAME_STRIDE", "30"))
+    max_frames = max(1, max_frames)
+    frame_stride = max(1, frame_stride)
+
+    detections_payload = []
+    frames_processed = 0
+    source_type = "video" if is_video else "image"
+
+    if is_video:
+        tmp_path = Path(tempfile.gettempdir()) / f"staccato-detect-{uuid.uuid4().hex}{suffix or '.mp4'}"
+        tmp_path.write_bytes(payload)
+
+        cap = None
+        try:
+            cap = cv2.VideoCapture(str(tmp_path))
+            if not cap.isOpened():
+                raise HTTPException(status_code=400, detail="Failed to open video file.")
+
+            frame_index = 0
+            while frames_processed < max_frames:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+
+                if frame_index % frame_stride == 0:
+                    frame_detections = detector.detect(frame)
+                    for item in frame_detections:
+                        detection = item.to_dict()
+                        detection["frame_index"] = frame_index
+                        detections_payload.append(detection)
+                    frames_processed += 1
+
+                frame_index += 1
+
+        finally:
+            if cap is not None:
+                cap.release()
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+    else:
+        np_buffer = np.frombuffer(payload, dtype=np.uint8)
+        frame = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
+        if frame is None:
+            raise HTTPException(status_code=400, detail="Failed to decode image file.")
+
+        frame_detections = detector.detect(frame)
+        detections_payload = [item.to_dict() for item in frame_detections]
+        frames_processed = 1
+
+    return {
+        "success": True,
+        "status": "OK",
+        "report_id": report_id,
+        "filename": filename,
+        "source_type": source_type,
+        "model": detector.model_name,
+        "count": len(detections_payload),
+        "detections": detections_payload,
+        "frames_processed": frames_processed,
+    }
+
