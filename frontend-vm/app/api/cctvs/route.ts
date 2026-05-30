@@ -1,223 +1,232 @@
 import { NextResponse } from "next/server";
 
-type RawCctvItem = Record<string, unknown>;
-
-const MAX_CCTV_COUNT = 8;
-const PROBE_TIMEOUT_MS = 12000;
-const PROBE_LIMIT = 120;
-const PROBE_BATCH_SIZE = 6;
+export const dynamic = "force-dynamic";
 
 const AI_VM_BASE_URL =
-  process.env.AI_VM_BASE_URL ??
-  process.env.NEXT_PUBLIC_AI_VM_BASE_URL ??
+  process.env.AI_VM_BASE_URL ||
+  process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
   "http://192.168.0.186:5001";
 
-function getString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
+const PLAYABLE_CACHE_TTL_MS = 5 * 60 * 1000;
 
-function isRawCctvItem(value: unknown): value is RawCctvItem {
-  return typeof value === "object" && value !== null;
-}
+type PlayableCache = {
+  expiresAt: number;
+  items: any[];
+};
 
-function getRawItems(payload: unknown): RawCctvItem[] {
-  if (Array.isArray(payload)) return payload.filter(isRawCctvItem);
-  if (!isRawCctvItem(payload)) return [];
+let playableCache: PlayableCache | null = null;
 
-  const data = payload.data ?? payload.items ?? payload.cameras ?? payload.result;
-  if (Array.isArray(data)) return data.filter(isRawCctvItem);
-  if (isRawCctvItem(data)) {
-    const nested = data.items ?? data.cameras ?? data.data ?? data.result;
-    if (Array.isArray(nested)) return nested.filter(isRawCctvItem);
-  }
-
+function getRawItems(payload: any): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.cameras)) return payload.cameras;
+  if (Array.isArray(payload.response?.body?.items)) return payload.response.body.items;
   return [];
 }
 
-function pickSourceUrl(item: RawCctvItem) {
-  return (
-    getString(item.sourceUrl) ??
-    getString(item.source_url) ??
-    getString(item.streamUrl) ??
-    getString(item.stream_url) ??
-    getString(item.url) ??
-    getString(item.cctvurl) ??
-    getString(item.cctv_url) ??
-    getString(item.videoUrl) ??
-    getString(item.video_url) ??
-    getString(item.mjpegUrl) ??
-    getString(item.mjpeg_url)
-  );
-}
-
-function normalizeStatus(status: unknown, active: unknown) {
-  if (status === "ACTIVE") return "ONLINE";
-  if (status === "INACTIVE") return "OFFLINE";
-  if (status === "MAINTENANCE") return "MAINTENANCE";
-  if (status === "ONLINE" || status === "OFFLINE") return status;
-  if (active === false || active === 0) return "OFFLINE";
-  return "ONLINE";
-}
-
-function buildCameraId(item: RawCctvItem, index: number) {
-  return String(item.camera_id ?? item.cameraId ?? "camera-" + (index + 1));
-}
-
-function buildCctvCode(item: RawCctvItem, index: number) {
+function pickSourceUrl(item: any): string {
   return String(
-    item.cctvCode ??
-      item.cctv_code ??
-      item.id ??
-      "CCTV-" + String(index + 1).padStart(3, "0")
+    item.cctvUrl ||
+    item.cctvurl ||
+    item.cctv_url ||
+    item.streamUrl ||
+    item.stream_url ||
+    item.sourceUrl ||
+    item.source_url ||
+    item.url ||
+    item.rtspUrl ||
+    item.rtsp_url ||
+    ""
   );
 }
 
-function buildStreamUrl(cameraId: string, sourceUrl?: string) {
-  if (!sourceUrl) return undefined;
-  return "/api/cctvs/" + encodeURIComponent(cameraId) + "/stream?source_url=" + encodeURIComponent(sourceUrl);
-}
-
-function normalizeCctv(item: RawCctvItem, index: number) {
-  const sourceUrl = pickSourceUrl(item);
-  const cameraId = buildCameraId(item, index);
-  const cctvCode = buildCctvCode(item, index);
-  const name = String(item.name ?? item.cctv_name ?? item.camera_name ?? cctvCode);
-  const roadName = String(item.roadName ?? item.road_name ?? item.road ?? "STACCATO 고속도로");
-  const locationName = String(item.locationName ?? item.location_name ?? item.location ?? name);
-  const active = item.active ?? item.is_active;
-  const streamUrl = buildStreamUrl(cameraId, sourceUrl);
-
-  return {
-    ...item,
-    id: cctvCode,
-    camera_id: cameraId,
-    cctvCode,
-    cctv_code: cctvCode,
-    name,
-    cctv_name: item.cctv_name ?? name,
-    road: item.road ?? roadName,
-    roadName,
-    road_name: item.road_name ?? roadName,
-    location: item.location ?? locationName,
-    locationName,
-    location_name: item.location_name ?? locationName,
-    direction: item.direction ?? "-",
-    status: normalizeStatus(item.status, active),
-    streamUrl,
-    stream_url: streamUrl,
-    imageUrl: item.imageUrl ?? "/api/cctvs/" + encodeURIComponent(cameraId) + "/snapshot",
-    snapshotUrl: item.snapshotUrl ?? "/api/cctvs/" + encodeURIComponent(cameraId) + "/snapshot",
-    sourceUrl,
-    isLive: Boolean(streamUrl),
-    isAiDetected: item.isAiDetected ?? false,
-    detectionType: item.detectionType,
-    confidence: item.confidence,
-    lastUpdatedAt: item.lastUpdatedAt ?? item.updated_at ?? item.created_at ?? item.file_create_time ?? "-",
-    roiTypes: item.roiTypes ?? [],
-    original: item.original ?? item,
-  };
-}
-
-async function canPlayStream(item: RawCctvItem) {
+async function isPlayable(item: any, probeIndex: number) {
   const sourceUrl = pickSourceUrl(item);
   if (!sourceUrl) return false;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), 7000);
+
+  const probeCameraId = `probe-${probeIndex}`;
+  const upstream = new URL(
+    `/streams/${encodeURIComponent(probeCameraId)}.mjpeg`,
+    AI_VM_BASE_URL
+  );
+
+  upstream.searchParams.set("source_url", sourceUrl);
+  upstream.searchParams.set("quality", "45");
+  upstream.searchParams.set("analysis_fps", "0.5");
 
   try {
-    const response = await fetch(sourceUrl, {
-      headers: { Range: "bytes=0-1" },
-      signal: controller.signal,
+    const response = await fetch(upstream.toString(), {
+      method: "GET",
       cache: "no-store",
+      signal: controller.signal,
+      headers: {
+        Accept: "multipart/x-mixed-replace,image/jpeg,*/*",
+      },
     });
-    const isPlayable = response.ok || response.status === 206 || response.status === 302;
-    await response.body?.cancel().catch(() => undefined);
-    return isPlayable;
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (response.body) {
+      try {
+        await response.body.cancel();
+      } catch {}
+    }
+
+    return response.ok && (
+      contentType.includes("multipart/x-mixed-replace") ||
+      contentType.includes("image/jpeg") ||
+      contentType.includes("application/octet-stream")
+    );
   } catch {
     return false;
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timer);
   }
 }
 
-async function pickPlayableItems(rawItems: RawCctvItem[]) {
-  const probeItems = rawItems.filter((item) => pickSourceUrl(item)).slice(0, PROBE_LIMIT);
-  const playableItems: RawCctvItem[] = [];
+async function pickPlayableItems(rawItems: any[]) {
+  const now = Date.now();
 
-  for (let index = 0; index < probeItems.length; index += PROBE_BATCH_SIZE) {
-    const batch = probeItems.slice(index, index + PROBE_BATCH_SIZE);
-    const results = await Promise.all(batch.map((item) => canPlayStream(item)));
-    results.forEach((isPlayable, resultIndex) => {
-      if (isPlayable) playableItems.push(batch[resultIndex]);
-    });
+  if (playableCache && playableCache.expiresAt > now && playableCache.items.length >= 8) {
+    return playableCache.items;
   }
 
-  return playableItems;
+  const candidates = rawItems.filter((item) => pickSourceUrl(item)).slice(0, 60);
+  const playable: any[] = [];
+
+  const batchSize = 4;
+
+  for (let start = 0; start < candidates.length && playable.length < 8; start += batchSize) {
+    const batch = candidates.slice(start, start + batchSize);
+
+    const results = await Promise.all(
+      batch.map(async (item, offset) => ({
+        item,
+        ok: await isPlayable(item, start + offset + 1),
+      }))
+    );
+
+    for (const result of results) {
+      if (result.ok) playable.push(result.item);
+      if (playable.length >= 8) break;
+    }
+  }
+
+  playableCache = {
+    expiresAt: now + PLAYABLE_CACHE_TTL_MS,
+    items: playable,
+  };
+
+  return playable;
 }
 
-export async function GET(request: Request) {
+function normalizeCctv(item: any, index: number) {
+  const n = index + 1;
+  const displayCode = `CCTV-${String(n).padStart(3, "0")}`;
+  const cameraId = `camera-${n}`;
+  const sourceUrl = pickSourceUrl(item);
+  const streamQuery = sourceUrl ? `?source_url=${encodeURIComponent(sourceUrl)}` : "";
+
+  const name =
+    item.cctvName ||
+    item.cctvname ||
+    item.cctv_name ||
+    item.name ||
+    `STACCATO CCTV ${n}`;
+
+  return {
+    id: displayCode,
+    cctvCode: displayCode,
+    cctv_code: displayCode,
+    camera_id: cameraId,
+
+    name,
+    cctv_name: name,
+
+    road: item.roadName || item.road_name || item.routeName || "STACCATO 고속도로",
+    roadName: item.roadName || item.road_name || item.routeName || "STACCATO 고속도로",
+    road_name: item.roadName || item.road_name || item.routeName || "STACCATO 고속도로",
+
+    location: item.location || item.locationName || item.location_name || `${n}번 관제 구간`,
+    locationName: item.locationName || item.location_name || item.location || `${n}번 관제 구간`,
+    location_name: item.locationName || item.location_name || item.location || `${n}번 관제 구간`,
+
+    direction: item.direction || "-",
+    status: "ONLINE",
+    active: true,
+    is_active: true,
+
+    streamUrl: `/api/cctvs/${encodeURIComponent(cameraId)}/stream${streamQuery}`,
+    stream_url: `/api/cctvs/${encodeURIComponent(cameraId)}/stream${streamQuery}`,
+
+    imageUrl: `/api/cctvs/${encodeURIComponent(cameraId)}/snapshot`,
+    snapshotUrl: `/api/cctvs/${encodeURIComponent(cameraId)}/snapshot`,
+    bboxWsUrl: `/api/cctvs/${encodeURIComponent(cameraId)}/bbox`,
+
+    sourceUrl,
+    isLive: true,
+    isAiDetected: false,
+    roiTypes: [],
+    original: item,
+  };
+}
+
+export async function GET() {
   try {
-    const requestUrl = new URL(request.url);
-    const queryString = requestUrl.searchParams.toString();
-    const upstreamUrl = AI_VM_BASE_URL.replace(/\/$/, "") + "/traffic/api/cctv" + (queryString ? "?" + queryString : "");
-    const response = await fetch(upstreamUrl, { cache: "no-store" });
+    const upstreamUrl = `${AI_VM_BASE_URL.replace(/\/$/, "")}/traffic/api/cctv`;
+
+    const response = await fetch(upstreamUrl, {
+      method: "GET",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
 
     if (!response.ok) {
       return NextResponse.json(
         {
           success: false,
+          message: `AI CCTV API failed: ${response.status}`,
           count: 0,
-          rawCount: 0,
-          playableCount: 0,
-          selectedCount: 0,
-          message: "CCTV list request failed: " + response.status,
           data: [],
           items: [],
           cameras: [],
         },
-        { status: response.status }
+        { status: 502 }
       );
     }
 
     const payload = await response.json();
     const rawItems = getRawItems(payload);
-    const candidates = rawItems.filter((item) => pickSourceUrl(item));
     const playableItems = await pickPlayableItems(rawItems);
-    const selectedItems = [
-      ...playableItems,
-      ...candidates.filter((item) => !playableItems.includes(item)),
-    ].slice(0, MAX_CCTV_COUNT);
-    const cameras = selectedItems.map(normalizeCctv);
+    const cameras = playableItems.slice(0, 8).map(normalizeCctv);
 
     return NextResponse.json({
-      success: cameras.length === MAX_CCTV_COUNT,
+      success: cameras.length === 8,
       count: cameras.length,
       rawCount: rawItems.length,
-      playableCount: playableItems.length,
-      selectedCount: selectedItems.length,
-      message:
-        cameras.length === MAX_CCTV_COUNT
-          ? "CCTV list fetched. " + playableItems.length + " streams verified as playable."
-          : "Only " + cameras.length + " CCTV stream sources found",
+      selectedCount: playableItems.length,
+      message: cameras.length === 8
+        ? "Playable CCTV list fetched"
+        : `Only ${cameras.length} playable CCTV streams found`,
       data: cameras,
       items: cameras,
       cameras,
     });
-  } catch {
+  } catch (error) {
     return NextResponse.json(
       {
         success: false,
+        message: error instanceof Error ? error.message : "CCTV playable source selection failed",
         count: 0,
-        rawCount: 0,
-        playableCount: 0,
-        selectedCount: 0,
-        message: "CCTV list request failed",
         data: [],
         items: [],
         cameras: [],
       },
-      { status: 502 }
+      { status: 500 }
     );
   }
 }

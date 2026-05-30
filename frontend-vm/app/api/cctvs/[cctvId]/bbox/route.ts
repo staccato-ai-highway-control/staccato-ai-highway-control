@@ -1,35 +1,41 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const AI_BASE_URL =
-  process.env.AI_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_AI_API_BASE_URL ??
-  "http://192.168.0.186:8001";
+export const dynamic = "force-dynamic";
 
-type RouteContext = {
-  params: Promise<{ cctvId: string }>;
-};
+const AI_VM_BASE_URL =
+  process.env.AI_VM_BASE_URL ||
+  process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
+  "http://192.168.0.186:5001";
 
-export async function GET(request: Request, context: RouteContext) {
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ cctvId: string }> }
+) {
   const { cctvId } = await context.params;
+  const upstreamUrl = new URL(
+    `/internal/cameras/${encodeURIComponent(cctvId)}/detections`,
+    AI_VM_BASE_URL.replace(/\/$/, "")
+  );
 
   try {
-    const requestUrl = new URL(request.url);
-    const queryString = requestUrl.searchParams.toString();
-    const upstreamUrl =
-      AI_BASE_URL.replace(/\/$/, "") +
-      "/api/cctvs/" +
-      encodeURIComponent(cctvId) +
-      "/bbox" +
-      (queryString ? "?" + queryString : "");
+    const response = await fetch(upstreamUrl, {
+      method: "GET",
+      cache: "no-store",
+    });
 
-    const response = await fetch(upstreamUrl, { cache: "no-store" });
-    if (!response.ok) {
-      return NextResponse.json({ detections: [], items: [], data: { detections: [] } });
-    }
+    const data = await response.json().catch(() => null);
 
-    const payload = await response.json();
-    return NextResponse.json(payload);
-  } catch {
-    return NextResponse.json({ detections: [], items: [], data: { detections: [] } });
+    return NextResponse.json(data ?? { success: false, error: "Invalid AI VM response" }, {
+      status: response.status,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        camera_id: cctvId,
+        error: error instanceof Error ? error.message : "Failed to fetch CCTV detections",
+      },
+      { status: 502 }
+    );
   }
 }

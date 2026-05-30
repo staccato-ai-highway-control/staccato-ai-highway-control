@@ -8,18 +8,14 @@ const AI_VM_BASE_URL =
   "http://192.168.0.186:5001";
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ cctvId: string }> }
 ) {
   const { cctvId } = await context.params;
   const upstreamUrl = new URL(
-    `/streams/${encodeURIComponent(cctvId)}.mjpeg`,
+    `/snapshots/${encodeURIComponent(cctvId)}/latest.jpg`,
     AI_VM_BASE_URL.replace(/\/$/, "")
   );
-
-  request.nextUrl.searchParams.forEach((value, key) => {
-    upstreamUrl.searchParams.set(key, value);
-  });
 
   const response = await fetch(upstreamUrl, {
     method: "GET",
@@ -27,7 +23,7 @@ export async function GET(
   });
 
   if (!response.ok || !response.body) {
-    return new Response("Failed to fetch CCTV stream", {
+    return new Response("Snapshot not available", {
       status: response.status || 502,
     });
   }
@@ -35,7 +31,7 @@ export async function GET(
   return new Response(response.body, {
     status: response.status,
     headers: {
-      "Content-Type": response.headers.get("content-type") || "multipart/x-mixed-replace",
+      "Content-Type": response.headers.get("content-type") || "image/jpeg",
       "Cache-Control": "no-store",
     },
   });

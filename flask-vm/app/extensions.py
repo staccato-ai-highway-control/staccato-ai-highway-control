@@ -11,8 +11,13 @@ from flask_socketio import SocketIO
 
 db = SQLAlchemy()
 migrate = Migrate()
-socketio = SocketIO()
-
+socketio = SocketIO(
+    cors_allowed_origins=[
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://192.168.0.188:3001"
+    ]
+)
 
 def _normalize_cors_origins(value, fallback="*"):
     """

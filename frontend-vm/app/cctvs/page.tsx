@@ -66,6 +66,7 @@ export default function CctvsPage() {
         getCctvSlots().catch(() => getCameraSlotConfig()),
         getCameras().catch(() => []),
       ]);
+
       setCameraSlotConfig(nextSlots);
       setCctvs(nextCctvs);
     } catch (error) {
@@ -184,16 +185,16 @@ export default function CctvsPage() {
       {isLoading ? <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">CCTV 슬롯 정보를 불러오는 중입니다.</div> : null}
 
       <section className="grid gap-5 md:grid-cols-2 2xl:grid-cols-4">
-        {visibleCameraSlots.map(({ slot, cctv }, index) => (
-          cctv ? (
-            <CctvCard
-              key={`${slot.slotNumber}-${cctv.id}`}
-              cctv={cctv}
-              index={index}
-              slotNumber={slot.slotNumber}
-              onSelect={setSelectedCctv}
-              onConfigureRoi={setRoiSlotNumber}
-            />
+        {visibleCameraSlots.map(({ slot, cctv }, index) => {          return cctv ? (
+            <div key={`${slot.slotNumber}-${cctv.id}`} className="space-y-3">
+<CctvCard
+                cctv={cctv}
+                index={index}
+                slotNumber={slot.slotNumber}
+                onSelect={setSelectedCctv}
+                onConfigureRoi={setRoiSlotNumber}
+              />
+</div>
           ) : (
             <article key={`empty-${slot.slotNumber}`} className="grid min-h-[420px] content-between rounded-lg border-2 border-dashed border-slate-200 bg-white p-5 text-center shadow-sm">
               <div className="grid min-h-64 place-items-center rounded-lg bg-slate-100 text-slate-400">
@@ -206,8 +207,8 @@ export default function CctvsPage() {
                 <p className="text-sm font-semibold text-slate-500">설정에서 CCTV를 선택하면 이 슬롯에 영상이 표시됩니다.</p>
               </div>
             </article>
-          )
-        ))}
+          );
+        })}
       </section>
 
       {visibleCameraSlots.length === 0 ? (

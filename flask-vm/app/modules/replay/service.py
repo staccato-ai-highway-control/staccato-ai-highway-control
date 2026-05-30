@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from sqlalchemy import or_
 
 from app.extensions import db
@@ -11,6 +12,7 @@ from app.models import (
     IncidentSnapshot,
     ReportAnalysisJob,
     ReportAttachment,
+    RealtimeEvent,
 )
 
 
@@ -146,7 +148,7 @@ def serialize_replay_item(incident) -> dict:
         "snapshot_url": snapshot_url,
         "replay_url": replay_url,
         "media_type": _media_type(attachment),
-        "has_snapshot": snapshot is not None,
+        "has_snapshot": bool(snapshot_url),
         "has_video": has_video,
     }
 
@@ -166,20 +168,143 @@ def determine_source_type(incident) -> str:
     return UNKNOWN_SOURCE
 
 
+
+
+def _is_external_url(value: str | None) -> bool:
+    return bool(value and (value.startswith("http://") or value.startswith("https://")))
+
+
+def _storage_roots() -> list[Path]:
+    roots: list[Path] = []
+
+    try:
+        from flask import current_app
+
+        configured_storage_root = current_app.config.get("STORAGE_ROOT")
+        if configured_storage_root:
+            roots.append(Path(configured_storage_root))
+
+        roots.append(Path(current_app.root_path).parent / "storage")
+    except RuntimeError:
+        pass
+
+    roots.extend([
+        Path("/home/staccato/staccato/storage"),
+        Path("/home/staccato/staccato-flask/storage"),
+    ])
+
+    unique_roots: list[Path] = []
+    seen = set()
+
+    for root in roots:
+        resolved = root.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_roots.append(resolved)
+
+    return unique_roots
+
+
+def _storage_media_exists(public_url: str | None) -> bool:
+    if not public_url:
+        return False
+
+    if _is_external_url(public_url):
+        return True
+
+    if not public_url.startswith("/storage/"):
+        return True
+
+    relative_path = public_url.removeprefix("/storage/")
+
+    for root in _storage_roots():
+        target_path = (root / relative_path).resolve()
+
+        try:
+            target_path.relative_to(root)
+        except ValueError:
+            continue
+
+        if target_path.exists() and target_path.is_file():
+            return True
+
+    return False
+
+
+def _resolve_storage_media_url(path_value: str | None) -> str | None:
+    if not path_value:
+        return None
+
+    value = path_value.strip()
+    if not value:
+        return None
+
+    if _is_external_url(value):
+        return value
+
+    # 이미 public storage URL인 경우
+    if value.startswith("/storage/"):
+        return value if _storage_media_exists(value) else None
+
+    # storage/generated/... 형태인 경우
+    if value.startswith("storage/"):
+        public_url = "/" + value
+        return public_url if _storage_media_exists(public_url) else None
+
+    # generated/incidents/... 형태인 경우
+    if value.startswith("generated/"):
+        public_url = f"/storage/{value}"
+        return public_url if _storage_media_exists(public_url) else None
+
+    # 절대 경로가 STORAGE_ROOT 내부 파일인 경우
+    candidate_path = Path(value)
+
+    if candidate_path.is_absolute():
+        for root in _storage_roots():
+            try:
+                relative_path = candidate_path.resolve().relative_to(root)
+            except ValueError:
+                continue
+
+            public_url = f"/storage/{relative_path.as_posix()}"
+            return public_url if _storage_media_exists(public_url) else None
+
+    return None
+
+
+def _latest_realtime_event(incident_id: int) -> RealtimeEvent | None:
+    return (
+        RealtimeEvent.query
+        .filter_by(incident_id=incident_id)
+        .order_by(RealtimeEvent.created_at.desc(), RealtimeEvent.id.desc())
+        .first()
+    )
+
+
 def resolve_snapshot_url(incident) -> str | None:
     snapshot = _latest_snapshot(incident.id)
     if snapshot is None:
         return None
 
-    # IncidentSnapshot currently stores only internal file paths. Do not expose
-    # them to the frontend until a public download API exists.
-    return None
+    return _resolve_storage_media_url(getattr(snapshot, "file_path", None))
 
 
 def resolve_replay_url(incident) -> str | None:
+    realtime_event = _latest_realtime_event(incident.id)
+
+    if realtime_event is not None:
+        payload = getattr(realtime_event, "payload", None)
+        if isinstance(payload, dict):
+            for key in ("clip_path", "video_url", "replay_url"):
+                media_url = _resolve_storage_media_url(payload.get(key))
+                if media_url:
+                    return media_url
+
     attachment = _get_attachment(incident)
     if attachment and _is_video_attachment(attachment):
-        return _public_url(attachment.file_url)
+        public_url = _public_url(attachment.file_url)
+        return public_url if _storage_media_exists(public_url) else None
 
     return None
 
