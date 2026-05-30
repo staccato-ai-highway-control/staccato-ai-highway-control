@@ -15,6 +15,7 @@ function getDisplayName(user: AuthUser | null) {
 type HeaderBadge = {
   label: string;
   className: string;
+  isRealtimeTrigger?: boolean;
 };
 
 function getRoleHeader(user: AuthUser | null, fallbackTitle: string): { title: string; badges: HeaderBadge[] } {
@@ -22,7 +23,7 @@ function getRoleHeader(user: AuthUser | null, fallbackTitle: string): { title: s
     title: fallbackTitle || "통합 관제",
     badges: [
       { label: getRoleLabel(user?.role), className: "border-sky-200 bg-sky-50 text-sky-700" },
-      { label: "실시간 이벤트", className: "border-amber-200 bg-amber-50 text-amber-700" },
+      { label: "실시간 이벤트", className: "border-amber-200 bg-amber-50 text-amber-700", isRealtimeTrigger: true },
       { label: "시스템 정상", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
     ],
   };
@@ -32,10 +33,12 @@ export function Header({
   title,
   isMobileMenuOpen,
   onMobileMenuToggle,
+  onRealtimePreviewClick,
 }: {
   title: string;
   isMobileMenuOpen?: boolean;
   onMobileMenuToggle?: () => void;
+  onRealtimePreviewClick?: () => void;
 }) {
   const router = useRouter();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -72,14 +75,25 @@ export function Header({
 
         <h1 className="truncate text-lg font-black text-slate-950 md:text-xl">{roleHeader.title}</h1>
         <div className="hidden min-w-0 items-center gap-2 lg:flex">
-          {roleHeader.badges.map((badge) => (
-            <span
-              key={badge.label}
-              className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold ${badge.className}`}
-            >
-              {badge.label}
-            </span>
-          ))}
+          {roleHeader.badges.map((badge) =>
+            badge.isRealtimeTrigger ? (
+              <button
+                key={badge.label}
+                type="button"
+                onClick={onRealtimePreviewClick}
+                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:brightness-95 " + badge.className}
+              >
+                {badge.label}
+              </button>
+            ) : (
+              <span
+                key={badge.label}
+                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold " + badge.className}
+              >
+                {badge.label}
+              </span>
+            )
+          )}
         </div>
       </div>
 

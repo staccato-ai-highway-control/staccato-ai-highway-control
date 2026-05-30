@@ -46,3 +46,33 @@ export type RealtimeConnectionStatus =
   | "connected"
   | "disconnected"
   | "error";
+
+export type RealtimeEventPreview = {
+  realtime_event_id: number | string;
+  event_type: string;
+  message: string;
+  severity?: "INFO" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | string;
+  source_cctv_id?: string | number | null;
+  preview_url?: string | null;
+  preview_type?: "video" | "image" | string | null;
+  video_url?: string | null;
+  snapshot_url?: string | null;
+  target_url?: string | null;
+  occurred_at?: string | null;
+  created_at?: string | null;
+  has_video?: boolean;
+  has_snapshot?: boolean;
+};
+
+export type RealtimeEventPreviewApiResponse =
+  | RealtimeEventPreview[]
+  | {
+      data?:
+        | RealtimeEventPreview[]
+        | {
+            items?: RealtimeEventPreview[];
+            events?: RealtimeEventPreview[];
+          };
+      items?: RealtimeEventPreview[];
+      events?: RealtimeEventPreview[];
+    };

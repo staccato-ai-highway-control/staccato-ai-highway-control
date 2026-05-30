@@ -208,7 +208,7 @@ export async function saveCameraSlotConfig(config: CameraSlotConfig[]) {
   });
 
   const payload = {
-    items: normalized.map((item) => ({
+    slots: normalized.map((item) => ({
       slot_number: item.slotNumber,
       cctv_id: item.cctvId || null,
       cctv_code: item.cctvId || null,
