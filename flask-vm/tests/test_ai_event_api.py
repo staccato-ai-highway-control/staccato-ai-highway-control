@@ -77,9 +77,9 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
         assert event is not None
         assert event.camera_id == "camera-1"
         assert event.event_type == "STOPPED_VEHICLE"
-        assert event.video_url == "http://127.0.0.1:5001/events/evt_20260526_0001.mp4"
-        assert event.snapshot_url == "http://127.0.0.1:5001/events/evt_20260526_0001.jpg"
-        assert event.stream_url == "http://127.0.0.1:5001/streams/camera-1.mjpeg"
+        assert event.video_url == "http://192.168.0.186:5001/events/evt_20260526_0001.mp4"
+        assert event.snapshot_url == "http://192.168.0.186:5001/events/evt_20260526_0001.jpg"
+        assert event.stream_url == "http://192.168.0.186:5001/streams/camera-1.mjpeg"
         assert event.bbox_json == [820, 430, 940, 510]
         assert event.raw_event_json["message"] == "Stopped vehicle detected in shoulder ROI"
 
