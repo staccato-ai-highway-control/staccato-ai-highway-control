@@ -84,10 +84,24 @@ export default function CctvsPage() {
 
   const cctvById = useMemo(() => {
     const map = new Map<string, Cctv>();
+
     cctvs.forEach((cctv) => {
-      map.set(cctv.id, cctv);
-      map.set(cctv.cctvCode, cctv);
+      const anyCctv = cctv as Cctv & Record<string, unknown>;
+      const candidateKeys = [
+        cctv.id,
+        cctv.cctvCode,
+        anyCctv.cctv_code,
+        anyCctv.cameraId,
+        anyCctv.camera_id,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      candidateKeys.forEach((key) => {
+        map.set(key, cctv);
+      });
     });
+
     return map;
   }, [cctvs]);
 

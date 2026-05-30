@@ -16,6 +16,10 @@ function getCctvLabel(cctv: Cctv) {
   return `${cctv.cctvCode} · ${cctv.roadName} ${cctv.locationName}`;
 }
 
+function getCctvValue(cctv: Cctv) {
+  return cctv.cctvCode || cctv.id;
+}
+
 function getSlotValue(slot: CameraSlotConfig) {
   return slot.cctvId || "";
 }
@@ -24,7 +28,14 @@ export function CameraSlotSettingsModal({ cctvs, config, onClose, onSave }: Came
   const [draftConfig, setDraftConfig] = useState(config);
   const [isSaving, setIsSaving] = useState(false);
 
-  const cctvById = useMemo(() => new Map(cctvs.map((cctv) => [cctv.id, cctv])), [cctvs]);
+  const cctvById = useMemo(() => {
+    const map = new Map<string, Cctv>();
+    cctvs.forEach((cctv) => {
+      map.set(cctv.id, cctv);
+      map.set(cctv.cctvCode, cctv);
+    });
+    return map;
+  }, [cctvs]);
 
   function handleChange(slotNumber: number, cctvId: string) {
     const cctv = cctvById.get(cctvId);
@@ -76,7 +87,7 @@ export function CameraSlotSettingsModal({ cctvs, config, onClose, onSave }: Came
               >
                 <option value="">카메라 미배정</option>
                 {cctvs.map((cctv) => (
-                  <option key={cctv.id} value={cctv.id}>{getCctvLabel(cctv)}</option>
+                  <option key={cctv.id} value={getCctvValue(cctv)}>{getCctvLabel(cctv)}</option>
                 ))}
               </select>
             </label>

@@ -30,6 +30,7 @@ export type CctvSlot = {
   slotNumber?: number;
   cctv_id?: number | string | null;
   cctv_code?: string | null;
+  camera_id?: string | null;
   display_name?: string | null;
   cctv?: Partial<Cctv> | null;
 };
