@@ -20,7 +20,7 @@ Excluded from final MVP:
 
 - Map API
 - GPS based location display
-- Full Docker Compose deployment
+- VM-based deployment; Docker Compose deployment is deprecated
 - Reinforcement learning / automatic retraining
 
 ---
