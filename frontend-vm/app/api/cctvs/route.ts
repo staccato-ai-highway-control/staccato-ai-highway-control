@@ -91,7 +91,7 @@ async function isPlayable(item: any, probeIndex: number) {
 async function pickPlayableItems(rawItems: any[]) {
   const now = Date.now();
 
-  if (playableCache && playableCache.expiresAt > now && playableCache.items.length >= 8) {
+  if (playableCache && playableCache.expiresAt > now && playableCache.items.length >= 1) {
     return playableCache.items;
   }
 
@@ -100,7 +100,7 @@ async function pickPlayableItems(rawItems: any[]) {
 
   const batchSize = 4;
 
-  for (let start = 0; start < candidates.length && playable.length < 8; start += batchSize) {
+  for (let start = 0; start < candidates.length && playable.length < 1; start += batchSize) {
     const batch = candidates.slice(start, start + batchSize);
 
     const results = await Promise.all(
@@ -112,7 +112,7 @@ async function pickPlayableItems(rawItems: any[]) {
 
     for (const result of results) {
       if (result.ok) playable.push(result.item);
-      if (playable.length >= 8) break;
+      if (playable.length >= 1) break;
     }
   }
 
@@ -202,14 +202,14 @@ export async function GET() {
     const payload = await response.json();
     const rawItems = getRawItems(payload);
     const playableItems = await pickPlayableItems(rawItems);
-    const cameras = playableItems.slice(0, 8).map(normalizeCctv);
+    const cameras = playableItems.slice(0, 1).map(normalizeCctv);
 
     return NextResponse.json({
-      success: cameras.length === 8,
+      success: cameras.length === 1,
       count: cameras.length,
       rawCount: rawItems.length,
       selectedCount: playableItems.length,
-      message: cameras.length === 8
+      message: cameras.length === 1
         ? "Playable CCTV list fetched"
         : `Only ${cameras.length} playable CCTV streams found`,
       data: cameras,
