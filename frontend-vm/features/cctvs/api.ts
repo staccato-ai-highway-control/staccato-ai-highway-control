@@ -55,7 +55,7 @@ type RawCctv = Partial<Cctv> & {
 
 type CctvListResponse = FlexibleApiResponse<Cctv[]> | { items?: RawCctv[]; cameras?: RawCctv[]; count?: number; success?: boolean; ok?: boolean };
 type CctvDetailResponse = FlexibleApiResponse<Cctv> | { item?: RawCctv; camera?: RawCctv; success?: boolean; ok?: boolean };
-type CctvSlotListResponse = FlexibleApiResponse<CctvSlot[]> | { items?: CctvSlot[]; count?: number; success?: boolean };
+type CctvSlotListResponse = FlexibleApiResponse<CctvSlot[]> | { items?: CctvSlot[]; slots?: CctvSlot[]; count?: number; success?: boolean };
 type StreamStatusListResponse = FlexibleApiResponse<StreamStatus[]> | { items?: StreamStatus[]; count?: number; success?: boolean };
 
 function buildQuery(params: Record<string, string | number | boolean | undefined> = {}) {
@@ -77,8 +77,8 @@ function normalizeStatus(status?: string, active?: boolean | number) {
 }
 
 function normalizeCctv(raw: RawCctv): Cctv {
-  const id = String(raw.id ?? raw.camera_id ?? raw.cctv_code ?? "");
-  const cctvCode = raw.cctvCode ?? raw.cctv_code ?? raw.camera_id ?? id;
+  const cctvCode = raw.cctvCode ?? raw.cctv_code ?? raw.camera_id ?? String(raw.id ?? "");
+  const id = String(cctvCode || raw.id || "");
   const name = raw.name ?? raw.cctv_name ?? raw.camera_name ?? cctvCode;
   const roadName = raw.roadName ?? raw.road_name ?? "-";
   const locationName = raw.locationName ?? raw.location_name ?? name;
@@ -122,8 +122,8 @@ function normalizeCctvDetail(response: CctvDetailResponse) {
 function normalizeSlots(response: CctvSlotListResponse): CameraSlotConfig[] {
   const data = Array.isArray(response)
     ? response
-    : getEnvelopeData<CctvSlot[] | { items?: CctvSlot[] }>(response as FlexibleApiResponse<CctvSlot[] | { items?: CctvSlot[] }>);
-  const slots = Array.isArray(data) ? data : data.items ?? [];
+    : getEnvelopeData<CctvSlot[] | { items?: CctvSlot[]; slots?: CctvSlot[] }>(response as FlexibleApiResponse<CctvSlot[] | { items?: CctvSlot[]; slots?: CctvSlot[] }>);
+  const slots = Array.isArray(data) ? data : data.items ?? data.slots ?? [];
   const slotMap = new Map<number, CameraSlotConfig>();
 
   slots.forEach((slot) => {
@@ -131,7 +131,7 @@ function normalizeSlots(response: CctvSlotListResponse): CameraSlotConfig[] {
     if (!Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 8) return;
 
     const nested = slot.cctv ? normalizeCctv(slot.cctv as RawCctv) : null;
-    const cctvId = String(slot.cctv_code ?? slot.cctv_id ?? nested?.id ?? "");
+    const cctvId = String(slot.cctv_code ?? nested?.cctvCode ?? slot.camera_id ?? nested?.id ?? slot.cctv_id ?? "");
     slotMap.set(slotNumber, {
       slotNumber,
       cctvId,
@@ -144,8 +144,10 @@ function normalizeSlots(response: CctvSlotListResponse): CameraSlotConfig[] {
 }
 
 export async function getCctvs(params: CctvListParams = {}) {
-  const response = await apiClient<CctvListResponse>(`/api/cctvs${buildQuery(params as Record<string, string | number | boolean | undefined>)}`, { auth: false });
-  return normalizeCctvList(response);
+  const response = await fetch("/api/cctvs" + buildQuery(params as Record<string, string | number | boolean | undefined>), { cache: "no-store" });
+  if (!response.ok) throw new Error("CCTV 정보를 불러오지 못했습니다.");
+  const payload = (await response.json()) as CctvListResponse;
+  return normalizeCctvList(payload);
 }
 
 export async function getCctv(id: string) {
@@ -159,8 +161,10 @@ export async function getCctvByCode(code: string) {
 }
 
 export async function getCameras(params: CctvListParams = {}) {
-  const response = await apiClient<CctvListResponse>(`/api/cameras${buildQuery(params as Record<string, string | number | boolean | undefined>)}`, { auth: false });
-  return normalizeCctvList(response);
+  const response = await fetch("/api/cctvs" + buildQuery(params as Record<string, string | number | boolean | undefined>), { cache: "no-store" });
+  if (!response.ok) throw new Error("CCTV 정보를 불러오지 못했습니다.");
+  const payload = (await response.json()) as CctvListResponse;
+  return normalizeCctvList(payload);
 }
 
 export async function getCamera(cameraId: string | number) {
@@ -198,7 +202,7 @@ export async function saveCameraSlotConfig(config: CameraSlotConfig[]) {
   });
 
   const payload = {
-    items: normalized.map((item) => ({
+    slots: normalized.map((item) => ({
       slot_number: item.slotNumber,
       cctv_id: item.cctvId || null,
       cctv_code: item.cctvId || null,
