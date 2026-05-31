@@ -466,9 +466,12 @@ def report_analysis_media(filename: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report analysis media not found.")
 
+    suffix = path.suffix.lower()
+    media_type = "video/mp4" if suffix == ".mp4" else "image/jpeg"
+
     return FileResponse(
         path,
-        media_type="image/jpeg",
+        media_type=media_type,
         headers={
             "Cache-Control": "no-store",
             "Cross-Origin-Resource-Policy": "cross-origin",
@@ -529,6 +532,173 @@ def _save_report_analysis_annotated_image(
         return None
 
     return f"{AI_PUBLIC_BASE_URL}/report-analysis/{filename}"
+
+
+def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
+    import cv2
+
+    for detection in detections:
+        bbox = detection.get("bbox")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            continue
+
+        x1, y1, x2, y2 = [int(value) for value in bbox]
+
+        label = (
+            detection.get("class_name")
+            or detection.get("label")
+            or detection.get("name")
+            or str(detection.get("class_id", "object"))
+        )
+        confidence = detection.get("confidence")
+        label_text = label
+        if isinstance(confidence, (int, float)):
+            label_text = f"{label} {confidence:.2f}"
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(
+            frame,
+            label_text,
+            (x1, max(20, y1 - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2,
+            cv2.LINE_AA,
+        )
+
+
+def _transcode_report_analysis_video_to_h264(input_path: Path, output_path: Path) -> bool:
+    import subprocess
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(input_path),
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "ultrafast",
+        "-crf",
+        "28",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+
+    try:
+        subprocess.run(command, check=True, timeout=120)
+        return output_path.exists() and output_path.stat().st_size > 0
+    except Exception:
+        return False
+
+
+def _save_report_analysis_annotated_video(
+    source_path: Path,
+    report_id: str,
+    detections: list[dict],
+) -> str | None:
+    if not source_path.exists():
+        print(f"[report-analysis-video] source file missing: {source_path}", flush=True)
+        return None
+    if not detections:
+        print("[report-analysis-video] no detections", flush=True)
+        return None
+
+    import cv2
+
+    REPORT_ANALYSIS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+    detections_by_frame: dict[int, list[dict]] = {}
+    for detection in detections:
+        frame_index = detection.get("frame_index")
+        if frame_index is None:
+            continue
+        try:
+            key = int(frame_index)
+        except (TypeError, ValueError):
+            continue
+        detections_by_frame.setdefault(key, []).append(detection)
+
+    if not detections_by_frame:
+        print("[report-analysis-video] no detections_by_frame", flush=True)
+        return None
+
+    cap = cv2.VideoCapture(str(source_path))
+    if not cap.isOpened():
+        print(f"[report-analysis-video] failed to open source video: {source_path}", flush=True)
+        return None
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 15.0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+
+    if width <= 0 or height <= 0:
+        print(f"[report-analysis-video] invalid video size: width={width}, height={height}, fps={fps}", flush=True)
+        cap.release()
+        return None
+
+    safe_report_id = "".join(
+        char for char in str(report_id or "unknown") if char.isalnum() or char in {"_", "-"}
+    )
+    token = uuid.uuid4().hex[:12]
+    raw_filename = f"report_{safe_report_id}_{token}_annotated_raw.mp4"
+    h264_filename = f"report_{safe_report_id}_{token}_annotated.mp4"
+
+    raw_path = REPORT_ANALYSIS_MEDIA_DIR / raw_filename
+    h264_path = REPORT_ANALYSIS_MEDIA_DIR / h264_filename
+
+    writer = cv2.VideoWriter(
+        str(raw_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        fps,
+        (width, height),
+    )
+
+    if not writer.isOpened():
+        print(f"[report-analysis-video] failed to open VideoWriter: raw_path={raw_path}, fps={fps}, width={width}, height={height}", flush=True)
+        cap.release()
+        return None
+
+    frame_index = 0
+    active_detections: list[dict] = []
+
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+
+        if frame_index in detections_by_frame:
+            active_detections = detections_by_frame[frame_index]
+
+        if active_detections:
+            _draw_report_analysis_detections(frame, active_detections)
+
+        writer.write(frame)
+        frame_index += 1
+
+    cap.release()
+    writer.release()
+
+    if not raw_path.exists() or raw_path.stat().st_size <= 0:
+        print(f"[report-analysis-video] raw video not created: {raw_path}", flush=True)
+        return None
+
+    if _transcode_report_analysis_video_to_h264(raw_path, h264_path):
+        try:
+            raw_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        return f"{AI_PUBLIC_BASE_URL}/report-analysis/{h264_filename}"
+
+    return f"{AI_PUBLIC_BASE_URL}/report-analysis/{raw_filename}"
 
 
 @app.on_event("shutdown")
@@ -637,10 +807,6 @@ async def detect_legacy_report_file(
         finally:
             if cap is not None:
                 cap.release()
-            try:
-                tmp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
 
     else:
         np_buffer = np.frombuffer(payload, dtype=np.uint8)
@@ -654,11 +820,36 @@ async def detect_legacy_report_file(
         best_detections = detections_payload
         frames_processed = 1
 
-    annotated_image_url = _save_report_analysis_annotated_image(
-        report_id=report_id,
-        frame=best_frame,
-        detections=best_detections,
-    )
+    annotated_image_url = None
+    annotated_video_url = None
+
+    if is_video:
+        annotated_video_url = _save_report_analysis_annotated_video(
+            source_path=Path(tmp_path),
+            report_id=report_id,
+            detections=detections_payload,
+        )
+
+        if not annotated_video_url:
+            annotated_image_url = _save_report_analysis_annotated_image(
+                report_id=report_id,
+                frame=best_frame,
+                detections=best_detections,
+            )
+    else:
+        annotated_image_url = _save_report_analysis_annotated_image(
+            report_id=report_id,
+            frame=best_frame,
+            detections=best_detections,
+        )
+
+    annotated_media_type = "video" if annotated_video_url else "image" if annotated_image_url else None
+
+    if is_video:
+        try:
+            Path(tmp_path).unlink(missing_ok=True)
+        except Exception:
+            pass
 
     return {
         "success": True,
@@ -671,8 +862,12 @@ async def detect_legacy_report_file(
         "detections": detections_payload,
         "frames_processed": frames_processed,
         "annotated_image_url": annotated_image_url,
+        "annotated_video_url": annotated_video_url,
+        "annotated_media_type": annotated_media_type,
         "annotated_media": {
             "image_url": annotated_image_url,
+            "video_url": annotated_video_url,
+            "media_type": annotated_media_type,
         },
     }
 
