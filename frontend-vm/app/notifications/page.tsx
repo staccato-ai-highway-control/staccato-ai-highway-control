@@ -286,23 +286,68 @@ export default function NotificationsPage() {
                       <p className="mt-2 text-xs font-bold text-blue-500">클릭하면 상세 정보를 펼쳐서 확인합니다.</p>
 
                       {expandedIds.has(notification.id) && notification.source ? (
-                        <div className="mt-4 grid gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 md:grid-cols-2">
-                          <p>사고 ID: {notification.source.incident_id ?? "-"}</p>
-                          <p>사고 코드: {notification.source.incident_code ?? "-"}</p>
-                          <p>이벤트 유형: {notification.source.event_type ?? "-"}</p>
-                          <p>심각도: {notification.source.severity ?? "-"}</p>
-                          <p>CCTV: {notification.source.cctv_id ?? notification.source.source_cctv_id ?? "-"}</p>
-                          <p>ROI: {notification.source.roi_type ?? "-"}</p>
-                          <p>차량: {notification.source.vehicle_class ?? "-"}</p>
-                          <p>신뢰도: {notification.source.confidence ?? "-"}</p>
-                          <p>발생 시각: {formatDateTime(notification.source.occurred_at)}</p>
-                          <p>생성 시각: {formatDateTime(notification.source.created_at)}</p>
-                          {notification.source.snapshot_path ? (
-                            <p className="md:col-span-2">스냅샷: {notification.source.snapshot_path}</p>
-                          ) : null}
-                          {notification.source.clip_path ? (
-                            <p className="md:col-span-2">영상: {notification.source.clip_path}</p>
-                          ) : null}
+                        <div className="mt-4 grid gap-4 rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs font-bold text-slate-600 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <p>사고 ID: {notification.source.incident_id ?? "-"}</p>
+                            <p>사고 코드: {notification.source.incident_code ?? "-"}</p>
+                            <p>이벤트 유형: {notification.source.event_type ?? "-"}</p>
+                            <p>심각도: {notification.source.severity ?? "-"}</p>
+                            <p>CCTV: {notification.source.cctv_id ?? notification.source.source_cctv_id ?? "-"}</p>
+                            <p>ROI: {notification.source.roi_type ?? "-"}</p>
+                            <p>차량: {notification.source.vehicle_class ?? "-"}</p>
+                            <p>신뢰도: {notification.source.confidence ?? "-"}</p>
+                            <p>발생 시각: {formatDateTime(notification.source.occurred_at)}</p>
+                            <p>생성 시각: {formatDateTime(notification.source.created_at)}</p>
+                          </div>
+
+                          <div
+                            className="grid gap-3"
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => event.stopPropagation()}
+                          >
+                            {notification.source.clip_path ? (
+                              <div>
+                                <p className="mb-2 text-xs font-black text-slate-500">영상 미리보기</p>
+                                <video
+                                  src={notification.source.clip_path}
+                                  controls
+                                  preload="metadata"
+                                  playsInline
+                                  className="max-h-48 w-full rounded-lg border border-slate-200 bg-black"
+                                />
+                                <a
+                                  href={notification.source.clip_path}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="mt-1 inline-block break-all text-[11px] font-bold text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700"
+                                >
+                                  영상 새 탭에서 열기
+                                </a>
+                              </div>
+                            ) : null}
+
+                            {notification.source.snapshot_path ? (
+                              <div>
+                                <p className="mb-2 text-xs font-black text-slate-500">스냅샷 미리보기</p>
+                                <img
+                                  src={notification.source.snapshot_path}
+                                  alt="이벤트 스냅샷"
+                                  loading="lazy"
+                                  className="max-h-48 w-full rounded-lg border border-slate-200 bg-white object-contain"
+                                />
+                                <a
+                                  href={notification.source.snapshot_path}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="mt-1 inline-block break-all text-[11px] font-bold text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-700"
+                                >
+                                  스냅샷 새 탭에서 열기
+                                </a>
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>
