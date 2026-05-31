@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+import subprocess
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
 from typing import Any
@@ -226,7 +227,15 @@ class EventClipWorker:
         height, width = first_frame.shape[:2]
         width -= width % 2
         height -= height % 2
-        writer = self._open_video_writer(video_path, width, height)
+
+        raw_video_path = video_path.with_name(f"{video_path.stem}.raw{video_path.suffix}")
+        h264_tmp_path = video_path.with_name(f"{video_path.stem}.h264.tmp{video_path.suffix}")
+
+        for candidate in (raw_video_path, h264_tmp_path):
+            if candidate.exists():
+                candidate.unlink()
+
+        writer = self._open_video_writer(raw_video_path, width, height)
 
         try:
             for snapshot in frames:
@@ -237,8 +246,50 @@ class EventClipWorker:
         finally:
             writer.release()
 
-        if not video_path.exists() or video_path.stat().st_size <= 0:
-            raise RuntimeError(f"Failed to write video {video_path}")
+        if not raw_video_path.exists() or raw_video_path.stat().st_size <= 0:
+            raise RuntimeError(f"Failed to write raw video {raw_video_path}")
+
+        self._transcode_to_browser_mp4(raw_video_path, h264_tmp_path)
+
+        if not h264_tmp_path.exists() or h264_tmp_path.stat().st_size <= 0:
+            raise RuntimeError(f"Failed to write H.264 video {h264_tmp_path}")
+
+        h264_tmp_path.replace(video_path)
+        raw_video_path.unlink(missing_ok=True)
+
+    def _transcode_to_browser_mp4(self, input_path: Path, output_path: Path) -> None:
+        command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(input_path),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "28",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        if completed.returncode != 0:
+            error_message = (completed.stderr or completed.stdout or "unknown ffmpeg error").strip()
+            raise RuntimeError(f"Failed to transcode event clip to H.264: {error_message}")
 
     def _open_video_writer(self, video_path: Path, width: int, height: int) -> cv2.VideoWriter:
         for codec in VIDEO_CODEC_FALLBACKS:
