@@ -68,7 +68,7 @@ YOLO_MODEL_PATHS = [
     item.strip()
     for item in os.environ.get(
         "YOLO_MODEL_PATHS",
-        "yolo11s.pt,yolo26n.pt,yolo11n.pt,yolov8n.pt",
+        "/home/staccato/staccato/ai-vm/models/yolo11s/best.pt,/home/staccato/staccato/ai-vm/models/yolo11n/best.pt,/home/staccato/staccato/ai-vm/models/yolo8n/best.pt",
     ).split(",")
     if item.strip()
 ]
@@ -80,7 +80,7 @@ YOLO_TARGET_CLASSES = {
     item.strip().lower()
     for item in os.environ.get(
         "YOLO_TARGET_CLASSES",
-        "car,motorcycle,bus,truck",
+        "car,bus,truck",
     ).split(",")
     if item.strip()
 }
@@ -131,7 +131,7 @@ EVENT_VEHICLE_CLASSES = {
     item.strip().lower()
     for item in os.environ.get(
         "EVENT_VEHICLE_CLASSES",
-        "car,motorcycle,bus,truck",
+        "car,bus,truck",
     ).split(",")
     if item.strip()
 }
