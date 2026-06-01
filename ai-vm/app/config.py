@@ -98,9 +98,10 @@ YOLO_FAR_MAX_BOX_HEIGHT = int(os.environ.get("YOLO_FAR_MAX_BOX_HEIGHT", "220"))
 AI_VM_PUBLIC_BASE_URL = os.environ.get("AI_VM_PUBLIC_BASE_URL", "http://127.0.0.1:5001").strip()
 FLASK_RELAY_EVENTS_URL = os.environ.get(
     "FLASK_RELAY_EVENTS_URL",
-    "http://127.0.0.1:8000/api/events",
+    "http://192.168.0.187:5000/api/events",
 ).strip()
 FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS", "1.5"))
+INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 EVENT_CLIP_PRE_SECONDS = float(os.environ.get("EVENT_CLIP_PRE_SECONDS", "5.0"))
 EVENT_CLIP_POST_SECONDS = float(os.environ.get("EVENT_CLIP_POST_SECONDS", "5.0"))
 MANUAL_EVENT_CLIP_PRE_SECONDS = float(os.environ.get("MANUAL_EVENT_CLIP_PRE_SECONDS", "5.0"))

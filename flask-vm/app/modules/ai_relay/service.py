@@ -271,3 +271,95 @@ def _safe_limit(limit: int | None) -> int:
 
 def _utc_now_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+
+def build_incident_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert an AI relay event payload into IncidentEventService input."""
+
+    if not isinstance(payload, dict):
+        raise RelayValidationError("event payload must be a JSON object")
+
+    normalized = _normalize_payload_urls(payload)
+    detection = _first_detection(normalized.get("detections"))
+
+    incident_payload = {
+        "event_id": _required_string(normalized, "event_id"),
+        "event_type": _required_string(normalized, "event_type"),
+        "severity": _normalize_incident_severity(
+            _optional_string(normalized, "severity")
+        ),
+        "cctv_id": _required_string(normalized, "camera_id"),
+        "occurred_at": _required_string(normalized, "timestamp"),
+        "roi_type": (
+            _optional_string(normalized, "roi_type")
+            or _optional_string(normalized, "roi_id")
+            or _optional_string(normalized, "lane_type")
+            or "UNKNOWN"
+        ),
+        "track_id": _optional_string(normalized, "track_id"),
+        "vehicle_class": (
+            _optional_string(normalized, "vehicle_class")
+            or _clean_string(detection.get("class"))
+        ),
+        "confidence": normalized.get("confidence", detection.get("confidence")),
+        "bbox": _normalize_incident_bbox(normalized.get("bbox")),
+        "snapshot_path": (
+            _optional_string(normalized, "snapshot_path")
+            or _optional_string(normalized, "snapshot_url")
+        ),
+        "clip_path": (
+            _optional_string(normalized, "clip_path")
+            or _optional_string(normalized, "video_url")
+        ),
+        "message": _optional_string(normalized, "message"),
+        "movement_delta_px": normalized.get("movement_delta_px"),
+        "stopped_duration_seconds": normalized.get("stopped_duration_seconds"),
+        "frame_timestamp_ms": normalized.get("frame_timestamp_ms"),
+        "model_name": _optional_string(normalized, "model_name") or "AI_VM",
+        "model_version": _optional_string(normalized, "model_version"),
+        "raw_ai_event": normalized,
+    }
+
+    return incident_payload
+
+
+def _first_detection(value: Any) -> dict[str, Any]:
+    if isinstance(value, list) and value:
+        first = value[0]
+        if isinstance(first, dict):
+            return first
+
+    return {}
+
+
+def _normalize_incident_bbox(value: Any) -> dict[str, float] | None:
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, (list, tuple)) and len(value) == 4:
+        x1, y1, x2, y2 = value
+        return {
+            "x1": float(x1),
+            "y1": float(y1),
+            "x2": float(x2),
+            "y2": float(y2),
+        }
+
+    raise RelayValidationError("bbox must be an object or [x1, y1, x2, y2] list")
+
+
+def _normalize_incident_severity(value: str | None) -> str:
+    severity = (value or "MEDIUM").strip().upper()
+
+    return {
+        "INFO": "LOW",
+        "WARNING": "MEDIUM",
+        "WARN": "MEDIUM",
+        "DANGER": "HIGH",
+        "CRITICAL": "HIGH",
+        "ERROR": "HIGH",
+    }.get(severity, severity)
