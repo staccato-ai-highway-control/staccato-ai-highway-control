@@ -26,7 +26,7 @@ class RelayValidationError(ValueError):
     pass
 
 
-def store_event(payload: dict[str, Any]) -> tuple[AiEvent, str]:
+def store_event(payload: dict[str, Any], *, commit: bool = True) -> tuple[AiEvent, str]:
     if not isinstance(payload, dict):
         raise RelayValidationError("event payload must be a JSON object")
 
@@ -69,7 +69,10 @@ def store_event(payload: dict[str, Any]) -> tuple[AiEvent, str]:
 
     _sync_realtime_event(event, now)
 
-    db.session.commit()
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
 
     return event, status
 

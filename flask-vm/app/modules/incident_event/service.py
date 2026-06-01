@@ -176,7 +176,7 @@ def _build_socket_payload(
 
 class IncidentEventService:
     @staticmethod
-    def create_from_its_event(payload: dict) -> dict:
+    def create_from_its_event(payload: dict, *, commit: bool = True, emit_socket: bool = True) -> dict:
         if not isinstance(payload, dict):
             raise IncidentEventValidationError("JSON object body is required.")
 
@@ -285,20 +285,15 @@ class IncidentEventService:
             sent_at=None,
         )
         db.session.add(realtime_event)
-        db.session.commit()
-
-        socket_emitted = socket_emitters.emit_incident_created(socket_payload)
-
-        try:
-            realtime_event.send_status = "SENT" if socket_emitted else "FAILED"
-            realtime_event.sent_at = _utc_now_naive() if socket_emitted else None
-            realtime_event.error_message = None if socket_emitted else "Socket.IO emit failed."
+        if commit:
             db.session.commit()
-        except Exception:
-            db.session.rollback()
-            logger.exception(
-                "Failed to update realtime event send status. realtime_event_id=%s",
-                realtime_event.id,
+        else:
+            db.session.flush()
+
+        socket_emitted = False
+        if emit_socket:
+            socket_emitted = IncidentEventService.emit_realtime_event_by_id(
+                realtime_event.id
             )
 
         return {
@@ -310,3 +305,42 @@ class IncidentEventService:
             "realtime_event_id": realtime_event.id,
             "socket_emitted": socket_emitted,
         }
+
+
+    @staticmethod
+    def emit_realtime_event_by_id(realtime_event_id: int | None) -> bool:
+        if not realtime_event_id:
+            return False
+
+        realtime_event = db.session.get(RealtimeEvent, realtime_event_id)
+        if realtime_event is None:
+            logger.warning(
+                "Realtime event not found for socket emit. realtime_event_id=%s",
+                realtime_event_id,
+            )
+            return False
+
+        socket_payload = realtime_event.payload if isinstance(realtime_event.payload, dict) else {}
+
+        try:
+            socket_emitted = socket_emitters.emit_incident_created(socket_payload)
+        except Exception:
+            socket_emitted = False
+            logger.exception(
+                "Failed to emit incident created socket. realtime_event_id=%s",
+                realtime_event_id,
+            )
+
+        try:
+            realtime_event.send_status = "SENT" if socket_emitted else "FAILED"
+            realtime_event.sent_at = _utc_now_naive() if socket_emitted else None
+            realtime_event.error_message = None if socket_emitted else "Socket.IO emit failed."
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Failed to update realtime event send status. realtime_event_id=%s",
+                realtime_event_id,
+            )
+
+        return socket_emitted
