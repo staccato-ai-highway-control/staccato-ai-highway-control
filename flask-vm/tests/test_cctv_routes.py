@@ -242,3 +242,83 @@ def test_cctv_create_update_patch_and_delete(client, app):
     delete_response = client.delete(f"/api/cctvs/{cctv_id}")
     assert delete_response.status_code == 200
     assert delete_response.get_json()["deleted_id"] == cctv_id
+
+
+
+
+def test_cctv_code_database_unique_constraint(app):
+    from datetime import datetime
+
+    import pytest
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    from app.extensions import db
+    from app.models import Cctv
+
+    with app.app_context():
+        # FK 추가나 전체 DB drop은 하지 않습니다.
+        # 기존 test DB는 db.create_all()만으로 기존 테이블에 unique를 ALTER하지 않으므로,
+        # 이 테스트에 필요한 cctvs.cctv_code unique index만 보장합니다.
+        db.session.execute(text("""
+            DELETE FROM cctvs
+            WHERE cctv_code = 'CCTV-UNIQUE-001'
+        """))
+        db.session.commit()
+
+        duplicate_count = db.session.execute(text("""
+            SELECT COUNT(*)
+            FROM (
+                SELECT cctv_code
+                FROM cctvs
+                GROUP BY cctv_code
+                HAVING COUNT(*) > 1
+            ) duplicated_codes
+        """)).scalar()
+
+        assert duplicate_count == 0
+
+        existing_index = db.session.execute(text("""
+            SELECT COUNT(*)
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE()
+              AND table_name = 'cctvs'
+              AND index_name = 'uq_cctvs_cctv_code'
+        """)).scalar()
+
+        if not existing_index:
+            db.session.execute(text("""
+                ALTER TABLE cctvs
+                ADD UNIQUE KEY uq_cctvs_cctv_code (cctv_code)
+            """))
+            db.session.commit()
+
+        first = Cctv(
+            cctv_code="CCTV-UNIQUE-001",
+            cctv_name="Unique CCTV 1",
+            road_name="테스트 도로",
+            direction="상행",
+            location_name="테스트 위치 1",
+            stream_url="rtsp://example.com/unique-1",
+            is_active=True,
+            created_at=datetime.utcnow(),
+        )
+        second = Cctv(
+            cctv_code="CCTV-UNIQUE-001",
+            cctv_name="Unique CCTV 2",
+            road_name="테스트 도로",
+            direction="하행",
+            location_name="테스트 위치 2",
+            stream_url="rtsp://example.com/unique-2",
+            is_active=True,
+            created_at=datetime.utcnow(),
+        )
+
+        db.session.add(first)
+        db.session.commit()
+
+        db.session.add(second)
+        with pytest.raises(IntegrityError):
+            db.session.commit()
+
+        db.session.rollback()

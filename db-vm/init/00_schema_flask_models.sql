@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS `cctvs` (
   `installed_at` date DEFAULT NULL,
   `created_at` datetime NOT NULL,
   `updated_at` datetime DEFAULT NULL,
+  UNIQUE KEY `uq_cctvs_cctv_code` (`cctv_code`),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
