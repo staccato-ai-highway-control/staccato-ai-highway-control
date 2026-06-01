@@ -41,8 +41,8 @@ class Config:
     SQLALCHEMY_DATABASE_URI = build_database_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001")
-    ITS_SERVER_URL = os.getenv("ITS_SERVER_URL", "http://192.168.0.189:8002")
+    AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:5001")
+    ITS_SERVER_URL = os.getenv("ITS_SERVER_URL", "")
 
     FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://192.168.0.188:3000")
     CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
