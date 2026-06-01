@@ -10,7 +10,7 @@ The final MVP focuses on:
 
 - CCTV stream processing
 - YOLOv11 based vehicle detection
-- ByteTrack based tracking
+- Bbox center-movement based stopped-vehicle estimation
 - ROI / Rule Engine based abnormal event detection
 - Flask based API Gateway and DB persistence
 - Socket.IO based realtime notification
@@ -43,7 +43,7 @@ The following features are excluded from the final MVP:
     CCTV / RTSP / HLS
     → ITS VM
     → YOLOv11 vehicle detection
-    → ByteTrack tracking
+    → Bbox center movement analysis
     → ROI / Rule Engine
     → abnormal event JSON
     → Flask VM event receiver
@@ -80,7 +80,7 @@ The following features are excluded from the final MVP:
 
 - Receives CCTV stream
 - Runs YOLOv11 inference
-- Runs ByteTrack tracking
+- Estimates stopped vehicles using bbox center movement over time
 - Applies ROI / Rule Engine
 - Creates abnormal event JSON
 - Handles replay clip generation or metadata handoff
