@@ -4,9 +4,16 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from app.modules.internal_auth import require_internal_api_token
+from app.modules.incident_event.service import (
+    IncidentEventService,
+    IncidentEventValidationError,
+)
+
 from app.extensions import socketio
 from app.modules.ai_relay.service import (
     RelayValidationError,
+    build_incident_event_payload,
     build_replay,
     get_event,
     list_events,
@@ -21,13 +28,22 @@ ai_relay_bp = Blueprint("ai_relay", __name__, url_prefix="/api")
 
 @ai_relay_bp.post("/events")
 def create_event():
+    auth_error = require_internal_api_token()
+    if auth_error:
+        return auth_error
+
     payload = request.get_json(silent=True)
     if payload is None:
         return jsonify({"ok": False, "success": False, "error": "JSON body is required"}), 400
 
     try:
         event, status = store_event(payload)
+        incident_result = IncidentEventService.create_from_its_event(
+            build_incident_event_payload(payload)
+        )
     except RelayValidationError as exc:
+        return jsonify({"ok": False, "success": False, "error": str(exc)}), 400
+    except IncidentEventValidationError as exc:
         return jsonify({"ok": False, "success": False, "error": str(exc)}), 400
     except Exception:
         logger.exception("Unexpected AI event persistence error")
@@ -42,6 +58,7 @@ def create_event():
         "success": True,
         "status": status,
         "event": event_dict,
+        "incident": incident_result,
         "broadcast_queued": broadcast_queued,
     }), status_code
 
