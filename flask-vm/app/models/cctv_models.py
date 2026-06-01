@@ -7,7 +7,7 @@ class Cctv(db.Model):
     __tablename__ = "cctvs"
 
     id = db.Column(db.BigInteger, primary_key=True, autoincrement=True, nullable=False)
-    cctv_code = db.Column(db.String(50), nullable=False)
+    cctv_code = db.Column(db.String(50), nullable=False, unique=True)
     cctv_name = db.Column(db.String(100), nullable=False)
     stream_url = db.Column(db.String(500), nullable=True)
     location_name = db.Column(db.String(255), nullable=True)
