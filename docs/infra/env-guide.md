@@ -17,8 +17,7 @@ Example:
 
     DATABASE_URL=mysql+pymysql://staccato_user:<DB_PASSWORD_URL_ENCODED>@192.168.0.190:3306/staccato
 
-    AI_SERVER_URL=http://192.168.0.186:8001
-    ITS_SERVER_URL=http://192.168.0.189:8002
+    AI_SERVER_URL=http://192.168.0.186:5001
 
     SECRET_KEY=change-me
     JWT_SECRET_KEY=change-me
