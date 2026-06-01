@@ -21,7 +21,8 @@ The following features are excluded from the final MVP:
 
 - Map API
 - GPS-based frontend display
-- VM-based deployment; Docker Compose deployment is deprecated
+- LLM / Chatbot features
+- Docker Compose based deployment
 - Reinforcement learning
 - Automatic retraining
 
@@ -33,7 +34,7 @@ The following features are excluded from the final MVP:
 |---|---|---|---|
 | Frontend VM | 192.168.0.188 | Web UI, login, report upload, mypage, monitoring | Next.js / React / TypeScript |
 | Flask VM | 192.168.0.187 | API Gateway, Auth, DB persistence, Report API, Socket.IO | Flask / SQLAlchemy |
-| ITS VM | 192.168.0.186 | CCTV ingest, YOLOv11 inference, tracking, rule engine, event generation | FastAPI / OpenCV / YOLOv11 |
+| AI VM | 192.168.0.186 | CCTV ingest, YOLOv11 inference, bbox center-movement analysis, rule engine, event generation | FastAPI / OpenCV / YOLOv11 |
 | DB VM | 192.168.0.190 | Application database | MySQL 8.0 |
 
 ---
@@ -41,7 +42,7 @@ The following features are excluded from the final MVP:
 ## 3. Final Runtime Flow
 
     CCTV / RTSP / HLS
-    → ITS VM
+    → AI VM
     → YOLOv11 vehicle detection
     → Bbox center movement analysis
     → ROI / Rule Engine
@@ -64,7 +65,7 @@ The following features are excluded from the final MVP:
 - Displays incident list and detail
 - Displays snapshot and replay metadata
 - Does not directly access DB
-- Does not directly call ITS internal services
+- Does not directly call AI internal services
 
 ### Flask VM
 
@@ -73,10 +74,10 @@ The following features are excluded from the final MVP:
 - Handles authentication and authorization
 - Stores incident, report, event, and replay metadata
 - Relays realtime notifications through Socket.IO
-- Receives event JSON from ITS VM
+- Receives event JSON from AI VM
 - Does not run AI inference directly
 
-### ITS VM
+### AI VM
 
 - Receives CCTV stream
 - Runs YOLOv11 inference
@@ -119,6 +120,7 @@ The following architecture elements are excluded from the final MVP:
 
 - Map API
 - GPS-based frontend display
-- VM-based deployment; Docker Compose deployment is deprecated
+- LLM / Chatbot features
+- Docker Compose based deployment
 - Reinforcement learning
 - Automatic retraining pipeline

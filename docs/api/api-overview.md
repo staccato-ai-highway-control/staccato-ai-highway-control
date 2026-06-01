@@ -6,7 +6,7 @@
 
 Frontend communicates with Flask APIs.
 
-ITS VM sends event payloads to Flask.
+AI VM sends event payloads to Flask.
 
 Flask owns DB access and API response contracts.
 
@@ -21,7 +21,7 @@ Flask owns DB access and API response contracts.
 | MyPage | `/auth/me/profile`, `/auth/me/password` | Included |
 | Report Upload | `/api/reports` | Included |
 | Incident | `/incidents`, `/incidents/{id}` | Included |
-| Event Receiver | Internal ITS to Flask event endpoint | Included |
+| Event Receiver | Internal AI to Flask event endpoint | Included |
 | Realtime | Socket.IO events | Included |
 | Replay Metadata | Incident clip / replay metadata endpoints | Included or integrated by replay owner |
 
@@ -33,6 +33,7 @@ Flask owns DB access and API response contracts.
 |---|---|
 | Map API | Excluded from final MVP |
 | GPS API | Excluded from final MVP |
+| LLM / Chatbot API | Excluded from final MVP |
 | Automatic retraining API | Excluded from final MVP |
 
 
