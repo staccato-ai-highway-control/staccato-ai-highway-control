@@ -5,6 +5,10 @@ import pytest
 from app import create_app
 from app.extensions import db
 from app.models import AiEvent, Incident
+from app.modules.incident_event.service import (
+    IncidentEventService,
+    IncidentEventValidationError,
+)
 from db_cleanup import cleanup_database
 
 
@@ -161,3 +165,31 @@ def test_post_api_events_requires_internal_token_when_configured(client, app):
     )
     assert accepted.status_code == 201
     assert accepted.get_json()["incident"]["incident_code"] == "evt_requires_token"
+
+
+
+def test_post_api_events_rolls_back_ai_event_when_incident_creation_fails(
+    client,
+    app,
+    monkeypatch,
+):
+    def fail_create_from_its_event(payload, *, commit=True, emit_socket=True):
+        raise IncidentEventValidationError("forced incident failure")
+
+    monkeypatch.setattr(
+        IncidentEventService,
+        "create_from_its_event",
+        staticmethod(fail_create_from_its_event),
+    )
+
+    response = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_atomic_failure"),
+    )
+
+    assert response.status_code == 400
+    assert "forced incident failure" in response.get_json()["error"]
+
+    with app.app_context():
+        assert db.session.get(AiEvent, "evt_atomic_failure") is None
+        assert Incident.query.filter_by(incident_code="evt_atomic_failure").count() == 0

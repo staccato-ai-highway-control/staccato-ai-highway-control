@@ -10,7 +10,7 @@ from app.modules.incident_event.service import (
     IncidentEventValidationError,
 )
 
-from app.extensions import socketio
+from app.extensions import db, socketio
 from app.modules.ai_relay.service import (
     RelayValidationError,
     build_incident_event_payload,
@@ -37,17 +37,37 @@ def create_event():
         return jsonify({"ok": False, "success": False, "error": "JSON body is required"}), 400
 
     try:
-        event, status = store_event(payload)
+        event, status = store_event(payload, commit=False)
         incident_result = IncidentEventService.create_from_its_event(
-            build_incident_event_payload(payload)
+            build_incident_event_payload(payload),
+            commit=False,
+            emit_socket=False,
         )
+        db.session.commit()
     except RelayValidationError as exc:
+        db.session.rollback()
         return jsonify({"ok": False, "success": False, "error": str(exc)}), 400
     except IncidentEventValidationError as exc:
+        db.session.rollback()
         return jsonify({"ok": False, "success": False, "error": str(exc)}), 400
     except Exception:
+        db.session.rollback()
         logger.exception("Unexpected AI event persistence error")
         return jsonify({"ok": False, "success": False, "error": "Internal server error"}), 500
+
+    if incident_result.get("status") == "created":
+        try:
+            incident_result["socket_emitted"] = (
+                IncidentEventService.emit_realtime_event_by_id(
+                    incident_result.get("realtime_event_id")
+                )
+            )
+        except Exception:
+            incident_result["socket_emitted"] = False
+            logger.exception(
+                "Failed to emit AI-created incident socket after commit. event_id=%s",
+                payload.get("event_id"),
+            )
 
     event_dict = event.to_dict()
     broadcast_queued = _emit("ai_event_received", event_dict)
