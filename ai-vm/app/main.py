@@ -479,6 +479,20 @@ def report_analysis_media(filename: str):
     )
 
 
+def _report_analysis_box_color(detection: dict) -> tuple[int, int, int]:
+    box_color = str(detection.get("box_color") or "").lower()
+    risk_level = str(detection.get("risk_level") or "").upper()
+    incident_type = str(detection.get("incident_type") or "").upper()
+
+    if box_color in {"red", "danger", "risk"}:
+        return (0, 0, 255)  # OpenCV BGR red
+
+    if risk_level in {"HIGH", "CRITICAL"} or incident_type:
+        return (0, 0, 255)  # OpenCV BGR red
+
+    return (0, 255, 0)  # OpenCV BGR green
+
+
 def _save_report_analysis_annotated_image(
     report_id: str,
     frame,
@@ -499,8 +513,10 @@ def _save_report_analysis_annotated_image(
 
         x1, y1, x2, y2 = [int(value) for value in bbox]
         label = (
-            detection.get("class_name")
+            detection.get("display_label")
             or detection.get("label")
+            or detection.get("class_name")
+            or detection.get("raw_class_name")
             or detection.get("name")
             or str(detection.get("class_id", "object"))
         )
@@ -509,14 +525,16 @@ def _save_report_analysis_annotated_image(
         if isinstance(confidence, (int, float)):
             label_text = f"{label} {confidence:.2f}"
 
-        cv2.rectangle(rendered, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        box_color = _report_analysis_box_color(detection)
+
+        cv2.rectangle(rendered, (x1, y1), (x2, y2), box_color, 2)
         cv2.putText(
             rendered,
             label_text,
             (x1, max(20, y1 - 8)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
-            (0, 255, 0),
+            box_color,
             2,
             cv2.LINE_AA,
         )
@@ -545,8 +563,10 @@ def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
         x1, y1, x2, y2 = [int(value) for value in bbox]
 
         label = (
-            detection.get("class_name")
+            detection.get("display_label")
             or detection.get("label")
+            or detection.get("class_name")
+            or detection.get("raw_class_name")
             or detection.get("name")
             or str(detection.get("class_id", "object"))
         )
@@ -555,14 +575,16 @@ def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
         if isinstance(confidence, (int, float)):
             label_text = f"{label} {confidence:.2f}"
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        box_color = _report_analysis_box_color(detection)
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
         cv2.putText(
             frame,
             label_text,
             (x1, max(20, y1 - 8)),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
-            (0, 255, 0),
+            box_color,
             2,
             cv2.LINE_AA,
         )
@@ -820,6 +842,31 @@ async def detect_legacy_report_file(
         best_detections = detections_payload
         frames_processed = 1
 
+    from .report_analysis_postprocess import postprocess_report_analysis_detections
+
+    frame_height = 0
+    frame_width = 0
+    if best_frame is not None:
+        frame_height, frame_width = best_frame.shape[:2]
+
+    postprocess_result = postprocess_report_analysis_detections(
+        detections=detections_payload,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+
+    best_postprocess_result = postprocess_report_analysis_detections(
+        detections=best_detections,
+        frame_width=frame_width,
+        frame_height=frame_height,
+    )
+
+    raw_detections_payload = detections_payload
+    raw_count = len(raw_detections_payload)
+
+    detections_payload = postprocess_result["display_detections"]
+    best_detections = best_postprocess_result["display_detections"]
+
     annotated_image_url = None
     annotated_video_url = None
 
@@ -859,7 +906,16 @@ async def detect_legacy_report_file(
         "source_type": source_type,
         "model": detector.model_name,
         "count": len(detections_payload),
+        "raw_count": raw_count,
+        "filtered_count": postprocess_result.get("filtered_count"),
+        "incident_candidate_count": postprocess_result.get("incident_candidate_count"),
         "detections": detections_payload,
+        "raw_detections": raw_detections_payload,
+        "incident_candidates": postprocess_result.get("incident_candidates", []),
+        "postprocess": {
+            "enabled": postprocess_result.get("enabled"),
+            "config": postprocess_result.get("config"),
+        },
         "frames_processed": frames_processed,
         "annotated_image_url": annotated_image_url,
         "annotated_video_url": annotated_video_url,
