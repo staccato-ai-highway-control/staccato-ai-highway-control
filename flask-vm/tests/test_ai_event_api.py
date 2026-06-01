@@ -4,7 +4,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import AiEvent
+from app.models import AiEvent, Incident
 from db_cleanup import cleanup_database
 
 
@@ -83,6 +83,11 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
         assert event.bbox_json == [820, 430, 940, 510]
         assert event.raw_event_json["message"] == "Stopped vehicle detected in shoulder ROI"
 
+        incident = Incident.query.filter_by(incident_code="evt_20260526_0001").one()
+        assert incident.incident_type == "STOPPED_VEHICLE"
+        assert incident.incident_status == "DETECTED"
+        assert incident.risk_level == "MEDIUM"
+
 
 def test_get_api_events_detail_and_replay_return_saved_event(client):
     client.post("/api/events", json=_payload())
@@ -137,3 +142,22 @@ def test_post_api_events_updates_existing_event_by_event_id(client, app):
         assert AiEvent.query.count() == 1
         event = db.session.get(AiEvent, "evt_20260526_0001")
         assert event.video_url.endswith("_v2.mp4")
+
+
+def test_post_api_events_requires_internal_token_when_configured(client, app):
+    app.config["INTERNAL_API_TOKEN"] = "test-internal-token"
+    app.config["REQUIRE_INTERNAL_API_TOKEN_IN_TESTING"] = True
+
+    rejected = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_requires_token"),
+    )
+    assert rejected.status_code == 401
+
+    accepted = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_requires_token"),
+        headers={"X-Internal-API-Token": "test-internal-token"},
+    )
+    assert accepted.status_code == 201
+    assert accepted.get_json()["incident"]["incident_code"] == "evt_requires_token"

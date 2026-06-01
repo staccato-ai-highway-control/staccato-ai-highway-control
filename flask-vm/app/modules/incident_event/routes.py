@@ -4,6 +4,8 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
+from app.modules.internal_auth import require_internal_api_token
+
 from app.modules.incident_event.service import (
     IncidentEventService,
     IncidentEventValidationError,
@@ -21,6 +23,10 @@ incident_event_bp = Blueprint(
 
 @incident_event_bp.route("/events", methods=["POST"])
 def create_its_event():
+    auth_error = require_internal_api_token()
+    if auth_error:
+        return auth_error
+
     payload = request.get_json(silent=True)
 
     try:
