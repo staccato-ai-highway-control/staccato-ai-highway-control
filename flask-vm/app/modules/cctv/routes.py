@@ -180,7 +180,7 @@ def _parse_limit(default: int = 8, max_limit: int = 100) -> int:
 
 
 def _ai_vm_base_url() -> str:
-    # Prefer AI-vm address. Keep legacy ITS_SERVER_URL only as fallback.
+    # Prefer AI VM address. Keep legacy ITS_SERVER_URL only as explicit fallback.
     return (
         current_app.config.get("AI_VM_BASE_URL")
         or os.environ.get("AI_VM_BASE_URL")
@@ -202,7 +202,7 @@ def _fetch_its_cctvs_from_ai_vm() -> list[dict]:
     }
 
     query = urllib.parse.urlencode(query_params)
-    url = f"{base_url}/its/cctvs"
+    url = f"{base_url}/traffic/api/cctv"
     if query:
         url = f"{url}?{query}"
 

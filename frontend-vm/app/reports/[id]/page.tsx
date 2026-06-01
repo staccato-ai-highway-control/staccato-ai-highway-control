@@ -592,6 +592,26 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const riskLevel = analysisStatusResult?.risk_level ?? analysisStatusResult?.latest_job?.risk_level ?? report.risk_level;
   const riskScore = analysisStatusResult?.risk_score ?? analysisStatusResult?.latest_job?.risk_score ?? report.risk_score;
   const convertedIncidentId = analysisStatusResult?.converted_incident_id ?? analysisStatusResult?.latest_job?.converted_incident_id ?? report.converted_incident_id ?? report.convertedIncidentCode;
+  const analysisSummaryCandidates = [
+    analysisStatusResult?.latest_job,
+    ...(analysisJobs ?? []),
+    { result_summary: (analysisStatusResult as any)?.analysis_summary },
+  ]
+    .map((item) => (item as any)?.result_summary ?? item)
+    .filter((item) => item && typeof item === "object") as Record<string, any>[];
+
+  const annotatedVideoUrl =
+    analysisSummaryCandidates
+      .map((summary) => summary.annotated_video_url ?? summary.annotated_media?.video_url ?? null)
+      .find(Boolean) ?? null;
+
+  const annotatedImageUrl =
+    analysisSummaryCandidates
+      .map((summary) => summary.annotated_image_url ?? summary.annotated_media?.image_url ?? null)
+      .find(Boolean) ?? null;
+
+  const annotatedMediaUrl = annotatedVideoUrl ?? annotatedImageUrl;
+  const annotatedMediaType = annotatedVideoUrl ? "video" : annotatedImageUrl ? "image" : null;
 
   return (
     <RequireAuth>
@@ -767,6 +787,37 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 <InfoRow label="riskLevel" value={riskLevel} />
                 <InfoRow label="riskScore" value={riskScore} />
               </div>
+              {annotatedMediaUrl ? (
+                <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-black">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950 px-4 py-3">
+                    <p className="text-sm font-black text-white">
+                      AI 객체 탐지 결과{annotatedMediaType === "video" ? " 영상" : " 이미지"}
+                    </p>
+                    <a
+                      href={annotatedMediaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-bold text-sky-300 no-underline hover:text-sky-200"
+                    >
+                      새 탭에서 열기
+                    </a>
+                  </div>
+                  {annotatedVideoUrl ? (
+                    <video
+                      src={annotatedVideoUrl}
+                      controls
+                      playsInline
+                      className="block w-full"
+                    />
+                  ) : (
+                    <img
+                      src={annotatedImageUrl ?? ""}
+                      alt="AI 객체 탐지 결과"
+                      className="block w-full"
+                    />
+                  )}
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis || isAnalysisRunning(analysisStatus)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
                   <Sparkles className="h-4 w-4" aria-hidden="true" />

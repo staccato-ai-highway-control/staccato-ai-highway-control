@@ -9,7 +9,7 @@ STACCATO is an AI-based highway CCTV abnormal situation detection and real-time 
 Final MVP focus:
 
 - YOLOv11 based vehicle detection
-- ByteTrack based tracking
+- Bbox center-movement based stopped-vehicle estimation
 - ROI / Rule Engine based abnormal event detection
 - Flask API Gateway and MySQL metadata storage
 - Socket.IO based realtime notification
@@ -20,7 +20,8 @@ Excluded from final MVP:
 
 - Map API
 - GPS based location display
-- VM-based deployment; Docker Compose deployment is deprecated
+- LLM / Chatbot features
+- Docker Compose based deployment
 - Reinforcement learning / automatic retraining
 
 ---
@@ -40,8 +41,7 @@ AI-based traffic incident control system for detecting stopped vehicles on drivi
 | DB-VM | MySQL direct install |
 | FLASK-VM | Python venv |
 | FRONTEND-VM | Node.js/npm |
-| AI-VM | Docker |
-| ITS-VM | Python/FastAPI |
+| AI VM | FastAPI / AI inference service |
 
 자세한 서버 세팅 기준은 `docs/infra` 문서를 참고합니다.
 
@@ -55,7 +55,7 @@ AI-based traffic incident control system for detecting stopped vehicles on drivi
 주의사항:
 
 - `.env`, `.env.local`, `.venv`, `node_modules`는 Git에 올리지 않습니다.
-- Docker는 `AI-VM`에서만 사용합니다.
-- `DB-VM`, `FLASK-VM`, `FRONTEND-VM`, `ITS-VM`에서는 Docker를 사용하지 않습니다.
+- 현재 실행 기준은 VM 분리 구조이며, Docker Compose 기반 통합 실행은 사용하지 않습니다.
+- `DB VM`, `Flask VM`, `Frontend VM`, `AI VM`은 각각 분리된 VM 기준으로 운영합니다.
 - 루트 `docker-compose.yml`과 비-AI VM의 Dockerfile은 삭제되었습니다.
 - 실제 서버 실행 상태, DB 데이터, 설치된 패키지는 Git pull만으로 복제되지 않습니다.

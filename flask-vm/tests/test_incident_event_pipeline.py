@@ -165,3 +165,22 @@ def test_socket_emit_failure_does_not_break_api(client, app, monkeypatch):
         realtime_event = RealtimeEvent.query.filter_by(incident_id=incident.id).one()
         assert realtime_event.send_status == "FAILED"
         assert realtime_event.error_message == "Socket.IO emit failed."
+
+
+def test_create_its_event_requires_internal_token_when_configured(client, app):
+    app.config["INTERNAL_API_TOKEN"] = "test-internal-token"
+    app.config["REQUIRE_INTERNAL_API_TOKEN_IN_TESTING"] = True
+
+    rejected = client.post(
+        "/internal/its/events",
+        json=_payload(event_id="its-requires-token"),
+    )
+    assert rejected.status_code == 401
+
+    accepted = client.post(
+        "/internal/its/events",
+        json=_payload(event_id="its-requires-token"),
+        headers={"X-Internal-API-Token": "test-internal-token"},
+    )
+    assert accepted.status_code == 201
+    assert accepted.get_json()["incident_code"] == "its-requires-token"

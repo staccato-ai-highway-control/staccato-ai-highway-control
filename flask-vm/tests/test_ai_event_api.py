@@ -4,7 +4,11 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import AiEvent
+from app.models import AiEvent, Incident
+from app.modules.incident_event.service import (
+    IncidentEventService,
+    IncidentEventValidationError,
+)
 from db_cleanup import cleanup_database
 
 
@@ -77,11 +81,16 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
         assert event is not None
         assert event.camera_id == "camera-1"
         assert event.event_type == "STOPPED_VEHICLE"
-        assert event.video_url == "http://127.0.0.1:5001/events/evt_20260526_0001.mp4"
-        assert event.snapshot_url == "http://127.0.0.1:5001/events/evt_20260526_0001.jpg"
-        assert event.stream_url == "http://127.0.0.1:5001/streams/camera-1.mjpeg"
+        assert event.video_url == "http://192.168.0.186:5001/events/evt_20260526_0001.mp4"
+        assert event.snapshot_url == "http://192.168.0.186:5001/events/evt_20260526_0001.jpg"
+        assert event.stream_url == "http://192.168.0.186:5001/streams/camera-1.mjpeg"
         assert event.bbox_json == [820, 430, 940, 510]
         assert event.raw_event_json["message"] == "Stopped vehicle detected in shoulder ROI"
+
+        incident = Incident.query.filter_by(incident_code="evt_20260526_0001").one()
+        assert incident.incident_type == "STOPPED_VEHICLE"
+        assert incident.incident_status == "DETECTED"
+        assert incident.risk_level == "MEDIUM"
 
 
 def test_get_api_events_detail_and_replay_return_saved_event(client):
@@ -137,3 +146,50 @@ def test_post_api_events_updates_existing_event_by_event_id(client, app):
         assert AiEvent.query.count() == 1
         event = db.session.get(AiEvent, "evt_20260526_0001")
         assert event.video_url.endswith("_v2.mp4")
+
+
+def test_post_api_events_requires_internal_token_when_configured(client, app):
+    app.config["INTERNAL_API_TOKEN"] = "test-internal-token"
+    app.config["REQUIRE_INTERNAL_API_TOKEN_IN_TESTING"] = True
+
+    rejected = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_requires_token"),
+    )
+    assert rejected.status_code == 401
+
+    accepted = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_requires_token"),
+        headers={"X-Internal-API-Token": "test-internal-token"},
+    )
+    assert accepted.status_code == 201
+    assert accepted.get_json()["incident"]["incident_code"] == "evt_requires_token"
+
+
+
+def test_post_api_events_rolls_back_ai_event_when_incident_creation_fails(
+    client,
+    app,
+    monkeypatch,
+):
+    def fail_create_from_its_event(payload, *, commit=True, emit_socket=True):
+        raise IncidentEventValidationError("forced incident failure")
+
+    monkeypatch.setattr(
+        IncidentEventService,
+        "create_from_its_event",
+        staticmethod(fail_create_from_its_event),
+    )
+
+    response = client.post(
+        "/api/events",
+        json=_payload(event_id="evt_atomic_failure"),
+    )
+
+    assert response.status_code == 400
+    assert "forced incident failure" in response.get_json()["error"]
+
+    with app.app_context():
+        assert db.session.get(AiEvent, "evt_atomic_failure") is None
+        assert Incident.query.filter_by(incident_code="evt_atomic_failure").count() == 0

@@ -7,14 +7,25 @@ const AI_VM_BASE_URL =
   process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
   "http://192.168.0.186:5001";
 
-const PLAYABLE_CACHE_TTL_MS = 5 * 60 * 1000;
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
 
-type PlayableCache = {
-  expiresAt: number;
-  items: any[];
-};
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
 
-let playableCache: PlayableCache | null = null;
+  return Math.floor(parsed);
+}
+
+// VMware 리소스 제약으로 현재 기본/최대 노출 수는 1개로 유지합니다.
+// 추후 리소스 문제가 해결되면 런타임 환경변수만 아래처럼 바꾸면 됩니다.
+// CCTV_LIST_DEFAULT_LIMIT=8
+// CCTV_LIST_MAX_VISIBLE=8
+const MAX_VISIBLE_CAMERAS = parsePositiveInt(process.env.CCTV_LIST_MAX_VISIBLE, 1);
+const DEFAULT_LIMIT = Math.min(
+  parsePositiveInt(process.env.CCTV_LIST_DEFAULT_LIMIT, 1),
+  MAX_VISIBLE_CAMERAS
+);
 
 function getRawItems(payload: any): any[] {
   if (Array.isArray(payload)) return payload;
@@ -41,87 +52,14 @@ function pickSourceUrl(item: any): string {
   );
 }
 
-async function isPlayable(item: any, probeIndex: number) {
-  const sourceUrl = pickSourceUrl(item);
-  if (!sourceUrl) return false;
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 7000);
-
-  const probeCameraId = `probe-${probeIndex}`;
-  const upstream = new URL(
-    `/streams/${encodeURIComponent(probeCameraId)}.mjpeg`,
-    AI_VM_BASE_URL
+function parseLimit(request: Request): number {
+  const { searchParams } = new URL(request.url);
+  const requestedLimit = parsePositiveInt(
+    searchParams.get("limit") || undefined,
+    DEFAULT_LIMIT
   );
 
-  upstream.searchParams.set("source_url", sourceUrl);
-  upstream.searchParams.set("quality", "45");
-  upstream.searchParams.set("analysis_fps", "0.5");
-
-  try {
-    const response = await fetch(upstream.toString(), {
-      method: "GET",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        Accept: "multipart/x-mixed-replace,image/jpeg,*/*",
-      },
-    });
-
-    const contentType = response.headers.get("content-type") || "";
-
-    if (response.body) {
-      try {
-        await response.body.cancel();
-      } catch {}
-    }
-
-    return response.ok && (
-      contentType.includes("multipart/x-mixed-replace") ||
-      contentType.includes("image/jpeg") ||
-      contentType.includes("application/octet-stream")
-    );
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function pickPlayableItems(rawItems: any[]) {
-  const now = Date.now();
-
-  if (playableCache && playableCache.expiresAt > now && playableCache.items.length >= 8) {
-    return playableCache.items;
-  }
-
-  const candidates = rawItems.filter((item) => pickSourceUrl(item)).slice(0, 60);
-  const playable: any[] = [];
-
-  const batchSize = 4;
-
-  for (let start = 0; start < candidates.length && playable.length < 8; start += batchSize) {
-    const batch = candidates.slice(start, start + batchSize);
-
-    const results = await Promise.all(
-      batch.map(async (item, offset) => ({
-        item,
-        ok: await isPlayable(item, start + offset + 1),
-      }))
-    );
-
-    for (const result of results) {
-      if (result.ok) playable.push(result.item);
-      if (playable.length >= 8) break;
-    }
-  }
-
-  playableCache = {
-    expiresAt: now + PLAYABLE_CACHE_TTL_MS,
-    items: playable,
-  };
-
-  return playable;
+  return Math.min(requestedLimit, MAX_VISIBLE_CAMERAS);
 }
 
 function normalizeCctv(item: any, index: number) {
@@ -175,7 +113,7 @@ function normalizeCctv(item: any, index: number) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const upstreamUrl = `${AI_VM_BASE_URL.replace(/\/$/, "")}/traffic/api/cctv`;
 
@@ -191,6 +129,11 @@ export async function GET() {
           success: false,
           message: `AI CCTV API failed: ${response.status}`,
           count: 0,
+          rawCount: 0,
+          selectedCount: 0,
+          limit: DEFAULT_LIMIT,
+          maxVisibleCameras: MAX_VISIBLE_CAMERAS,
+          streamProbeSkipped: true,
           data: [],
           items: [],
           cameras: [],
@@ -201,17 +144,19 @@ export async function GET() {
 
     const payload = await response.json();
     const rawItems = getRawItems(payload);
-    const playableItems = await pickPlayableItems(rawItems);
-    const cameras = playableItems.slice(0, 8).map(normalizeCctv);
+    const limit = parseLimit(request);
+    const cameras = rawItems.slice(0, limit).map(normalizeCctv);
 
     return NextResponse.json({
-      success: cameras.length === 8,
+      success: true,
       count: cameras.length,
       rawCount: rawItems.length,
-      selectedCount: playableItems.length,
-      message: cameras.length === 8
-        ? "Playable CCTV list fetched"
-        : `Only ${cameras.length} playable CCTV streams found`,
+      selectedCount: cameras.length,
+      limit,
+      maxVisibleCameras: MAX_VISIBLE_CAMERAS,
+      streamProbeSkipped: true,
+      message:
+        "CCTV metadata list fetched without stream probing; visible camera count is limited by runtime config",
       data: cameras,
       items: cameras,
       cameras,
@@ -222,6 +167,11 @@ export async function GET() {
         success: false,
         message: error instanceof Error ? error.message : "CCTV playable source selection failed",
         count: 0,
+        rawCount: 0,
+        selectedCount: 0,
+        limit: DEFAULT_LIMIT,
+        maxVisibleCameras: MAX_VISIBLE_CAMERAS,
+        streamProbeSkipped: true,
         data: [],
         items: [],
         cameras: [],

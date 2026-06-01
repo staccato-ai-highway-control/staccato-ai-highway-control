@@ -7,7 +7,6 @@
 | AI-VM | AI-VM | 192.168.0.186 | Pending |
 | FLASK-VM | Flask-VM | 192.168.0.187 | 1st setup done |
 | FRONTEND-VM | FRONTEND-VM | 192.168.0.188 | Pending |
-| ITS-VM | ITS-VM | 192.168.0.189 | Pending |
 | DB-VM | DB-VM | 192.168.0.190 | Done |
 
 ## Completed Scope

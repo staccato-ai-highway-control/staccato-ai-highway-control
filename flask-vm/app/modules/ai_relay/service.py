@@ -1,24 +1,36 @@
 from __future__ import annotations
 
+import os
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
 from app.extensions import db
-from app.models import AiEvent
+from app.models import AiEvent, RealtimeEvent
 
 
 DEFAULT_EVENT_LIMIT = 100
 MAX_EVENT_LIMIT = 500
 EVENT_ID_MAX_LENGTH = 191
 
+RECENT_INCIDENT_EVENT_NAME = "incident.created"
+AI_RELAY_SOURCE = "ai_relay"
+AI_VM_PUBLIC_BASE_URL = os.getenv("AI_VM_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
+AI_VM_INTERNAL_BASE_URLS = (
+    "http://127.0.0.1:5001",
+    "http://localhost:5001",
+)
+
 
 class RelayValidationError(ValueError):
     pass
 
 
-def store_event(payload: dict[str, Any]) -> tuple[AiEvent, str]:
+def store_event(payload: dict[str, Any], *, commit: bool = True) -> tuple[AiEvent, str]:
     if not isinstance(payload, dict):
         raise RelayValidationError("event payload must be a JSON object")
+
+    payload = _normalize_payload_urls(payload)
 
     event_id = _required_string(payload, "event_id")
     camera_id = _required_string(payload, "camera_id")
@@ -55,9 +67,105 @@ def store_event(payload: dict[str, Any]) -> tuple[AiEvent, str]:
     event.message = _optional_string(payload, "message")
     event.raw_event_json = dict(payload)
 
-    db.session.commit()
+    _sync_realtime_event(event, now)
+
+    if commit:
+        db.session.commit()
+    else:
+        db.session.flush()
 
     return event, status
+
+
+def _sync_realtime_event(event: AiEvent, now: datetime) -> RealtimeEvent:
+    realtime_event = _find_realtime_event_for_ai_event(event.event_id)
+
+    if realtime_event is None:
+        realtime_event = RealtimeEvent(
+            event_type="AI_EVENT",
+            event_name=RECENT_INCIDENT_EVENT_NAME,
+            target_role="ADMIN",
+            target_room="realtime:incidents",
+            target_resource_type="ai_event",
+            payload={},
+            send_status="PENDING",
+            created_at=event.event_timestamp or now,
+        )
+        db.session.add(realtime_event)
+
+    realtime_event.payload = _build_realtime_payload(event)
+    realtime_event.incident_id = None
+    realtime_event.target_resource_id = None
+    realtime_event.error_message = None
+
+    return realtime_event
+
+
+def _find_realtime_event_for_ai_event(event_id: str) -> RealtimeEvent | None:
+    # JSON 필드 쿼리 호환성 이슈를 피하기 위해 최근 항목을 Python에서 확인한다.
+    candidates = (
+        RealtimeEvent.query
+        .filter(RealtimeEvent.event_name == RECENT_INCIDENT_EVENT_NAME)
+        .order_by(RealtimeEvent.created_at.desc(), RealtimeEvent.id.desc())
+        .limit(1000)
+        .all()
+    )
+
+    for candidate in candidates:
+        payload = candidate.payload if isinstance(candidate.payload, dict) else {}
+        if payload.get("source") == AI_RELAY_SOURCE and payload.get("source_event_id") == event_id:
+            return candidate
+
+    return None
+
+
+def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
+    timestamp = event.event_timestamp.isoformat() if event.event_timestamp else None
+
+    return {
+        "source": AI_RELAY_SOURCE,
+        "source_event_id": event.event_id,
+        "ai_event_id": event.event_id,
+        "event_type": event.event_type,
+        "severity": event.severity,
+        "incident_status": event.status,
+        "cctv_id": event.camera_id,
+        "source_cctv_id": event.camera_id,
+        "occurred_at": timestamp,
+        "message": event.message or "AI 이상상황이 감지되었습니다.",
+        "track_id": event.track_id,
+        "roi_type": event.roi_id,
+        "lane_type": event.lane_type,
+        "bbox": event.bbox_json,
+        "snapshot_path": _normalize_media_url(event.snapshot_url),
+        "clip_path": _normalize_media_url(event.video_url),
+        "snapshot_url": _normalize_media_url(event.snapshot_url),
+        "video_url": _normalize_media_url(event.video_url),
+        "stream_url": _normalize_media_url(event.stream_url),
+        "raw_event": _normalize_payload_urls(event.raw_event_json or {}),
+    }
+
+
+def _normalize_payload_urls(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(payload)
+
+    for key in ("snapshot_url", "video_url", "stream_url"):
+        if key in normalized:
+            normalized[key] = _normalize_media_url(normalized.get(key))
+
+    return normalized
+
+
+def _normalize_media_url(value: Any) -> str | None:
+    text = _clean_string(value)
+    if not text:
+        return None
+
+    for internal_base_url in AI_VM_INTERNAL_BASE_URLS:
+        if text.startswith(internal_base_url):
+            return f"{AI_VM_PUBLIC_BASE_URL}{text[len(internal_base_url):]}"
+
+    return text
 
 
 def list_events(
@@ -110,9 +218,9 @@ def build_replay(event: AiEvent) -> dict[str, Any]:
         "event_id": event.event_id,
         "camera_id": event.camera_id,
         "timestamp": event_dict.get("timestamp"),
-        "snapshot_url": event.snapshot_url,
-        "video_url": event.video_url,
-        "stream_url": event.stream_url,
+        "snapshot_url": _normalize_media_url(event.snapshot_url),
+        "video_url": _normalize_media_url(event.video_url),
+        "stream_url": _normalize_media_url(event.stream_url),
         "event": event_dict,
     }
 
@@ -166,3 +274,95 @@ def _safe_limit(limit: int | None) -> int:
 
 def _utc_now_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+
+def build_incident_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Convert an AI relay event payload into IncidentEventService input."""
+
+    if not isinstance(payload, dict):
+        raise RelayValidationError("event payload must be a JSON object")
+
+    normalized = _normalize_payload_urls(payload)
+    detection = _first_detection(normalized.get("detections"))
+
+    incident_payload = {
+        "event_id": _required_string(normalized, "event_id"),
+        "event_type": _required_string(normalized, "event_type"),
+        "severity": _normalize_incident_severity(
+            _optional_string(normalized, "severity")
+        ),
+        "cctv_id": _required_string(normalized, "camera_id"),
+        "occurred_at": _required_string(normalized, "timestamp"),
+        "roi_type": (
+            _optional_string(normalized, "roi_type")
+            or _optional_string(normalized, "roi_id")
+            or _optional_string(normalized, "lane_type")
+            or "UNKNOWN"
+        ),
+        "track_id": _optional_string(normalized, "track_id"),
+        "vehicle_class": (
+            _optional_string(normalized, "vehicle_class")
+            or _clean_string(detection.get("class"))
+        ),
+        "confidence": normalized.get("confidence", detection.get("confidence")),
+        "bbox": _normalize_incident_bbox(normalized.get("bbox")),
+        "snapshot_path": (
+            _optional_string(normalized, "snapshot_path")
+            or _optional_string(normalized, "snapshot_url")
+        ),
+        "clip_path": (
+            _optional_string(normalized, "clip_path")
+            or _optional_string(normalized, "video_url")
+        ),
+        "message": _optional_string(normalized, "message"),
+        "movement_delta_px": normalized.get("movement_delta_px"),
+        "stopped_duration_seconds": normalized.get("stopped_duration_seconds"),
+        "frame_timestamp_ms": normalized.get("frame_timestamp_ms"),
+        "model_name": _optional_string(normalized, "model_name") or "AI_VM",
+        "model_version": _optional_string(normalized, "model_version"),
+        "raw_ai_event": normalized,
+    }
+
+    return incident_payload
+
+
+def _first_detection(value: Any) -> dict[str, Any]:
+    if isinstance(value, list) and value:
+        first = value[0]
+        if isinstance(first, dict):
+            return first
+
+    return {}
+
+
+def _normalize_incident_bbox(value: Any) -> dict[str, float] | None:
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, (list, tuple)) and len(value) == 4:
+        x1, y1, x2, y2 = value
+        return {
+            "x1": float(x1),
+            "y1": float(y1),
+            "x2": float(x2),
+            "y2": float(y2),
+        }
+
+    raise RelayValidationError("bbox must be an object or [x1, y1, x2, y2] list")
+
+
+def _normalize_incident_severity(value: str | None) -> str:
+    severity = (value or "MEDIUM").strip().upper()
+
+    return {
+        "INFO": "LOW",
+        "WARNING": "MEDIUM",
+        "WARN": "MEDIUM",
+        "DANGER": "HIGH",
+        "CRITICAL": "HIGH",
+        "ERROR": "HIGH",
+    }.get(severity, severity)
