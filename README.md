@@ -9,7 +9,7 @@ STACCATO is an AI-based highway CCTV abnormal situation detection and real-time 
 Final MVP focus:
 
 - YOLOv11 based vehicle detection
-- ByteTrack based tracking
+- Bbox center-movement based stopped-vehicle estimation
 - ROI / Rule Engine based abnormal event detection
 - Flask API Gateway and MySQL metadata storage
 - Socket.IO based realtime notification
