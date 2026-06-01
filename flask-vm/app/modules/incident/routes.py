@@ -76,6 +76,10 @@ def _normalize_risk_level(value: str | None) -> str:
     return "MEDIUM"
 
 
+def _is_truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def _risk_score_from(level: str, confidence) -> int:
     confidence_value = _to_float(confidence)
     if confidence_value is not None:
@@ -201,6 +205,45 @@ def list_incidents():
     if type_filter:
         query = query.filter(Incident.incident_type == type_filter.upper())
 
+    include_test_data = _is_truthy(
+        request.args.get("include_test_data") or request.args.get("includeTestData")
+    )
+    if not include_test_data:
+        # 기본 목록에서는 개발/시연용 테스트 incident를 숨깁니다.
+        # 필요 시 /api/incidents?include_test_data=true 로 포함 조회할 수 있습니다.
+        query = query.filter(
+            or_(
+                Incident.incident_code.is_(None),
+                ~Incident.incident_code.ilike("LLM-INC-%"),
+            )
+        )
+        query = query.filter(
+            or_(
+                Incident.incident_code.is_(None),
+                ~Incident.incident_code.ilike("TEST-INC-%"),
+            )
+        )
+        query = query.filter(
+            or_(
+                Incident.incident_type.is_(None),
+                ~Incident.incident_type.ilike("TEST"),
+            )
+        )
+        for code_pattern in ("%test%", "%테스트%"):
+            query = query.filter(
+                or_(
+                    Incident.incident_code.is_(None),
+                    ~Incident.incident_code.ilike(code_pattern),
+                )
+            )
+        for pattern in ("%테스트%", "%test%"):
+            query = query.filter(
+                or_(
+                    Incident.location_name.is_(None),
+                    ~Incident.location_name.ilike(pattern),
+                )
+            )
+
     keyword = (request.args.get("q") or request.args.get("keyword") or "").strip()
     if keyword:
         like = f"%{keyword}%"
@@ -232,6 +275,7 @@ def list_incidents():
         "data": payload,
         "incidents": payload,
         "count": len(payload),
+        "testDataIncluded": include_test_data,
     }), 200
 
 
