@@ -7,7 +7,7 @@ from flask import current_app
 
 class AIGatewayService:
     @staticmethod
-    def request_analysis(report_id, file_path):
+    def request_analysis(report_id, file_path, cctv_id=None, camera_id=None):
         """
         신고 첨부파일을 AI-vm /detect API로 전달합니다.
         반환값:
@@ -24,10 +24,12 @@ class AIGatewayService:
         detect_url = f"{ai_server_url.rstrip('/')}/detect"
 
         current_app.logger.info(
-            "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s",
+            "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s cctv_id=%s camera_id=%s",
             report_id,
             file_path,
             detect_url,
+            cctv_id,
+            camera_id,
         )
 
         if not file_path or not os.path.exists(file_path):
@@ -53,6 +55,12 @@ class AIGatewayService:
                 data = {
                     "report_id": str(report_id),
                 }
+
+                if cctv_id is not None:
+                    data["cctv_id"] = str(cctv_id)
+
+                if camera_id:
+                    data["camera_id"] = str(camera_id)
 
                 try:
                     timeout_seconds = int(
