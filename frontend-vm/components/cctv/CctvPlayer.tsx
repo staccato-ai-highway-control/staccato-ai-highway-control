@@ -9,7 +9,7 @@ export function CctvPlayer({ cctv }: { cctv: Cctv }) {
         <img
           src={mediaUrl}
           alt={`${cctv.cctvCode ?? cctv.id} stream`}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-contain"
           onError={(event) => {
             event.currentTarget.style.display = "none";
           }}

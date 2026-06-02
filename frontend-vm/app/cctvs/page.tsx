@@ -119,6 +119,14 @@ export default function CctvsPage() {
 
   useEffect(() => {
     setIsStreamReady(false);
+
+    if (!isMainStreamVisible) return;
+
+    const timer = window.setTimeout(() => {
+      setIsStreamReady(true);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
   }, [selectedCctv?.streamUrl, isMainStreamVisible]);
 
   function handleCreateManualIncident(payload: ManualIncidentPayload) {

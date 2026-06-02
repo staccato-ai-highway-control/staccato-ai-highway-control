@@ -58,6 +58,20 @@ function readNumber(value: unknown) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function scaleBboxIfNormalized(bbox: Bbox): Bbox {
+  const looksNormalized = bbox.x >= 0 && bbox.y >= 0 && bbox.width > 0 && bbox.height > 0 && bbox.x <= 1 && bbox.y <= 1 && bbox.width <= 1 && bbox.height <= 1;
+
+  if (!looksNormalized) return bbox;
+
+  return {
+    ...bbox,
+    x: bbox.x * ORIGINAL_WIDTH,
+    y: bbox.y * ORIGINAL_HEIGHT,
+    width: bbox.width * ORIGINAL_WIDTH,
+    height: bbox.height * ORIGINAL_HEIGHT,
+  };
+}
+
 function normalizeBbox(detection: RawDetection): Bbox | null {
   const bboxValue = detection.bbox ?? detection.box ?? detection.bounding_box ?? detection.boundingBox;
   let x = readNumber(detection.x ?? detection.left);
@@ -98,7 +112,7 @@ function normalizeBbox(detection: RawDetection): Bbox | null {
   const label = String(detection.label ?? detection.class_name ?? detection.className ?? detection.type ?? detection.name ?? "object");
   const confidence = readNumber(detection.confidence ?? detection.score ?? detection.probability);
 
-  return { x, y, width, height, label, confidence };
+  return scaleBboxIfNormalized({ x, y, width, height, label, confidence });
 }
 
 function normalizeDetections(payload: unknown) {
@@ -172,7 +186,7 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
 
   return (
     <div className="pointer-events-none absolute inset-0">
-      <svg className="absolute inset-0 h-full w-full" viewBox={"0 0 " + ORIGINAL_WIDTH + " " + ORIGINAL_HEIGHT} preserveAspectRatio="none" aria-hidden="true">
+      <svg className="absolute inset-0 h-full w-full" viewBox={"0 0 " + ORIGINAL_WIDTH + " " + ORIGINAL_HEIGHT} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
         {detections.map((bbox, index) => (
           <g key={bbox.x + "-" + bbox.y + "-" + bbox.width + "-" + bbox.height + "-" + index}>
             <rect x={bbox.x} y={bbox.y} width={bbox.width} height={bbox.height} fill="none" stroke="#ef4444" strokeWidth="5" />

@@ -37,12 +37,12 @@ export function CctvFrame({
   onStreamLoad?: () => void;
 }) {
   return (
-    <div className={`relative overflow-hidden bg-slate-900 ${large ? "h-[420px]" : "h-64"}`}>
+    <div className={`relative overflow-hidden bg-slate-900 ${large ? "aspect-video" : "h-64"}`}>
       {showStream && cctv.streamUrl ? (
         <img
           src={cctv.streamUrl}
           alt={`${cctv.cctvCode ?? cctv.id} stream`}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-contain"
           onError={(event) => {
             event.currentTarget.style.display = "none";
             onStreamError?.();

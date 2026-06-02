@@ -153,7 +153,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
                   <img
                     src={activeCctv.streamUrl}
                     alt={`${activeCctv.cctvCode ?? activeCctv.id} ROI preview`}
-                    className="absolute inset-0 h-full w-full object-cover"
+                    className="absolute inset-0 h-full w-full object-contain"
                     onError={(event) => {
                       event.currentTarget.style.display = "none";
                     }}
