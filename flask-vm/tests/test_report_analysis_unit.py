@@ -154,8 +154,8 @@ def test_request_report_analysis_creates_job_and_is_idempotent(app, test_user, m
 def test_process_queued_report_analysis_jobs_completes_job(app, test_user, monkeypatch):
     calls = []
 
-    def fake_request_analysis(report_id, file_path):
-        calls.append((report_id, file_path))
+    def fake_request_analysis(report_id, file_path, cctv_id=None, camera_id=None):
+        calls.append((report_id, file_path, cctv_id, camera_id))
         return True, {
             "status": "OK",
             "count": 1,
@@ -202,4 +202,4 @@ def test_process_queued_report_analysis_jobs_completes_job(app, test_user, monke
         assert job.job_status == "COMPLETED"
         assert job.progress_percent == 100
         assert job.result_summary["count"] == 1
-        assert calls == [(report.id, attachment.file_path)]
+        assert calls == [(report.id, attachment.file_path, None, None)]
