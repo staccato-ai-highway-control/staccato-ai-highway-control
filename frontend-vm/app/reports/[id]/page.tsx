@@ -132,9 +132,9 @@ function formatDateTime(value: string | null | undefined) {
 
 function InfoRow({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+    <div className="min-w-0 rounded-lg border border-slate-100 bg-slate-50 p-3">
       <dt className="text-xs font-black uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-1 text-sm font-bold text-slate-800">{value === null || value === undefined || value === "" ? "-" : value}</dd>
+      <dd className="mt-1 min-w-0 break-words text-sm font-bold text-slate-800 [overflow-wrap:anywhere]">{value === null || value === undefined || value === "" ? "-" : value}</dd>
     </div>
   );
 }
@@ -727,9 +727,9 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
             <Card className="overflow-hidden">
               <div className="border-b border-slate-200 p-5"><h3 className="text-lg font-black text-slate-950">첨부파일</h3></div>
-              <div className="grid gap-5 p-5 lg:grid-cols-[1fr_280px]">
+              <div className="grid min-w-0 gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,280px)]">
                 <ReportAttachmentPreview report={report} />
-                <div className="grid content-start gap-3">
+                <div className="grid min-w-0 content-start gap-3">
                   <InfoRow label="첨부 개수" value={report.attachment_count ?? report.attachments?.length ?? 0} />
                   <InfoRow label="파일명" value={report.attachments?.[0]?.original_filename ?? report.attachments?.[0]?.filename ?? report.attachment_name ?? report.attachmentName} />
                   <InfoRow label="파일 유형" value={report.attachments?.[0]?.mime_type ?? report.attachments?.[0]?.file_type ?? report.attachment_type ?? report.attachmentType} />
@@ -744,18 +744,18 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                         handleUploadAttachments(event.target.files);
                         event.target.value = "";
                       }}
-                      className="text-xs font-semibold text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white disabled:opacity-50"
+                      className="min-w-0 max-w-full text-xs font-semibold text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white disabled:opacity-50"
                     />
                     {uploadingAttachment ? <span className="text-xs font-semibold text-slate-500">업로드 중입니다.</span> : null}
                   </label>
                   {(report.attachments ?? []).length > 0 ? (
-                    <div className="grid gap-2">
+                    <div className="grid min-w-0 gap-2">
                       {(report.attachments ?? []).map((attachment, index) => {
                         const attachmentId = getAttachmentId(attachment);
                         return (
-                          <div key={attachmentId ?? `${getAttachmentName(attachment)}-${index}`} className="rounded-lg border border-slate-100 bg-white p-3">
-                            <p className="truncate text-xs font-black text-slate-800">{getAttachmentName(attachment)}</p>
-                            <p className="mt-1 text-xs font-semibold text-slate-400">{getAttachmentType(attachment)}</p>
+                          <div key={attachmentId ?? `${getAttachmentName(attachment)}-${index}`} className="min-w-0 rounded-lg border border-slate-100 bg-white p-3">
+                            <p className="min-w-0 break-all text-xs font-black text-slate-800">{getAttachmentName(attachment)}</p>
+                            <p className="mt-1 min-w-0 break-words text-xs font-semibold text-slate-400 [overflow-wrap:anywhere]">{getAttachmentType(attachment)}</p>
                             <button
                               type="button"
                               disabled={!attachmentId || deletingAttachmentId === String(attachmentId)}
