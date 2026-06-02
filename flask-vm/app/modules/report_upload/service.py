@@ -1952,7 +1952,13 @@ class ReportUploadService:
         db.session.commit()
         emit_report_analysis_updated(job)
 
-        success, response = AIGatewayService.request_analysis(report.id, attachment.file_path)
+        camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
+        success, response = AIGatewayService.request_analysis(
+            report.id,
+            attachment.file_path,
+            cctv_id=getattr(report, "cctv_id", None),
+            camera_id=camera_id,
+        )
         completed_at = ReportUploadService._now()
 
         if success:
@@ -2060,7 +2066,13 @@ class ReportUploadService:
         db.session.commit()
         emit_report_analysis_updated(job)
 
-        success, response = AIGatewayService.request_analysis(report.id, attachment.file_path)
+        camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
+        success, response = AIGatewayService.request_analysis(
+            report.id,
+            attachment.file_path,
+            cctv_id=getattr(report, "cctv_id", None),
+            camera_id=camera_id,
+        )
         completed_at = ReportUploadService._now()
 
         if success:
