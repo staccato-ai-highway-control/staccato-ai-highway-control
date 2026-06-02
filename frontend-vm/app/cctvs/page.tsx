@@ -223,7 +223,7 @@ export default function CctvsPage() {
                   </button>
                 </div>
               </div>
-              <CctvFrame cctv={selectedCctv} index={selectedCctvIndex >= 0 ? selectedCctvIndex : 0} large showStream />
+              <CctvFrame cctv={selectedCctv} index={selectedCctvIndex >= 0 ? selectedCctvIndex : 0} large showStream={!isRoiSettingsOpen} />
             </section>
 
             <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
