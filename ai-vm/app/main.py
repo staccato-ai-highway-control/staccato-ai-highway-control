@@ -689,16 +689,21 @@ def _save_report_analysis_annotated_video(
         cap.release()
         return None
 
+    hold_frames = int(os.getenv("REPORT_ANALYSIS_ANNOTATION_HOLD_FRAMES", "3"))
+    hold_frames = max(0, hold_frames)
+
     frame_index = 0
-    active_detections: list[dict] = []
 
     while True:
         ok, frame = cap.read()
         if not ok:
             break
 
-        if frame_index in detections_by_frame:
-            active_detections = detections_by_frame[frame_index]
+        active_detections: list[dict] = []
+        for sampled_frame_index, frame_detections in detections_by_frame.items():
+            frame_age = frame_index - sampled_frame_index
+            if 0 <= frame_age <= hold_frames:
+                active_detections.extend(frame_detections)
 
         if active_detections:
             _draw_report_analysis_detections(frame, active_detections)
