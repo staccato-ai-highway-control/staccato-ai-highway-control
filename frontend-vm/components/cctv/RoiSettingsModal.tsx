@@ -33,6 +33,14 @@ type RoiSettingsModalProps = {
   onClose: () => void;
 };
 
+function getAvailableSlotNumbers(slotConfig: CameraSlotConfig[], initialSlotNumber: 1 | 2) {
+  const slotNumbers = slotConfig
+    .filter((slot) => slot.cctvId && (slot.slotNumber === 1 || slot.slotNumber === 2))
+    .map((slot) => slot.slotNumber as 1 | 2);
+
+  return slotNumbers.length > 0 ? slotNumbers : [initialSlotNumber];
+}
+
 function getSlotCctv(slotNumber: 1 | 2, slotConfig: CameraSlotConfig[], cctvs: Cctv[]) {
   const slot = slotConfig.find((item) => item.slotNumber === slotNumber);
   return cctvs.find((cctv) => cctv.id === slot?.cctvId) ?? cctvs[0];
@@ -45,9 +53,16 @@ function getPolygonPoints(points: RoiPolygon["points"]) {
 export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose }: RoiSettingsModalProps) {
   const [activeSlotNumber, setActiveSlotNumber] = useState<1 | 2>(initialSlotNumber);
   const [activeRoiIndex, setActiveRoiIndex] = useState<1 | 2 | 3>(1);
+  const availableSlotNumbers = useMemo(() => getAvailableSlotNumbers(slotConfig, initialSlotNumber), [initialSlotNumber, slotConfig]);
   const activeCctv = useMemo(() => getSlotCctv(activeSlotNumber, slotConfig, cctvs), [activeSlotNumber, cctvs, slotConfig]);
   const [roiConfig, setRoiConfig] = useState<CameraRoiConfig>(() => getCameraRoiConfig(initialSlotNumber, activeCctv.id));
   const activePolygon = roiConfig.polygons.find((polygon) => polygon.roiIndex === activeRoiIndex) ?? roiConfig.polygons[0];
+
+  useEffect(() => {
+    if (!availableSlotNumbers.includes(activeSlotNumber)) {
+      setActiveSlotNumber(availableSlotNumbers[0]);
+    }
+  }, [activeSlotNumber, availableSlotNumbers]);
 
   useEffect(() => {
     setRoiConfig(getCameraRoiConfig(activeSlotNumber, activeCctv.id));
@@ -117,7 +132,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
         <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="grid gap-4">
             <div className="flex flex-wrap items-center gap-2">
-              {[1, 2].map((slotNumber) => (
+              {availableSlotNumbers.map((slotNumber) => (
                 <button
                   key={slotNumber}
                   type="button"
@@ -133,9 +148,17 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
             </div>
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-950">
-              <div className="relative aspect-video bg-gradient-to-br from-emerald-950 via-slate-700 to-sky-200">
-                <div className="absolute inset-x-0 bottom-0 h-2/3 bg-[linear-gradient(110deg,transparent_0_28%,rgba(15,23,42,0.45)_28%_34%,transparent_34%_45%,rgba(15,23,42,0.42)_45%_51%,transparent_51%_100%)]" />
-                <div className="absolute inset-x-12 bottom-0 h-2/3 bg-slate-800/35 [clip-path:polygon(44%_0,56%_0,100%_100%,0_100%)]" />
+              <div className="relative aspect-video bg-slate-900">
+                {activeCctv.streamUrl ? (
+                  <img
+                    src={activeCctv.streamUrl}
+                    alt={`${activeCctv.cctvCode ?? activeCctv.id} ROI preview`}
+                    className="absolute inset-0 h-full w-full object-contain"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : null}
                 <svg
                   viewBox={`0 0 ${ORIGINAL_WIDTH} ${ORIGINAL_HEIGHT}`}
                   className="absolute inset-0 h-full w-full cursor-crosshair"
@@ -167,7 +190,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
 
           <aside className="grid content-start gap-4">
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-800">
-              <b className="block text-blue-950">ROI 설정은 현재 1번, 2번 카메라만 지원합니다.</b>
+              <b className="block text-blue-950">ROI 설정은 현재 선택한 카메라 기준으로 저장됩니다.</b>
               클릭한 점은 화면 크기와 무관하게 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환 저장됩니다.
             </div>
 
