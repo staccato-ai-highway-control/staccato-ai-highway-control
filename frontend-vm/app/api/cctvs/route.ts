@@ -17,13 +17,9 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
   return Math.floor(parsed);
 }
 
-// VMware 리소스 제약으로 현재 기본/최대 노출 수는 1개로 유지합니다.
-// 추후 리소스 문제가 해결되면 런타임 환경변수만 아래처럼 바꾸면 됩니다.
-// CCTV_LIST_DEFAULT_LIMIT=8
-// CCTV_LIST_MAX_VISIBLE=8
-const MAX_VISIBLE_CAMERAS = parsePositiveInt(process.env.CCTV_LIST_MAX_VISIBLE, 1);
+const MAX_VISIBLE_CAMERAS = parsePositiveInt(process.env.CCTV_LIST_MAX_VISIBLE, 60);
 const DEFAULT_LIMIT = Math.min(
-  parsePositiveInt(process.env.CCTV_LIST_DEFAULT_LIMIT, 1),
+  parsePositiveInt(process.env.CCTV_LIST_DEFAULT_LIMIT, MAX_VISIBLE_CAMERAS),
   MAX_VISIBLE_CAMERAS
 );
 
@@ -156,7 +152,7 @@ export async function GET(request: Request) {
       maxVisibleCameras: MAX_VISIBLE_CAMERAS,
       streamProbeSkipped: true,
       message:
-        "CCTV metadata list fetched without stream probing; visible camera count is limited by runtime config",
+        "CCTV metadata list fetched without stream probing",
       data: cameras,
       items: cameras,
       cameras,
@@ -165,7 +161,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: error instanceof Error ? error.message : "CCTV playable source selection failed",
+        message: error instanceof Error ? error.message : "CCTV metadata fetch failed",
         count: 0,
         rawCount: 0,
         selectedCount: 0,

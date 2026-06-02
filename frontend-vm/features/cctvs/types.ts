@@ -8,8 +8,10 @@ export type Cctv = {
   locationName: string;
   direction: string;
   status: "ONLINE" | "OFFLINE" | "MAINTENANCE";
+  cameraId?: string;
   streamUrl?: string;
   imageUrl?: string;
+  bboxWsUrl?: string;
   isLive: boolean;
   isAiDetected: boolean;
   detectionType?: string;
@@ -22,6 +24,7 @@ export type Cctv = {
 export type CctvListParams = {
   is_active?: 1 | 0 | true | false | "1" | "0" | "true" | "false" | "yes" | "no";
   road_name?: string;
+  limit?: number;
 };
 
 export type CctvSlot = {
