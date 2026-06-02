@@ -87,7 +87,7 @@ export default function CctvsPage() {
     setErrorMessage(null);
 
     try {
-      const nextCctvs = await getCameras({ limit: 60 });
+      const nextCctvs = await getCameras({ limit: 8 });
       setCctvs(nextCctvs);
       setSelectedCctvId((currentId) => {
         if (nextCctvs.length === 0) return "";
