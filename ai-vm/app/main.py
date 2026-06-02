@@ -91,6 +91,77 @@ def health():
     }
 
 
+DEFAULT_CCTV_SOURCE_NAMES = [
+    "[수도권제1순환선] 판교분기점",
+    "[경부선] 신갈분기점",
+    "[영동선] 동수원",
+    "[수도권제1순환선] 하남분기점",
+    "[수도권제1순환선] 조남분기점",
+    "[수도권제1순환선] 서운분기점",
+    "[수도권제1순환선] 퇴계원",
+    "[수도권제1순환선] 성남",
+]
+
+
+def _parse_cctv_source_names(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
+def _selected_cctv_source_names(source_names: str | None = None) -> list[str]:
+    configured_names = _parse_cctv_source_names(source_names)
+    if configured_names:
+        return configured_names
+
+    env_names = _parse_cctv_source_names(os.getenv("CCTV_SOURCE_NAMES"))
+    if env_names:
+        return env_names
+
+    return DEFAULT_CCTV_SOURCE_NAMES
+
+
+def _filter_cctv_sources(
+    cctv_list: list[dict],
+    source_names: list[str],
+    limit: int,
+) -> list[dict]:
+    selected: list[dict] = []
+    used_indexes: set[int] = set()
+
+    for source_name in source_names:
+        matched_index = None
+
+        for index, item in enumerate(cctv_list):
+            if index in used_indexes:
+                continue
+            item_name = str(item.get("name") or item.get("cctvname") or "").strip()
+            if item_name == source_name:
+                matched_index = index
+                break
+
+        if matched_index is None:
+            for index, item in enumerate(cctv_list):
+                if index in used_indexes:
+                    continue
+                item_name = str(item.get("name") or item.get("cctvname") or "").strip()
+                if item_name and (source_name in item_name or item_name in source_name):
+                    matched_index = index
+                    break
+
+        if matched_index is None:
+            continue
+
+        selected.append(cctv_list[matched_index])
+        used_indexes.add(matched_index)
+
+        if len(selected) >= limit:
+            break
+
+    return selected[:limit]
+
+
+
 @app.get("/traffic/api/cctv")
 def traffic_cctv_api(
     min_x: str = Query(ITS_CCTV_DEFAULT_MIN_X, alias="minX"),
@@ -99,6 +170,8 @@ def traffic_cctv_api(
     max_y: str = Query(ITS_CCTV_DEFAULT_MAX_Y, alias="maxY"),
     cctv_type: str = Query(ITS_CCTV_DEFAULT_TYPE, alias="cctvType"),
     road_type: str = Query(ITS_CCTV_DEFAULT_ROAD_TYPE, alias="roadType"),
+    limit: int = Query(8, ge=1, le=100),
+    source_names: str | None = Query(default=None, alias="sourceNames"),
 ):
     try:
         cctv_list = get_its_cctv_list(
@@ -110,10 +183,23 @@ def traffic_cctv_api(
             road_type=road_type,
         )
 
+        selected_names = _selected_cctv_source_names(source_names)
+        selected_cctvs = _filter_cctv_sources(
+            cctv_list=cctv_list,
+            source_names=selected_names,
+            limit=limit,
+        )
+
         return {
             "success": True,
             "message": "CCTV list fetched",
-            "data": cctv_list,
+            "count": len(selected_cctvs),
+            "raw_count": len(cctv_list),
+            "selected_count": len(selected_cctvs),
+            "limit": limit,
+            "source_names": selected_names,
+            "selection_mode": "allowlist",
+            "data": selected_cctvs,
         }
     except ValueError as error:
         return JSONResponse(
