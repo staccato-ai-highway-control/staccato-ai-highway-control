@@ -35,6 +35,7 @@ from .dev_auth import (
     is_valid_dev_login,
 )
 from .detector import detector
+from .realtime_detection_filter import filter_detections_by_road_roi
 from .its_openapi import get_its_cctv_list
 from .roi_config import get_camera_rois, save_camera_rois
 from .schemas import CameraStartPayload, LoginPayload, ManualEventPayload, RoiSettingsPayload
@@ -392,6 +393,12 @@ def internal_camera_detections(
         detections = detector.detect(frame, confidence=confidence, imgsz=imgsz)
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+
+    detections = filter_detections_by_road_roi(
+        camera_id=camera_id,
+        detections=detections,
+        frame_shape=frame.shape,
+    )
 
     return {
         "success": True,
