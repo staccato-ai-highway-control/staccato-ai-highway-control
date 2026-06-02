@@ -54,7 +54,7 @@ export function CctvDetailModal({
 
         <div className="grid gap-5 p-5 xl:grid-cols-[1fr_360px]">
           <div className="overflow-hidden rounded-lg border border-slate-200">
-            <CctvFrame cctv={cctv} index={cctvIndex} large />
+            <CctvFrame cctv={cctv} index={cctvIndex} large showStream={false} />
           </div>
 
           <aside className="grid content-start gap-4">

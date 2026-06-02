@@ -22,6 +22,7 @@ export type Cctv = {
 export type CctvListParams = {
   is_active?: 1 | 0 | true | false | "1" | "0" | "true" | "false" | "yes" | "no";
   road_name?: string;
+  limit?: number;
 };
 
 export type CctvSlot = {
