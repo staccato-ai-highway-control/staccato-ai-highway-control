@@ -753,12 +753,16 @@ def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
 async def detect_legacy_report_file(
     file: UploadFile = File(...),
     report_id: str = Form(default=""),
+    cctv_id: str = Form(default=""),
+    camera_id: str = Form(default=""),
 ):
     """Legacy Flask report-analysis compatibility endpoint.
 
     Flask AIGatewayService sends multipart/form-data:
     - file
     - report_id
+    - cctv_id
+    - camera_id
 
     Flask marks a report analysis job as completed when this response includes
     either "detections" or "count".
@@ -853,12 +857,16 @@ async def detect_legacy_report_file(
         detections=detections_payload,
         frame_width=frame_width,
         frame_height=frame_height,
+        camera_id=camera_id or None,
+        source_type=source_type,
     )
 
     best_postprocess_result = postprocess_report_analysis_detections(
         detections=best_detections,
         frame_width=frame_width,
         frame_height=frame_height,
+        camera_id=camera_id or None,
+        source_type=source_type,
     )
 
     raw_detections_payload = detections_payload
@@ -902,6 +910,8 @@ async def detect_legacy_report_file(
         "success": True,
         "status": "OK",
         "report_id": report_id,
+        "cctv_id": cctv_id or None,
+        "camera_id": camera_id or None,
         "filename": filename,
         "source_type": source_type,
         "model": detector.model_name,

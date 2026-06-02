@@ -2,7 +2,17 @@ import os
 from typing import Any
 
 
+try:
+    from .config import ROI_BASE_HEIGHT, ROI_BASE_WIDTH
+    from .roi_config import get_camera_rois
+except Exception:  # pragma: no cover - keeps legacy direct execution safe
+    ROI_BASE_WIDTH = 1920
+    ROI_BASE_HEIGHT = 1080
+    get_camera_rois = None
+
+
 VEHICLE_CLASSES = {"car", "bus", "truck"}
+SHOULDER_ROI_IDS = {"LEFT_SHOULDER", "RIGHT_SHOULDER"}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -42,6 +52,75 @@ def _bbox_values(detection: dict[str, Any]) -> tuple[float, float, float, float]
     return x1, y1, x2, y2
 
 
+def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    """Return True when point is inside polygon using ray-casting."""
+    x, y = point
+    inside = False
+    if len(polygon) < 3:
+        return False
+
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        intersects = (yi > y) != (yj > y)
+        if intersects:
+            denominator = yj - yi
+            if denominator == 0:
+                j = i
+                continue
+            x_intersection = (xj - xi) * (y - yi) / denominator + xi
+            if x < x_intersection:
+                inside = not inside
+        j = i
+
+    return inside
+
+
+def _roi_ids_for_bbox(
+    bbox: tuple[float, float, float, float],
+    frame_width: int | float | None,
+    frame_height: int | float | None,
+    camera_id: str | None,
+) -> list[str]:
+    """Map bbox bottom-center point to camera ROI ids."""
+    if not camera_id or get_camera_rois is None:
+        return []
+
+    width = float(frame_width or 0)
+    height = float(frame_height or 0)
+    if width <= 0 or height <= 0:
+        return []
+
+    x1, _y1, x2, y2 = bbox
+    bottom_center = ((x1 + x2) / 2, y2)
+
+    x_scale = width / float(ROI_BASE_WIDTH or width)
+    y_scale = height / float(ROI_BASE_HEIGHT or height)
+
+    roi_ids: list[str] = []
+    try:
+        rois = get_camera_rois(camera_id)
+    except Exception:
+        return []
+
+    for roi_id, points in rois.items():
+        polygon: list[tuple[float, float]] = []
+        for point in points:
+            if not isinstance(point, list) or len(point) != 2:
+                continue
+            try:
+                px, py = float(point[0]), float(point[1])
+            except (TypeError, ValueError):
+                continue
+            polygon.append((px * x_scale, py * y_scale))
+
+        if _point_in_polygon(bottom_center, polygon):
+            roi_ids.append(str(roi_id))
+
+    return roi_ids
+
+
 def _class_name(detection: dict[str, Any]) -> str:
     value = (
         detection.get("class_name")
@@ -56,6 +135,8 @@ def postprocess_report_analysis_detections(
     detections: list[dict[str, Any]],
     frame_width: int | float | None,
     frame_height: int | float | None,
+    camera_id: str | None = None,
+    source_type: str | None = None,
 ) -> dict[str, Any]:
     enabled = _env_bool("REPORT_ANALYSIS_POSTPROCESS_ENABLED", False)
 
@@ -94,7 +175,7 @@ def postprocess_report_analysis_detections(
 
     display_mode = os.getenv(
         "REPORT_ANALYSIS_POSTPROCESS_DISPLAY_MODE",
-        "candidates",
+        "filtered",
     ).strip().lower()
 
     width = float(frame_width or 0)
@@ -145,23 +226,43 @@ def postprocess_report_analysis_detections(
         normalized["postprocess_passed"] = True
         normalized["box_color"] = "green"
 
+        roi_ids = _roi_ids_for_bbox(
+            bbox=bbox,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            camera_id=camera_id,
+        )
+        normalized["roi_ids"] = roi_ids
+        normalized["roi_matched"] = bool(roi_ids)
+
         filtered.append(normalized)
 
         area_ratio = box_area / frame_area if frame_area > 0 else 0
-        is_candidate = (
+        is_heuristic_candidate = (
             confidence >= candidate_min_confidence
             and (height <= 0 or center_y >= height * candidate_min_center_y_ratio)
             and (frame_area <= 0 or area_ratio >= candidate_min_area_ratio)
         )
+        is_shoulder_candidate = bool(SHOULDER_ROI_IDS.intersection(roi_ids))
+        is_candidate = is_shoulder_candidate or is_heuristic_candidate
 
         if is_candidate:
             normalized["box_color"] = "red"
-            normalized["incident_type"] = "STOPPED_OR_COLLISION_CANDIDATE"
             normalized["risk_level"] = "HIGH"
-            normalized["risk_reason"] = (
-                "vehicle bbox is inside the road-risk area and satisfies "
-                "confidence/size thresholds"
-            )
+
+            if is_shoulder_candidate:
+                normalized["incident_type"] = "SHOULDER_STOP_CANDIDATE"
+                normalized["risk_reason"] = (
+                    "vehicle bbox bottom-center is inside a shoulder ROI"
+                )
+            else:
+                normalized["incident_type"] = "STOPPED_VEHICLE_CANDIDATE"
+                normalized["risk_reason"] = (
+                    "vehicle bbox is inside the road-risk area and satisfies "
+                    "confidence/size thresholds"
+                )
+
+            normalized["source_type"] = source_type or "unknown"
 
             if filtered:
                 filtered[-1] = normalized
@@ -186,6 +287,10 @@ def postprocess_report_analysis_detections(
         "display_detections": display_detections,
         "config": {
             "display_mode": display_mode,
+            "camera_id": camera_id,
+            "source_type": source_type,
+            "roi_enabled": bool(camera_id),
+            "shoulder_roi_ids": sorted(SHOULDER_ROI_IDS),
             "min_confidence": min_confidence,
             "min_box_width": min_box_width,
             "min_box_height": min_box_height,
