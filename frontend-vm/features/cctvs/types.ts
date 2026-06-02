@@ -8,8 +8,10 @@ export type Cctv = {
   locationName: string;
   direction: string;
   status: "ONLINE" | "OFFLINE" | "MAINTENANCE";
+  cameraId?: string;
   streamUrl?: string;
   imageUrl?: string;
+  bboxWsUrl?: string;
   isLive: boolean;
   isAiDetected: boolean;
   detectionType?: string;

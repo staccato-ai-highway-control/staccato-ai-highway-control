@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { BboxDetectionOverlay } from "@/components/cctv/BboxDetectionOverlay";
 import { CctvFrame, statusLabels } from "@/components/cctv/CctvCard";
 import { CctvDetailModal } from "@/components/cctv/CctvDetailModal";
 import { RoiSettingsModal } from "@/components/cctv/RoiSettingsModal";
@@ -79,6 +80,7 @@ export default function CctvsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRoiSettingsOpen, setIsRoiSettingsOpen] = useState(false);
+  const [isStreamReady, setIsStreamReady] = useState(false);
 
   async function loadCctvData() {
     setIsLoading(true);
@@ -113,6 +115,11 @@ export default function CctvsPage() {
     ? manualIncidents.filter((incident) => incident.cctvId === selectedCctv.id)
     : [];
   const roiSlotConfig = useMemo(() => createSingleSlotConfig(selectedCctv), [selectedCctv]);
+  const isMainStreamVisible = Boolean(selectedCctv && !isRoiSettingsOpen);
+
+  useEffect(() => {
+    setIsStreamReady(false);
+  }, [selectedCctv?.streamUrl, isMainStreamVisible]);
 
   function handleCreateManualIncident(payload: ManualIncidentPayload) {
     const incident = createManualIncident(payload, manualIncidents.length + 1);
@@ -223,7 +230,16 @@ export default function CctvsPage() {
                   </button>
                 </div>
               </div>
-              <CctvFrame cctv={selectedCctv} index={selectedCctvIndex >= 0 ? selectedCctvIndex : 0} large showStream={!isRoiSettingsOpen} />
+              <CctvFrame
+                cctv={selectedCctv}
+                index={selectedCctvIndex >= 0 ? selectedCctvIndex : 0}
+                large
+                showStream={isMainStreamVisible}
+                onStreamError={() => setIsStreamReady(false)}
+                onStreamLoad={() => setIsStreamReady(true)}
+              >
+                <BboxDetectionOverlay cctv={selectedCctv} enabled={isMainStreamVisible && isStreamReady} />
+              </CctvFrame>
             </section>
 
             <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

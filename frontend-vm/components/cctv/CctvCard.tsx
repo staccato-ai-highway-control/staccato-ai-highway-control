@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Cctv } from "@/types/cctv";
 
 const statusLabels = {
@@ -23,11 +24,17 @@ export function CctvFrame({
   cctv,
   large = false,
   showStream = false,
+  children,
+  onStreamError,
+  onStreamLoad,
 }: {
   cctv: Cctv;
   index?: number;
   large?: boolean;
   showStream?: boolean;
+  children?: ReactNode;
+  onStreamError?: () => void;
+  onStreamLoad?: () => void;
 }) {
   return (
     <div className={`relative overflow-hidden bg-slate-900 ${large ? "h-[420px]" : "h-64"}`}>
@@ -38,9 +45,12 @@ export function CctvFrame({
           className="absolute inset-0 h-full w-full object-cover"
           onError={(event) => {
             event.currentTarget.style.display = "none";
+            onStreamError?.();
           }}
+          onLoad={onStreamLoad}
         />
       ) : null}
+      {children}
     </div>
   );
 }
