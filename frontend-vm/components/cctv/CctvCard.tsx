@@ -42,7 +42,7 @@ export function CctvFrame({
         <img
           src={cctv.streamUrl}
           alt={`${cctv.cctvCode ?? cctv.id} stream`}
-          className="absolute inset-0 h-full w-full object-contain"
+          className="absolute inset-0 h-full w-full object-fill"
           onError={(event) => {
             event.currentTarget.style.display = "none";
             onStreamError?.();

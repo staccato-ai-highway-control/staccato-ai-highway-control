@@ -17,6 +17,8 @@ type RawDetection = Record<string, unknown>;
 
 const BBOX_POLL_INTERVAL_MS = 1000;
 const AI_DETECTION_CAMERA_IDS = new Set(["camera-1", "camera-2"]);
+const FALLBACK_DETECTION_WIDTH = 640;
+const FALLBACK_DETECTION_HEIGHT = 360;
 
 function parseCameraIdFromStreamUrl(streamUrl?: string) {
   if (!streamUrl) return undefined;
@@ -58,21 +60,58 @@ function readNumber(value: unknown) {
   return Number.isFinite(number) ? number : undefined;
 }
 
-function scaleBboxIfNormalized(bbox: Bbox): Bbox {
+function getFrameSizeFromRecord(record: Record<string, unknown>) {
+  const width = readNumber(record.frame_width ?? record.frameWidth ?? record.image_width ?? record.imageWidth ?? record.width);
+  const height = readNumber(record.frame_height ?? record.frameHeight ?? record.image_height ?? record.imageHeight ?? record.height);
+
+  return width && height ? { width, height } : null;
+}
+
+function getDetectionFrameSize(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+
+  const record = payload as Record<string, unknown>;
+  const direct = getFrameSizeFromRecord(record);
+  if (direct) return direct;
+
+  if (record.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+    return getFrameSizeFromRecord(record.data as Record<string, unknown>);
+  }
+
+  return null;
+}
+
+function scaleBbox(bbox: Bbox, frameSize: { width: number; height: number } | null): Bbox {
   const looksNormalized = bbox.x >= 0 && bbox.y >= 0 && bbox.width > 0 && bbox.height > 0 && bbox.x <= 1 && bbox.y <= 1 && bbox.width <= 1 && bbox.height <= 1;
 
-  if (!looksNormalized) return bbox;
+  if (looksNormalized) {
+    return {
+      ...bbox,
+      x: bbox.x * ORIGINAL_WIDTH,
+      y: bbox.y * ORIGINAL_HEIGHT,
+      width: bbox.width * ORIGINAL_WIDTH,
+      height: bbox.height * ORIGINAL_HEIGHT,
+    };
+  }
+
+  const sourceSize = frameSize ?? (
+    bbox.x + bbox.width <= FALLBACK_DETECTION_WIDTH && bbox.y + bbox.height <= FALLBACK_DETECTION_HEIGHT
+      ? { width: FALLBACK_DETECTION_WIDTH, height: FALLBACK_DETECTION_HEIGHT }
+      : null
+  );
+
+  if (!sourceSize || (sourceSize.width === ORIGINAL_WIDTH && sourceSize.height === ORIGINAL_HEIGHT)) return bbox;
 
   return {
     ...bbox,
-    x: bbox.x * ORIGINAL_WIDTH,
-    y: bbox.y * ORIGINAL_HEIGHT,
-    width: bbox.width * ORIGINAL_WIDTH,
-    height: bbox.height * ORIGINAL_HEIGHT,
+    x: bbox.x * (ORIGINAL_WIDTH / sourceSize.width),
+    y: bbox.y * (ORIGINAL_HEIGHT / sourceSize.height),
+    width: bbox.width * (ORIGINAL_WIDTH / sourceSize.width),
+    height: bbox.height * (ORIGINAL_HEIGHT / sourceSize.height),
   };
 }
 
-function normalizeBbox(detection: RawDetection): Bbox | null {
+function normalizeBbox(detection: RawDetection, frameSize: { width: number; height: number } | null): Bbox | null {
   const bboxValue = detection.bbox ?? detection.box ?? detection.bounding_box ?? detection.boundingBox;
   let x = readNumber(detection.x ?? detection.left);
   let y = readNumber(detection.y ?? detection.top);
@@ -112,11 +151,12 @@ function normalizeBbox(detection: RawDetection): Bbox | null {
   const label = String(detection.label ?? detection.class_name ?? detection.className ?? detection.type ?? detection.name ?? "object");
   const confidence = readNumber(detection.confidence ?? detection.score ?? detection.probability);
 
-  return scaleBboxIfNormalized({ x, y, width, height, label, confidence });
+  return scaleBbox({ x, y, width, height, label, confidence }, frameSize);
 }
 
 function normalizeDetections(payload: unknown) {
-  return getRawDetections(payload).map(normalizeBbox).filter((bbox): bbox is Bbox => Boolean(bbox));
+  const frameSize = getDetectionFrameSize(payload);
+  return getRawDetections(payload).map((detection) => normalizeBbox(detection, frameSize)).filter((bbox): bbox is Bbox => Boolean(bbox));
 }
 
 function formatConfidence(confidence?: number) {
@@ -186,7 +226,7 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
 
   return (
     <div className="pointer-events-none absolute inset-0">
-      <svg className="absolute inset-0 h-full w-full" viewBox={"0 0 " + ORIGINAL_WIDTH + " " + ORIGINAL_HEIGHT} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+      <svg className="absolute inset-0 h-full w-full" viewBox={"0 0 " + ORIGINAL_WIDTH + " " + ORIGINAL_HEIGHT} preserveAspectRatio="none" aria-hidden="true">
         {detections.map((bbox, index) => (
           <g key={bbox.x + "-" + bbox.y + "-" + bbox.width + "-" + bbox.height + "-" + index}>
             <rect x={bbox.x} y={bbox.y} width={bbox.width} height={bbox.height} fill="none" stroke="#ef4444" strokeWidth="5" />
