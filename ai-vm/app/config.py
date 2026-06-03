@@ -39,6 +39,18 @@ ITS_CCTV_DEFAULT_MIN_Y = os.environ.get("ITS_CCTV_DEFAULT_MIN_Y", "36.85").strip
 ITS_CCTV_DEFAULT_MAX_Y = os.environ.get("ITS_CCTV_DEFAULT_MAX_Y", "37.70").strip()
 ITS_CCTV_DEFAULT_TYPE = os.environ.get("ITS_CCTV_DEFAULT_TYPE", "5").strip()
 ITS_CCTV_DEFAULT_ROAD_TYPE = os.environ.get("ITS_CCTV_DEFAULT_ROAD_TYPE", "ex").strip()
+ITS_CCTV_CACHE_PATH = Path(
+    os.environ.get(
+        "ITS_CCTV_CACHE_PATH",
+        "/home/staccato/staccato/ai-vm/storage/cache/its_cctv_list.json",
+    )
+)
+ITS_CCTV_CACHE_TTL_SECONDS = int(os.environ.get("ITS_CCTV_CACHE_TTL_SECONDS", "3600"))
+ITS_CCTV_ALLOW_STALE_CACHE = (
+    os.environ.get("ITS_CCTV_ALLOW_STALE_CACHE", "1").strip().lower()
+    not in {"0", "false", "no", "off"}
+)
+ITS_CCTV_STALE_MAX_AGE_SECONDS = int(os.environ.get("ITS_CCTV_STALE_MAX_AGE_SECONDS", "86400"))
 CCTV_SOURCE_REFRESH_ENABLED = (
     os.environ.get("CCTV_SOURCE_REFRESH_ENABLED", "1").strip().lower()
     not in {"0", "false", "no", "off"}
