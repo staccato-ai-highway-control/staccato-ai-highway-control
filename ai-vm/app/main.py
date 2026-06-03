@@ -36,7 +36,7 @@ from .dev_auth import (
 )
 from .detector import detector
 from .realtime_detection_filter import filter_detections_by_road_roi
-from .its_openapi import get_its_cctv_list
+from .its_openapi import get_its_cctv_list_response
 from .roi_config import get_camera_rois, save_camera_rois
 from .schemas import CameraStartPayload, LoginPayload, ManualEventPayload, RoiSettingsPayload
 from .stream_server import BOUNDARY, active_stream_counts, claim_stream_slot, mjpeg_generator
@@ -175,7 +175,7 @@ def traffic_cctv_api(
     source_names: str | None = Query(default=None, alias="sourceNames"),
 ):
     try:
-        cctv_list = get_its_cctv_list(
+        cctv_response = get_its_cctv_list_response(
             min_x=min_x,
             max_x=max_x,
             min_y=min_y,
@@ -183,6 +183,7 @@ def traffic_cctv_api(
             cctv_type=cctv_type,
             road_type=road_type,
         )
+        cctv_list = cctv_response["items"]
 
         selected_names = _selected_cctv_source_names(source_names)
         selected_cctvs = _filter_cctv_sources(
@@ -191,9 +192,13 @@ def traffic_cctv_api(
             limit=limit,
         )
 
+        from_cache = bool(cctv_response.get("fromCache"))
         return {
             "success": True,
-            "message": "CCTV list fetched",
+            "message": "CCTV list fetched from cache" if from_cache else "CCTV list fetched",
+            "fromCache": from_cache,
+            "cacheUpdatedAt": cctv_response.get("cacheUpdatedAt"),
+            "originalError": cctv_response.get("originalError"),
             "count": len(selected_cctvs),
             "raw_count": len(cctv_list),
             "selected_count": len(selected_cctvs),
@@ -201,6 +206,8 @@ def traffic_cctv_api(
             "source_names": selected_names,
             "selection_mode": "allowlist",
             "data": selected_cctvs,
+            "items": selected_cctvs,
+            "cameras": selected_cctvs,
         }
     except ValueError as error:
         return JSONResponse(
