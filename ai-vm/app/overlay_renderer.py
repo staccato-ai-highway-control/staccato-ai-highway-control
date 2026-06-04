@@ -16,11 +16,8 @@ EVENT_COLORS = {
 
 
 def render_event_overlay(frame: np.ndarray, event: dict[str, Any]) -> np.ndarray:
-    rendered = frame.copy()
-    _draw_rois(rendered, str(event.get("camera_id") or ""))
-    _draw_detections(rendered, event)
-    _draw_event_box(rendered, event)
-    return rendered
+    # Save clean evidence frame without baked-in ROI/bbox/text overlays.
+    return frame.copy()
 
 
 def _draw_rois(frame: np.ndarray, camera_id: str | None = None) -> None:
