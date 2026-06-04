@@ -708,19 +708,19 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               ) : (
                 <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <InfoRow label="reportCode" value={getReportCode(report)} />
-                  <InfoRow label="title" value={getReportTitle(report)} />
-                  <InfoRow label="reportType" value={reportTypeLabels[reportType] ?? reportType} />
-                  <InfoRow label="purpose" value={purposeLabels[purpose] ?? purpose} />
-                  <InfoRow label="reporter" value={report.reporter_name ?? report.reporter ?? report.reporter_id} />
-                  <InfoRow label="location" value={getReportLocation(report)} />
-                  <InfoRow label="cctvId" value={report.cctv_id} />
-                  <InfoRow label="status" value={statusLabels[status] ?? status} />
-                  <InfoRow label="priority" value={priorityLabels[priority] ?? priority} />
-                  <InfoRow label="riskLevel" value={riskLevel} />
-                  <InfoRow label="riskScore" value={riskScore} />
-                  <InfoRow label="createdAt" value={formatDateTime(getReportCreatedAt(report))} />
-                  <InfoRow label="updatedAt" value={formatDateTime(report.updated_at)} />
+                  <InfoRow label="신고번호" value={getReportCode(report)} />
+                  <InfoRow label="제목" value={getReportTitle(report)} />
+                  <InfoRow label="신고유형" value={reportTypeLabels[reportType] ?? reportType} />
+                  <InfoRow label="목적" value={purposeLabels[purpose] ?? purpose} />
+                  <InfoRow label="신고자" value={report.reporter_name ?? report.reporter ?? report.reporter_id} />
+                  <InfoRow label="위치" value={getReportLocation(report)} />
+                  <InfoRow label="CCTV 식별번호" value={report.cctv_id} />
+                  <InfoRow label="상태" value={statusLabels[status] ?? status} />
+                  <InfoRow label="우선순위" value={priorityLabels[priority] ?? priority} />
+                  <InfoRow label="위험도" value={riskLevel} />
+                  <InfoRow label="위험점수" value={riskScore} />
+                  <InfoRow label="생성일시" value={formatDateTime(getReportCreatedAt(report))} />
+                  <InfoRow label="수정일시" value={formatDateTime(report.updated_at)} />
                 </dl>
               )}
             </Card>
@@ -783,9 +783,9 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 <Badge tone={getBadgeTone(analysisStatus)}>{analysisStatus}</Badge>
               </div>
               <div className="mb-4 grid gap-3 md:grid-cols-3">
-                <InfoRow label="analysisStatus" value={analysisStatus} />
-                <InfoRow label="riskLevel" value={riskLevel} />
-                <InfoRow label="riskScore" value={riskScore} />
+                <InfoRow label="AI 분석 상태" value={analysisStatus} />
+                <InfoRow label="위험도" value={riskLevel} />
+                <InfoRow label="위험점수" value={riskScore} />
               </div>
               {annotatedMediaUrl ? (
                 <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-black">
