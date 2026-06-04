@@ -8,7 +8,7 @@ const AI_VM_BASE_URL =
   "http://192.168.0.186:5001";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ cctvId: string }> }
 ) {
   const { cctvId } = await context.params;
@@ -16,6 +16,10 @@ export async function GET(
     `/internal/cameras/${encodeURIComponent(cctvId)}/detections`,
     AI_VM_BASE_URL.replace(/\/$/, "")
   );
+
+  request.nextUrl.searchParams.forEach((value, key) => {
+    upstreamUrl.searchParams.set(key, value);
+  });
 
   try {
     const response = await fetch(upstreamUrl, {
