@@ -10,6 +10,24 @@ import { Card } from "@/components/common/Card";
 import { createAnalysisComparison, getAnalysisComparisonCandidates } from "@/features/reports/api";
 import type { ReportAnalysisComparisonCandidate, ReportAnalysisComparisonMetric, ReportAnalysisComparisonResult } from "@/features/reports/types";
 
+const COMPARISON_METRICS = [
+  { key: "avg_confidence", label: "평균 신뢰도", type: "confidence" },
+  { key: "detection_count", label: "탐지 개수", type: "count" },
+  { key: "max_confidence", label: "최고 신뢰도", type: "confidence" },
+] as const;
+
+type ComparisonMetricKey = (typeof COMPARISON_METRICS)[number]["key"];
+type ComparisonMetricType = (typeof COMPARISON_METRICS)[number]["type"];
+
+interface DisplayComparisonMetric {
+  key: ComparisonMetricKey;
+  label: string;
+  type: ComparisonMetricType;
+  values: Record<string, number | null>;
+  delta: number;
+  allSame: boolean;
+}
+
 function getJobId(candidate: ReportAnalysisComparisonCandidate) {
   return candidate.job_id ?? candidate.analysis_job_id ?? candidate.id;
 }
@@ -29,16 +47,182 @@ function isCompletedJob(candidate: ReportAnalysisComparisonCandidate) {
   return getJobStatus(candidate) === "COMPLETED";
 }
 
-function formatMetricValue(value: unknown) {
-  if (value === null || value === undefined || value === "") return "-";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeMetrics(metrics: ReportAnalysisComparisonResult["metrics"]): ReportAnalysisComparisonMetric[] {
-  if (!metrics) return [];
-  if (Array.isArray(metrics)) return metrics;
-  return Object.entries(metrics).map(([key, value]) => ({ key, label: key, value: formatMetricValue(value) }));
+function parseJsonMetric(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+
+  const trimmed = value.trim();
+  if (!trimmed || (!trimmed.startsWith("{") && !trimmed.startsWith("["))) return value;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function toNumber(value: unknown): number | null {
+  const parsedValue = parseJsonMetric(value);
+  if (typeof parsedValue === "number" && Number.isFinite(parsedValue)) return parsedValue;
+  if (typeof parsedValue === "string") {
+    const normalized = parsedValue.trim().replace(/%$/, "");
+    if (!normalized) return null;
+    const numeric = Number(normalized);
+    if (!Number.isFinite(numeric)) return null;
+    return parsedValue.trim().endsWith("%") ? numeric / 100 : numeric;
+  }
+  return null;
+}
+
+function normalizeJobId(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/^job[_-]?/i, "");
+}
+
+function getValueFromMetricItem(value: unknown): number | null {
+  const parsedValue = parseJsonMetric(value);
+
+  if (!isRecord(parsedValue)) {
+    return toNumber(parsedValue);
+  }
+
+  return toNumber(
+    parsedValue.value ??
+      parsedValue.score ??
+      parsedValue.confidence ??
+      parsedValue.count ??
+      parsedValue.metric_value
+  );
+}
+
+function getMetricKeyFromEntry(entry: ReportAnalysisComparisonMetric) {
+  const parsedValue = parseJsonMetric(entry.value);
+  const parsedValues = parseJsonMetric(entry.values);
+  const candidates = [entry.key, entry.name, entry.label];
+
+  if (isRecord(parsedValue)) candidates.push(parsedValue.key as string, parsedValue.name as string, parsedValue.metric as string);
+  if (isRecord(parsedValues)) candidates.push(parsedValues.key as string, parsedValues.name as string, parsedValues.metric as string);
+
+  return COMPARISON_METRICS.find((metric) => candidates.includes(metric.key))?.key;
+}
+
+function getMetricPayload(metrics: ReportAnalysisComparisonResult["metrics"], metricKey: ComparisonMetricKey): unknown {
+  if (!metrics) return null;
+
+  if (Array.isArray(metrics)) {
+    const entry = metrics.find((metric) => getMetricKeyFromEntry(metric) === metricKey);
+    if (!entry) return null;
+
+    const parsedValue = parseJsonMetric(entry.value);
+    if (isRecord(parsedValue)) return parsedValue;
+
+    const parsedValues = parseJsonMetric(entry.values);
+    if (isRecord(parsedValues)) return { ...entry, values: parsedValues };
+
+    return entry;
+  }
+
+  return parseJsonMetric(metrics[metricKey]);
+}
+
+function getMetricValues(payload: unknown, jobIds: string[]) {
+  const parsedPayload = parseJsonMetric(payload);
+  const source = isRecord(parsedPayload) ? parsedPayload : {};
+  const rawValues = parseJsonMetric(source.values ?? source.job_values ?? source.jobs ?? source.value);
+
+  const result = jobIds.reduce<Record<string, number | null>>((acc, jobId) => {
+    acc[normalizeJobId(jobId)] = null;
+    return acc;
+  }, {});
+
+  if (Array.isArray(rawValues)) {
+    rawValues.forEach((item) => {
+      if (!isRecord(item)) return;
+
+      const jobId = normalizeJobId(
+        item.job_id ??
+          item.jobId ??
+          item.analysis_job_id ??
+          item.analysisJobId ??
+          item.id
+      );
+
+      if (!jobId) return;
+
+      result[jobId] = getValueFromMetricItem(item);
+    });
+
+    return result;
+  }
+
+  const valuesSource = isRecord(rawValues) ? rawValues : source;
+
+  Object.entries(valuesSource).forEach(([rawJobId, rawValue]) => {
+    const jobId = normalizeJobId(rawJobId);
+
+    if (!jobId || !(jobId in result)) return;
+
+    result[jobId] = getValueFromMetricItem(rawValue);
+  });
+
+  return result;
+}
+
+function getMetricDelta(payload: unknown, values: Record<string, number | null>) {
+  const parsedPayload = parseJsonMetric(payload);
+  const source = isRecord(parsedPayload) ? parsedPayload : {};
+  const explicitDelta = toNumber(source.delta ?? source.diff ?? source.difference);
+  if (explicitDelta !== null) return Math.abs(explicitDelta);
+
+  const numericValues = Object.values(values).filter((value): value is number => value !== null);
+  if (numericValues.length === 0) return 0;
+  return Math.max(...numericValues) - Math.min(...numericValues);
+}
+
+function areMetricValuesSame(values: Record<string, number | null>) {
+  const numericValues = Object.values(values).filter((value): value is number => value !== null);
+  if (numericValues.length <= 1) return true;
+  const first = numericValues[0];
+  return numericValues.every((value) => Math.abs(value - first) < 0.000001);
+}
+
+function buildDisplayMetrics(result: ReportAnalysisComparisonResult | null, selectedIds: string[]) {
+  if (!result) return [];
+
+  const jobIds = (result.job_ids?.length ? result.job_ids.map(String) : selectedIds).filter(Boolean);
+  return COMPARISON_METRICS.map((metric) => {
+    const payload = getMetricPayload(result.metrics, metric.key);
+    const values = getMetricValues(payload, jobIds);
+    return {
+      ...metric,
+      values,
+      delta: getMetricDelta(payload, values),
+      allSame: areMetricValuesSame(values),
+    };
+  }).filter((metric) => Object.values(metric.values).some((value) => value !== null));
+}
+
+function formatDisplayMetricValue(value: number | null, type: ComparisonMetricType) {
+  if (value === null) return "-";
+  if (type === "count") return `${Math.round(value).toLocaleString("ko-KR")}건`;
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatDisplayDelta(value: number, type: ComparisonMetricType) {
+  if (type === "count") return `${Math.round(value).toLocaleString("ko-KR")}건`;
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function buildComparisonSummary(metrics: DisplayComparisonMetric[], jobCount: number) {
+  if (metrics.length === 0) return "";
+  const allSame = metrics.every((metric) => metric.allSame);
+  if (allSame) {
+    return `선택된 ${jobCount}개 Job의 평균 신뢰도, 탐지 개수, 최고 신뢰도는 모두 동일합니다.`;
+  }
+  return `선택된 ${jobCount}개 Job의 지표 비교 결과입니다.`;
 }
 
 function formatDate(value?: string | null) {
@@ -46,6 +230,64 @@ function formatDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+
+function ComparisonResultView({ result, selectedJobIds }: { result: ReportAnalysisComparisonResult; selectedJobIds: string[] }) {
+  const metrics = buildDisplayMetrics(result, selectedJobIds);
+  const jobIds = (result.job_ids?.length ? result.job_ids.map(String) : selectedJobIds).filter(Boolean);
+  const summary = buildComparisonSummary(metrics, jobIds.length);
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <h4 className="text-sm font-black text-slate-800">비교 결과</h4>
+      {metrics.length === 0 ? <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">표시할 지표가 없습니다.</p> : null}
+      {metrics.length > 0 ? (
+        <>
+          <div className="mt-2 rounded-lg bg-slate-50 p-4">
+            <p className="text-sm font-bold leading-6 text-slate-700">{summary}</p>
+            <dl className="mt-3 grid gap-2">
+              {metrics.map((metric) => {
+                const firstValue = Object.values(metric.values).find((value) => value !== null) ?? null;
+                return (
+                  <div key={metric.key} className="flex items-center justify-between gap-3 text-sm">
+                    <dt className="font-bold text-slate-500">{metric.label}</dt>
+                    <dd className="font-black text-slate-900">{formatDisplayMetricValue(firstValue, metric.type)}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+            {metrics.every((metric) => metric.allSame) ? <p className="mt-3 text-xs font-black text-slate-500">모든 Job 동일</p> : null}
+          </div>
+
+          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100">
+            <table className="min-w-full divide-y divide-slate-100 text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">지표</th>
+                  {jobIds.map((jobId) => (
+                    <th key={jobId} scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">Job {jobId}</th>
+                  ))}
+                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">차이</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {metrics.map((metric) => (
+                  <tr key={metric.key}>
+                    <th scope="row" className="whitespace-nowrap px-3 py-2 text-left text-sm font-black text-slate-700">{metric.label}</th>
+                    {jobIds.map((jobId) => (
+                      <td key={`${metric.key}-${jobId}`} className="whitespace-nowrap px-3 py-2 font-bold text-slate-900">{formatDisplayMetricValue(metric.values[jobId] ?? null, metric.type)}</td>
+                    ))}
+                    <td className="whitespace-nowrap px-3 py-2 font-bold text-slate-900">{formatDisplayDelta(metric.delta, metric.type)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function AnalysisComparisonsContent() {
@@ -223,20 +465,7 @@ function AnalysisComparisonsContent() {
             </button>
 
             {comparisonResult ? (
-              <div className="mt-5 border-t border-slate-100 pt-4">
-                <h4 className="text-sm font-black text-slate-800">비교 결과</h4>
-                <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 [overflow-wrap:anywhere] [word-break:keep-all]">{comparisonResult.summary ?? "비교 요약이 없습니다."}</p>
-                <div className="mt-3 grid gap-2">
-                  {normalizeMetrics(comparisonResult.metrics).length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">표시할 metrics가 없습니다.</p> : null}
-                  {normalizeMetrics(comparisonResult.metrics).map((metric, index) => (
-                    <div key={metric.key ?? metric.name ?? metric.label ?? index} className="rounded-lg border border-slate-100 p-3">
-                      <p className="text-xs font-black text-slate-500">{metric.label ?? metric.name ?? metric.key ?? "metric"}</p>
-                      <p className="mt-1 break-words text-sm font-bold text-slate-900 [overflow-wrap:anywhere]">{metric.value !== undefined ? formatMetricValue(metric.value) : formatMetricValue(metric.values)}</p>
-                      {metric.description ? <p className="mt-1 whitespace-pre-wrap break-words text-xs font-semibold text-slate-500 [overflow-wrap:anywhere] [word-break:keep-all]">{metric.description}</p> : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <ComparisonResultView result={comparisonResult} selectedJobIds={selectedJobIds} />
             ) : null}
           </Card>
         </section>
