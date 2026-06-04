@@ -404,8 +404,43 @@ class CameraWorker:
         )
 
     def _handle_inference_events(self, events: list[dict]) -> None:
-        for event in events:
-            self.event_clip_worker.enqueue_event(event)
+        if not events:
+            return
+
+        # Final camera-level throttle before clip writing / Flask relay.
+        # The detector can emit multiple events when track_id/roi changes,
+        # so only one automatic event per camera is allowed during cooldown.
+        from .config import EVENT_COOLDOWN_SECONDS
+
+        now = self._utc_now()
+        last_enqueued_at = getattr(self, "_last_auto_event_enqueued_at", None)
+
+        if last_enqueued_at is not None:
+            elapsed = (now - last_enqueued_at).total_seconds()
+            if elapsed < EVENT_COOLDOWN_SECONDS:
+                return
+
+        def event_score(event: dict) -> float:
+            detections = event.get("detections")
+            if isinstance(detections, list) and detections:
+                scores = []
+                for detection in detections:
+                    if isinstance(detection, dict):
+                        try:
+                            scores.append(float(detection.get("confidence") or 0.0))
+                        except (TypeError, ValueError):
+                            pass
+                if scores:
+                    return max(scores)
+
+            try:
+                return float(event.get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        selected_event = max(events, key=event_score)
+        self._last_auto_event_enqueued_at = now
+        self.event_clip_worker.enqueue_event(selected_event)
 
     def _set_status(self, status: CameraStatus) -> None:
         with self._status_lock:

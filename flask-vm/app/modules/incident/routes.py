@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from app.extensions import db
 from app.models.cctv_models import Cctv
 from app.models.incident_models import DetectionLog, Incident, IncidentSnapshot
+from app.models.ai_event_models import AiEvent
 from app.models.incident_support_models import IncidentStatusHistory
 from app.modules.incident.service import IncidentService
 from app.modules.report_upload.service import ReportUploadService
@@ -119,10 +120,18 @@ def _get_cctv(cctv_id):
     return db.session.get(Cctv, cctv_id)
 
 
+def _latest_ai_event_for_incident(incident: Incident) -> AiEvent | None:
+    incident_code = getattr(incident, "incident_code", None)
+    if not incident_code:
+        return None
+    return db.session.get(AiEvent, incident_code)
+
+
 def _to_frontend_incident(incident: Incident) -> dict:
     cctv = _get_cctv(incident.cctv_id)
     detection_log = _latest_detection_log(incident.id)
     snapshot = _latest_snapshot(incident.id)
+    ai_event = _latest_ai_event_for_incident(incident)
 
     event_type = _normalize_incident_type(incident.incident_type)
     status = _normalize_status(incident.incident_status)
@@ -141,11 +150,17 @@ def _to_frontend_incident(incident: Incident) -> dict:
 
     cctv_code = getattr(cctv, "cctv_code", None) or (
         str(incident.cctv_id) if incident.cctv_id else ""
-    )
+    ) or (ai_event.camera_id if ai_event and ai_event.camera_id else "")
 
     snapshot_url = ""
     if snapshot and snapshot.file_path:
         snapshot_url = snapshot.file_path
+    elif ai_event and ai_event.snapshot_url:
+        snapshot_url = ai_event.snapshot_url
+
+    video_url = ai_event.video_url if ai_event and ai_event.video_url else ""
+    stream_url = ai_event.stream_url if ai_event and ai_event.stream_url else ""
+    bbox = ai_event.bbox_json if ai_event and ai_event.bbox_json else None
 
     roi_type = "SHOULDER" if event_type == "SHOULDER_STOP" else "LANE"
     if detection_log and detection_log.roi_type:
@@ -171,6 +186,9 @@ def _to_frontend_incident(incident: Incident) -> dict:
         "assignee": None,
         "cctvId": cctv_code,
         "snapshotUrl": snapshot_url,
+        "videoUrl": video_url,
+        "streamUrl": stream_url,
+        "bbox": bbox,
         "roiType": roi_type,
         "movementDeltaPx": _to_float(
             detection_log.movement_delta_px if detection_log else None,

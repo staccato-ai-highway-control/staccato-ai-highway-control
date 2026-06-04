@@ -242,14 +242,21 @@ class EventDetector:
         roi_id: str | None,
         timestamp: datetime,
     ) -> bool:
-        key = (track_id, event_type, roi_id)
-        last_event_at = self._last_event_at.get(key)
-        if last_event_at is not None:
-            elapsed = (timestamp - last_event_at).total_seconds()
-            if elapsed < EVENT_COOLDOWN_SECONDS:
-                return False
+        # Track IDs can change frequently in CCTV streams.
+        # Use a camera-level cooldown first to prevent event flooding
+        # for the same camera/event/ROI even when track_id changes.
+        camera_key = ("camera", self.camera_id, event_type, roi_id)
+        track_key = ("track", track_id, event_type, roi_id)
 
-        self._last_event_at[key] = timestamp
+        for key in (camera_key, track_key):
+            last_event_at = self._last_event_at.get(key)
+            if last_event_at is not None:
+                elapsed = (timestamp - last_event_at).total_seconds()
+                if elapsed < EVENT_COOLDOWN_SECONDS:
+                    return False
+
+        self._last_event_at[camera_key] = timestamp
+        self._last_event_at[track_key] = timestamp
         return True
 
     def _build_event(
