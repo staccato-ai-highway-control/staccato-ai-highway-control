@@ -38,6 +38,7 @@ def build_bbox_metadata(
         "timestamp": timestamp.isoformat(),
         "frame_width": width,
         "frame_height": height,
+        "bbox_format": "xyxy",
         "detections": [_normalize_detection(detection) for detection in detections],
     }
 
