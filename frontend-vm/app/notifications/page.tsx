@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { useRealtimeIncidents } from "@/features/realtime/useRealtimeIncidents";
 import type { RealtimeConnectionStatus, RealtimeIncidentEvent } from "@/features/realtime/types";
+import { formatKstDateTime } from "@/lib/dateTime";
 
 type NotificationType = "INCIDENT" | "AI_ANALYSIS" | "REPORT" | "ADMIN" | "SYSTEM";
 type NotificationFilter = "ALL" | "UNREAD" | NotificationType;
@@ -90,23 +91,6 @@ function getEventKey(event: RealtimeIncidentEvent) {
   );
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
 
 function buildIncidentTitle(event: RealtimeIncidentEvent) {
   if (event.incident_code) return `사고 이벤트 ${event.incident_code}`;
@@ -137,7 +121,7 @@ function toNotificationItem(event: RealtimeIncidentEvent, readIds: Set<string>, 
     type: "INCIDENT",
     title: buildIncidentTitle(event),
     message: buildIncidentMessage(event),
-    createdAt: formatDateTime(event.created_at ?? event.occurred_at),
+    createdAt: formatKstDateTime(event.created_at ?? event.occurred_at),
     isRead: readIds.has(id),
     source: event,
   };
@@ -296,8 +280,8 @@ export default function NotificationsPage() {
                             <p>ROI: {notification.source.roi_type ?? "-"}</p>
                             <p>차량: {notification.source.vehicle_class ?? "-"}</p>
                             <p>신뢰도: {notification.source.confidence ?? "-"}</p>
-                            <p>발생 시각: {formatDateTime(notification.source.occurred_at)}</p>
-                            <p>생성 시각: {formatDateTime(notification.source.created_at)}</p>
+                            <p>발생 시각: {formatKstDateTime(notification.source.occurred_at)}</p>
+                            <p>생성 시각: {formatKstDateTime(notification.source.created_at)}</p>
                           </div>
 
                           <div
