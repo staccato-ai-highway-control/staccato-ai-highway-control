@@ -293,6 +293,21 @@ def build_incident_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
             _optional_string(normalized, "severity")
         ),
         "cctv_id": _required_string(normalized, "camera_id"),
+        "location_name": (
+            _optional_string(normalized, "location_name")
+            or _optional_string(normalized, "cctv_name")
+            or _optional_string(normalized, "camera_name")
+            or _optional_string(normalized, "road_name")
+            or _optional_string(normalized, "source_cctv_id")
+            or _optional_string(normalized, "camera_id")
+        ),
+        "camera_name": _optional_string(normalized, "camera_name"),
+        "cctv_name": _optional_string(normalized, "cctv_name"),
+        "road_name": _optional_string(normalized, "road_name"),
+        "source_cctv_id": (
+            _optional_string(normalized, "source_cctv_id")
+            or _optional_string(normalized, "camera_id")
+        ),
         "occurred_at": _required_string(normalized, "timestamp"),
         "roi_type": (
             _optional_string(normalized, "roi_type")
