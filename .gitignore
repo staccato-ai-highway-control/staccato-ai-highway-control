@@ -106,3 +106,13 @@ __pycache__/
 venv/
 .next/
 node_modules/
+
+# Local environment files and backups
+.env
+.env.*
+!.env.example
+*.bak
+*.bak.*
+.env.bak*
+.env.broken*
+.env.broken_literal_n_*
