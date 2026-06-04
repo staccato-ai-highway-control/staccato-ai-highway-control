@@ -8,6 +8,7 @@ import { Card } from "@/components/common/Card";
 import { Badge } from "@/components/common/Badge";
 import { fetchReplay, fetchReplays } from "@/features/replays/api";
 import type { ReplayItem, ReplayListResponse } from "@/features/replays/types";
+import { formatKstDateTime } from "@/lib/dateTime";
 
 type BadgeTone = "slate" | "blue" | "green" | "amber" | "red";
 
@@ -30,12 +31,6 @@ function getTone(value?: string | null): BadgeTone {
   return "slate";
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
-}
 
 function optionLabel(value: string, fallback: string) {
   if (!value) return fallback;
@@ -183,7 +178,7 @@ export default function ReplayPage() {
               <div className="grid aspect-video place-items-center overflow-hidden rounded-lg bg-slate-100 text-sm font-bold text-slate-500">
                 {snapshotUrl && activeReplay?.has_snapshot ? <img src={snapshotUrl} alt="이벤트 스냅샷" className="h-full w-full object-cover" /> : "Snapshot 없음"}
               </div>
-              {activeReplay ? <dl className="mt-4 grid gap-2 text-xs font-semibold text-slate-500"><div>탐지 시각: {formatDate(activeReplay.detected_at)}</div><div>위치: {activeReplay.road_name ?? "-"} {activeReplay.location_name ?? ""}</div><div>상태: {activeReplay.status}</div></dl> : null}
+              {activeReplay ? <dl className="mt-4 grid gap-2 text-xs font-semibold text-slate-500"><div>탐지 시각: {formatKstDateTime(activeReplay.detected_at)}</div><div>위치: {activeReplay.road_name ?? "-"} {activeReplay.location_name ?? ""}</div><div>상태: {activeReplay.status}</div></dl> : null}
             </Card>
 
             <Card className="p-5">
@@ -195,7 +190,7 @@ export default function ReplayPage() {
                 {result.items.map((item) => (
                   <button key={item.incident_id} type="button" onClick={() => loadReplayDetail(item.incident_id)} disabled={detailLoading} className={`rounded-lg border p-3 text-left transition disabled:opacity-60 ${item.incident_id === activeReplay?.incident_id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
                     <b className="block text-sm">{item.incident_code}</b>
-                    <span className="mt-1 block text-xs font-semibold opacity-75">{formatDate(item.detected_at)} · {sourceLabels[item.source_type] ?? item.source_type}</span>
+                    <span className="mt-1 block text-xs font-semibold opacity-75">{formatKstDateTime(item.detected_at)} · {sourceLabels[item.source_type] ?? item.source_type}</span>
                     <span className="mt-2 flex flex-wrap gap-1"><Badge tone={getTone(item.status)}>{item.status}</Badge><Badge tone={getTone(item.risk_level)}>{item.risk_level}</Badge></span>
                   </button>
                 ))}
