@@ -5,7 +5,8 @@ export const MVP_DESCRIPTION =
 
 export const SERVICE_SUBTITLE = "AI Traffic Safety Control System";
 
+const DIRECT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://192.168.0.187:5000";
+const API_PROXY_PATH = process.env.NEXT_PUBLIC_API_PROXY_PATH ?? "/backend-api";
+
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_PROXY_PATH ??
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "/backend-api";
+  typeof window === "undefined" ? DIRECT_API_BASE_URL : API_PROXY_PATH;
