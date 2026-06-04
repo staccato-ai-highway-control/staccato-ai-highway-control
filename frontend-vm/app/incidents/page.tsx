@@ -45,8 +45,14 @@ const statusOptions: Array<{ label: string; value: IncidentStatusFilter }> = [
   { label: "종결", value: "CLOSED" },
 ];
 
+const pageSizeOptions = [10, 20, 50];
+
 function getIncidentAnalysisJobId(incident: Incident) {
   return incident.analysis_job_id ?? incident.job_id;
+}
+
+function formatDetectedAt(detectedAt: string) {
+  return detectedAt.replace("T", " ");
 }
 
 function matchesSearch(incident: Incident, keyword: string) {
@@ -65,6 +71,8 @@ export default function IncidentsPage() {
   const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<IncidentStatusFilter>("ALL");
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [pageSize, setPageSize] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -111,6 +119,20 @@ export default function IncidentsPage() {
     });
   }, [incidents, riskFilter, searchKeyword, statusFilter, typeFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / pageSize));
+  const visibleCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = filteredIncidents.length === 0 ? 0 : (visibleCurrentPage - 1) * pageSize + 1;
+  const pageEndIndex = Math.min(visibleCurrentPage * pageSize, filteredIncidents.length);
+  const paginatedIncidents = filteredIncidents.slice((visibleCurrentPage - 1) * pageSize, visibleCurrentPage * pageSize);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pageSize, riskFilter, searchKeyword, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
   return (
     <RequireAuth>
       <AppLayout title="이벤트 관리">
@@ -152,62 +174,106 @@ export default function IncidentsPage() {
         {errorMessage && incidents.length > 0 ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
 
         {!(errorMessage && !loading && incidents.length === 0) ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `${filteredIncidents.length}건`}</span>
-            <button type="button" onClick={loadIncidents} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `전체 ${filteredIncidents.length}건 · 현재 ${pageStartIndex}-${pageEndIndex}건 표시`}</span>
+            <button type="button" onClick={loadIncidents} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
           </div>
-          <div className="overflow-auto">
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[1280px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">incident_code</th>
-                  <th className="px-4 py-3">이벤트 유형</th>
-                  <th className="px-4 py-3">제목</th>
-                  <th className="px-4 py-3">도로명/위치</th>
-                  <th className="px-4 py-3">위험도</th>
-                  <th className="px-4 py-3">상태</th>
-                  <th className="px-4 py-3">탐지 시각</th>
-                  <th className="px-4 py-3">담당자</th>
-                  <th className="px-4 py-3">액션</th>
+                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3">incident_code</th>
+                  <th className="min-w-[140px] whitespace-nowrap px-4 py-3">이벤트 유형</th>
+                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3">제목</th>
+                  <th className="min-w-[220px] px-4 py-3">도로명/위치</th>
+                  <th className="min-w-[90px] whitespace-nowrap px-4 py-3">위험도</th>
+                  <th className="min-w-[100px] whitespace-nowrap px-4 py-3">상태</th>
+                  <th className="min-w-[170px] whitespace-nowrap px-4 py-3">탐지 시각</th>
+                  <th className="min-w-[100px] whitespace-nowrap px-4 py-3">담당자</th>
+                  <th className="sticky right-0 z-20 min-w-[420px] whitespace-nowrap border-l border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">액션</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredIncidents.map((incident) => (
-                  <tr key={incident.id} className="border-t border-slate-100 align-top">
-                    <td className="px-4 py-4 font-bold text-slate-700"><span className="block max-w-[140px] truncate">{incident.code}</span></td>
-                    <td className="px-4 py-4 font-semibold text-slate-600">{incidentTypeLabels[incident.eventType]}</td>
-                    <td className="px-4 py-4">
-                      <b className="block max-w-[260px] truncate text-slate-950">{incident.title}</b>
-                      <p className="mt-1 text-xs font-semibold text-slate-400">신뢰도 {Math.round(incident.confidence * 100)}%</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <b className="block max-w-[220px] truncate text-slate-700">{incident.roadName}</b>
-                      <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-slate-500">{incident.location}</p>
-                    </td>
-                    <td className="px-4 py-4"><RiskLevelBadge level={incident.riskLevel} /></td>
-                    <td className="px-4 py-4"><IncidentStatusBadge status={incident.status} /></td>
-                    <td className="px-4 py-4 font-semibold text-slate-500">{incident.detectedAt}</td>
-                    <td className="px-4 py-4 font-semibold text-slate-600">{incident.assignee ?? "미배정"}</td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/incidents/${incident.id}`} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
-                        <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "REVIEWING")} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50 disabled:opacity-50">검토중</button>
-                        <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "FALSE_POSITIVE")} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">오탐 처리</button>
-                        {getIncidentAnalysisJobId(incident) ? (
-                          <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
+                {paginatedIncidents.map((incident) => {
+                  const roadName = incident.roadName.trim();
+                  const location = incident.location.trim();
+
+                  return (
+                    <tr key={incident.id} className="border-t border-slate-100 align-top">
+                      <td className="min-w-[180px] whitespace-nowrap px-4 py-4 font-bold text-slate-700"><span className="block max-w-[160px] truncate">{incident.code}</span></td>
+                      <td className="min-w-[140px] whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{incidentTypeLabels[incident.eventType]}</td>
+                      <td className="min-w-[180px] whitespace-nowrap px-4 py-4">
+                        <b className="block max-w-[220px] truncate text-slate-950">{incident.title}</b>
+                        <p className="mt-1 text-xs font-semibold text-slate-400">신뢰도 {Math.round(incident.confidence * 100)}%</p>
+                      </td>
+                      <td className="min-w-[220px] px-4 py-4">
+                        {roadName || location ? (
+                          <>
+                            <b className="block max-w-[220px] truncate text-slate-700">{roadName || "-"}</b>
+                            {location ? <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-slate-500">{location}</p> : null}
+                          </>
                         ) : (
-                          <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
+                          <span className="font-semibold text-slate-500">-</span>
                         )}
-                        <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "RESOLVED")} className="rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">처리 완료</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="min-w-[90px] whitespace-nowrap px-4 py-4"><span className="inline-flex whitespace-nowrap"><RiskLevelBadge level={incident.riskLevel} /></span></td>
+                      <td className="min-w-[100px] whitespace-nowrap px-4 py-4"><span className="inline-flex whitespace-nowrap"><IncidentStatusBadge status={incident.status} /></span></td>
+                      <td className="min-w-[170px] whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{formatDetectedAt(incident.detectedAt)}</td>
+                      <td className="min-w-[100px] whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{incident.assignee?.trim() || "미배정"}</td>
+                      <td className="sticky right-0 z-10 min-w-[420px] whitespace-nowrap border-l border-slate-200 bg-white px-4 py-4 shadow-sm">
+                        <div className="flex flex-nowrap gap-2">
+                          <Link href={`/incidents/${incident.id}`} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
+                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "REVIEWING")} className="whitespace-nowrap rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50 disabled:opacity-50">검토중</button>
+                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "FALSE_POSITIVE")} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">오탐 처리</button>
+                          {getIncidentAnalysisJobId(incident) ? (
+                            <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="whitespace-nowrap rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
+                          ) : (
+                            <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
+                          )}
+                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "RESOLVED")} className="whitespace-nowrap rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">처리 완료</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {!loading && filteredIncidents.length === 0 ? <p className="border-t border-slate-100 p-6 text-center text-sm font-semibold text-slate-500">조건에 맞는 이벤트가 없습니다.</p> : null}
+
+          {!loading && filteredIncidents.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+              <span className="text-sm font-bold text-slate-600">전체 {filteredIncidents.length}건 · 현재 {pageStartIndex}-{pageEndIndex}건 표시</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={pageSize}
+                  onChange={(event) => setPageSize(Number(event.target.value))}
+                  className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700"
+                  aria-label="페이지당 표시 건수"
+                >
+                  {pageSizeOptions.map((option) => <option key={option} value={option}>{option}건</option>)}
+                </select>
+                <button
+                  type="button"
+                  disabled={visibleCurrentPage === 1}
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  이전
+                </button>
+                <span className="min-w-[76px] text-center text-xs font-bold text-slate-500">{visibleCurrentPage} / {totalPages}</span>
+                <button
+                  type="button"
+                  disabled={visibleCurrentPage === totalPages}
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  다음
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section> : null}
       </AppLayout>
     </RequireAuth>
