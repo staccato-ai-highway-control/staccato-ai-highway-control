@@ -3,6 +3,7 @@
 import { BellRing, ExternalLink, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RealtimeEventPreview } from "@/features/realtime/types";
+import { formatKstDateTime } from "@/lib/dateTime";
 
 type RealtimePreviewToastProps = {
   event: RealtimeEventPreview | null;
@@ -10,20 +11,6 @@ type RealtimePreviewToastProps = {
   onClose: () => void;
 };
 
-function formatDateTime(value?: string | null) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("ko-KR", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(date);
-}
 
 function getSeverityClass(severity?: string) {
   switch (severity?.toUpperCase()) {
@@ -141,7 +128,7 @@ export function RealtimePreviewToast({ event, open, onClose }: RealtimePreviewTo
             <p className="mt-2 line-clamp-2 text-sm font-black leading-5 text-white">
               {event.message || "새 실시간 이벤트가 발생했습니다."}
             </p>
-            <p className="mt-1 text-xs font-semibold text-slate-400">{formatDateTime(occurredAt)}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-400">{formatKstDateTime(occurredAt)}</p>
             <PreviewMedia event={event} />
             {event.target_url ? (
               <button
