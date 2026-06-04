@@ -61,7 +61,7 @@ class EventDetector:
             lambda: deque(maxlen=EVENT_HISTORY_LENGTH)
         )
         self._slow_started_at: dict[int, datetime] = {}
-        self._last_event_at: dict[tuple[int, str, str | None], datetime] = {}
+        self._last_event_at: dict[tuple[Any, ...], datetime] = {}
 
         self.generated_events = 0
         self.last_event_at: datetime | None = None
@@ -113,8 +113,13 @@ class EventDetector:
             if danger_time < EVENT_DANGER_SECONDS:
                 continue
 
+            # Event must be inside a configured ROI.
+            # Outside ROI cannot be safely classified as shoulder stop or lane stop.
+            if not item.roi_ids:
+                continue
+
             event_type = self._event_type_for_rois(item.roi_ids)
-            roi_id = item.roi_ids[0] if item.roi_ids else None
+            roi_id = item.roi_ids[0]
             if not self._can_emit(item.track_id, event_type, roi_id, timestamp):
                 continue
 
