@@ -7,13 +7,25 @@ const AI_VM_BASE_URL =
   process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
   "http://192.168.0.186:5001";
 
+function normalizeAiCameraId(cctvId: string) {
+  const decoded = decodeURIComponent(cctvId);
+  const match = decoded.match(/^CCTV-0*([1-9]\d*)$/i);
+
+  if (match) {
+    return `camera-${Number(match[1])}`;
+  }
+
+  return decoded;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ cctvId: string }> }
 ) {
   const { cctvId } = await context.params;
+  const cameraId = normalizeAiCameraId(cctvId);
   const upstreamUrl = new URL(
-    `/streams/${encodeURIComponent(cctvId)}.mjpeg`,
+    `/streams/${encodeURIComponent(cameraId)}.mjpeg`,
     AI_VM_BASE_URL.replace(/\/$/, "")
   );
 
