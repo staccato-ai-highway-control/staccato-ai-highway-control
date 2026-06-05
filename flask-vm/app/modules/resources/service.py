@@ -113,10 +113,13 @@ def create_resource(form, file, current_user) -> tuple[dict, int]:
     return resource.to_detail_dict(), 201
 
 
-def update_resource(resource_id: int, form, file) -> tuple[dict, int]:
+def update_resource(resource_id: int, form, file, current_user) -> tuple[dict, int]:
     resource = _get_active_resource(resource_id)
     if resource is None:
         return {"message": "Resource not found."}, 404
+
+    if resource.author_id != getattr(current_user, "id", None):
+        return {"message": "Only the resource author can update this resource."}, 403
 
     if "title" in form:
         title = _clean_text(form.get("title"))
@@ -159,10 +162,13 @@ def update_resource(resource_id: int, form, file) -> tuple[dict, int]:
     return resource.to_detail_dict(), 200
 
 
-def delete_resource(resource_id: int) -> tuple[dict, int]:
+def delete_resource(resource_id: int, current_user) -> tuple[dict, int]:
     resource = _get_active_resource(resource_id)
     if resource is None:
         return {"message": "Resource not found."}, 404
+
+    if resource.author_id != getattr(current_user, "id", None):
+        return {"message": "Only the resource author can delete this resource."}, 403
 
     now = _utc_now_naive()
     resource.deleted_at = now
