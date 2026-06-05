@@ -4,6 +4,7 @@ import { BellRing, ExternalLink, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RealtimeEventPreview } from "@/features/realtime/types";
 import { formatKstDateTime } from "@/lib/dateTime";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
 type RealtimePreviewToastProps = {
   event: RealtimeEventPreview | null;
@@ -31,17 +32,15 @@ function getSeverityClass(severity?: string) {
 
 function getPreviewKind(event: RealtimeEventPreview) {
   const previewType = event.preview_type?.toLowerCase();
-  if (previewType === "video" && event.preview_url) return "video";
-  if (previewType === "image" && (event.preview_url || event.snapshot_url)) return "image";
-  if (event.video_url || (event.has_video && event.preview_url)) return "video";
+  if (event.video_url || previewType === "video" || (event.preview_url && previewType !== "image")) return "video";
   if (event.snapshot_url || event.preview_url) return "image";
   return null;
 }
 
 function getPreviewUrl(event: RealtimeEventPreview) {
   const previewKind = getPreviewKind(event);
-  if (previewKind === "video") return event.preview_url ?? event.video_url ?? null;
-  if (previewKind === "image") return event.preview_url ?? event.snapshot_url ?? null;
+  if (previewKind === "video") return normalizeMediaUrl(event.preview_url ?? event.video_url ?? null);
+  if (previewKind === "image") return normalizeMediaUrl(event.preview_url ?? event.snapshot_url ?? null);
   return null;
 }
 
@@ -125,7 +124,8 @@ export function RealtimePreviewToast({ event, open, onClose }: RealtimePreviewTo
                 <span className="truncate text-xs font-bold text-slate-400">CCTV {event.source_cctv_id}</span>
               ) : null}
             </div>
-            <p className="mt-2 line-clamp-2 text-sm font-black leading-5 text-white">
+            <h2 className="mt-2 text-base font-black leading-5 text-white">이상상황 감지</h2>
+            <p className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-100">
               {event.message || "새 실시간 이벤트가 발생했습니다."}
             </p>
             <p className="mt-1 text-xs font-semibold text-slate-400">{formatKstDateTime(occurredAt)}</p>

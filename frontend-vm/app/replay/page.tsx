@@ -9,6 +9,7 @@ import { Badge } from "@/components/common/Badge";
 import { fetchReplay, fetchReplays } from "@/features/replays/api";
 import type { ReplayItem, ReplayListResponse } from "@/features/replays/types";
 import { formatKstDateTime } from "@/lib/dateTime";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
 type BadgeTone = "slate" | "blue" | "green" | "amber" | "red";
 
@@ -109,8 +110,8 @@ export default function ReplayPage() {
     return result.items.find((item) => item.incident_id === selectedId) ?? result.items[0] ?? null;
   }, [result.items, selectedId]);
   const activeReplay = selectedReplay ?? selectedFromList;
-  const mediaUrl = getReplayMediaUrl(activeReplay);
-  const snapshotUrl = activeReplay?.snapshot_url ?? null;
+  const mediaUrl = normalizeMediaUrl(getReplayMediaUrl(activeReplay));
+  const snapshotUrl = normalizeMediaUrl(activeReplay?.snapshot_url ?? null);
 
   return (
     <RequireAuth>

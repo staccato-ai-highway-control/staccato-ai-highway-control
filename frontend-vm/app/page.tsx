@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, UserRound } from "lucide-react";
+import { ChevronDown, FileText, LogOut, MessageSquareText, UserRound } from "lucide-react";
 import { getMe } from "@/features/auth/api";
 import type { AuthUser } from "@/features/auth/types";
 import { getRoleLabel } from "@/config/navigation";
@@ -24,6 +24,7 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -102,6 +103,49 @@ export default function Home() {
   const boxOpacity = progress > 0.28 ? 1 : 0;
   const scanOpacity = progress > 0.38 ? 1 : 0;
   const detectTextOpacity = progress > 0.55 ? 1 : 0;
+  const boardMenuLinks = [
+    { href: "/bug-reports", label: "버그리포트", icon: MessageSquareText },
+    { href: "/resources", label: "자료실", icon: FileText },
+  ];
+  const boardMenu = (
+    <div
+      className="relative"
+      onMouseEnter={() => setIsBoardMenuOpen(true)}
+      onMouseLeave={() => setIsBoardMenuOpen(false)}
+      onFocus={() => setIsBoardMenuOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsBoardMenuOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setIsBoardMenuOpen((isOpen) => !isOpen)}
+        className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-slate-950/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+        aria-haspopup="menu"
+        aria-expanded={isBoardMenuOpen}
+      >
+        게시판
+        <ChevronDown className={`h-4 w-4 transition ${isBoardMenuOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+
+      {isBoardMenuOpen ? (
+        <div role="menu" className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-lg border border-white/20 bg-slate-950/95 shadow-2xl backdrop-blur">
+          {boardMenuLinks.map((item) => {
+            const Icon = item.icon;
+
+            return (
+              <Link key={item.href} href={item.href} role="menuitem" onClick={() => setIsBoardMenuOpen(false)} className="flex min-h-11 items-center gap-2 px-4 text-sm font-semibold text-slate-100 no-underline transition hover:bg-white/10 hover:text-white">
+                <Icon className="h-4 w-4 shrink-0 text-sky-300" aria-hidden="true" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
 
   return (
     <main className="bg-slate-950 text-white">
@@ -125,7 +169,7 @@ export default function Home() {
             </Link>
 
             {authUser ? (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-end gap-3">
                 <div className="hidden min-w-0 items-center gap-3 rounded-lg border border-white/25 bg-slate-950/35 px-3 py-2 backdrop-blur md:flex">
                   <div className="grid h-8 w-8 place-items-center rounded-full bg-sky-400 text-sm font-black text-slate-950">
                     {(authUser.name || authUser.email || "S").slice(0, 1).toUpperCase()}
@@ -147,12 +191,7 @@ export default function Home() {
                   대시보드
                 </Link>
 
-                <Link
-                  href="/bug-reports"
-                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
-                >
-                  문의게시판
-                </Link>
+                {boardMenu}
 
                 <Link
                   href="/mypage"
@@ -172,13 +211,8 @@ export default function Home() {
                 </button>
               </div>
             ) : (
-              <div className="flex gap-3">
-                <Link
-                  href="/bug-reports"
-                  className="rounded-lg border border-white/30 px-4 py-2 text-sm font-semibold text-white no-underline transition hover:bg-white/10"
-                >
-                  문의게시판
-                </Link>
+              <div className="flex flex-wrap justify-end gap-3">
+                {boardMenu}
 
                 <Link
                   href="/login"
