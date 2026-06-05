@@ -190,10 +190,15 @@ class InferenceWorker:
                             self.relay_client.send_event(event)
 
                 inference_ms = (time.monotonic() - started_at) * 1000.0
+                frame_height, frame_width = item.frame.shape[:2]
+
                 result = InferenceResult(
                     camera_id=item.camera_id,
                     frame_id=item.frame_id,
                     timestamp=item.timestamp,
+                    frame_width=int(frame_width),
+                    frame_height=int(frame_height),
+                    bbox_format="xyxy",
                     model=detector.model_name,
                     detections=display_detections,
                     events=events,
