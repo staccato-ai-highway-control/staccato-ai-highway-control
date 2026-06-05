@@ -43,7 +43,7 @@ function normalizeRealtimeEventPreviews(response: RealtimeEventPreviewApiRespons
 
 export async function getRealtimeEventPreviews(limit = 5): Promise<RealtimeEventPreview[]> {
   const params = new URLSearchParams({ limit: String(limit) });
-  const response = await apiClient<RealtimeEventPreviewApiResponse>("/api/realtime/events/preview?" + params.toString(), { auth: false });
+  const response = await apiClient<RealtimeEventPreviewApiResponse>("/api/realtime/events/preview?" + params.toString());
 
   return normalizeRealtimeEventPreviews(response);
 }
