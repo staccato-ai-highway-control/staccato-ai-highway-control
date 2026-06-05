@@ -44,6 +44,10 @@ from app.models.bug_report_models import (
     BugReportAttachment,
 )
 
+from app.models.resource_models import (
+    ProjectResource,
+)
+
 from app.models.its_models import (
     ExternalApiLog,
     ItsRiskScore,
@@ -117,6 +121,7 @@ __all__ = [
     "BoardReaction",
     "BugReport",
     "BugReportAttachment",
+    "ProjectResource",
     "ItsWeatherSnapshot",
     "ItsTrafficSnapshot",
     "ItsRiskScore",
