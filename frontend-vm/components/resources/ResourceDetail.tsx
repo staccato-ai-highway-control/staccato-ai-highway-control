@@ -3,21 +3,27 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, Eye, Pencil, Trash2 } from "lucide-react";
-import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { ArrowLeft, Download, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import type { AuthUser } from "@/features/auth/types";
 import { deleteResource, downloadResourceFile, getResource } from "@/features/resources/api";
 import type { ResourceItem } from "@/features/resources/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 import { formatResourceDate, formatResourceFileSize, resourceCategoryLabels, resourceCategoryTone, resourceVisibilityLabels } from "./resourceData";
+import { isResourceOwner } from "./resourcePermissions";
 
 export function ResourceDetail({ resourceId }: { resourceId: string }) {
   const router = useRouter();
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [resource, setResource] = useState<ResourceItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -54,7 +60,7 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
   }
 
   async function handleDelete() {
-    if (!resource) return;
+    if (!resource || !isResourceOwner(resource, authUser)) return;
     const confirmed = window.confirm("자료를 삭제하시겠습니까?");
     if (!confirmed) return;
 
@@ -70,9 +76,11 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
     }
   }
 
+  const canManage = resource ? isResourceOwner(resource, authUser) : false;
+
   return (
-    <RequireSuperAdmin>
-      <AppLayout title="자료 상세">
+    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
+      <section className="mx-auto max-w-4xl">
         <div className="mb-5">
           <Link href="/resources" className="inline-flex items-center gap-2 text-sm font-black text-slate-600 no-underline hover:text-slate-950">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -93,37 +101,37 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
                     <Badge tone={resourceCategoryTone[resource.category]}>{resource.category_label || resourceCategoryLabels[resource.category]}</Badge>
                     <Badge tone="slate">{resourceVisibilityLabels[resource.visibility]}</Badge>
                   </div>
-                  <h2 className="text-2xl font-black text-slate-950">{resource.title}</h2>
+                  <h1 className="text-2xl font-black text-slate-950">{resource.title}</h1>
                   <p className="mt-3 text-sm font-semibold text-slate-500">{resource.author_name} · {formatResourceDate(resource.created_at)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <button type="button" onClick={handleDownload} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                    <Eye className="h-4 w-4" aria-hidden="true" />
-                    미리보기
-                  </button>
                   <button type="button" onClick={handleDownload} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 px-3 text-sm font-bold text-sky-700 transition hover:bg-sky-50">
                     <Download className="h-4 w-4" aria-hidden="true" />
                     다운로드
                   </button>
-                  <button type="button" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                    수정
-                  </button>
-                  <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                    삭제
-                  </button>
+                  {canManage ? (
+                    <>
+                      <Link href={`/resources/${resource.id}/edit`} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                        수정
+                      </Link>
+                      <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 px-3 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        삭제
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
             </Card>
 
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-black text-slate-950">설명</h3>
+              <h2 className="mb-3 text-base font-black text-slate-950">설명</h2>
               <p className="whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-700">{resource.description || "설명이 없습니다."}</p>
             </Card>
 
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-black text-slate-950">첨부파일</h3>
+              <h2 className="mb-3 text-base font-black text-slate-950">첨부파일</h2>
               <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <p className="truncate text-sm font-black text-slate-950">{resource.file_name}</p>
                 <p className="mt-2 text-xs font-semibold text-slate-500">{resource.file_type} · {formatResourceFileSize(resource.file_size)}</p>
@@ -131,7 +139,7 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
             </Card>
           </article>
         ) : null}
-      </AppLayout>
-    </RequireSuperAdmin>
+      </section>
+    </main>
   );
 }
