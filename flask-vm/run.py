@@ -30,10 +30,12 @@ load_local_env()
 app = create_app()
 
 if __name__ == "__main__":
+    port = int(os.getenv("FLASK_RUN_PORT") or os.getenv("PORT", "5000"))
+
     socketio.run(
         app,
         host="0.0.0.0",
-        port=5000,
+        port=port,
         debug=True,
         use_reloader=False,
         allow_unsafe_werkzeug=True,
