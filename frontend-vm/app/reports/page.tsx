@@ -104,6 +104,102 @@ function getReportLocation(report: Report) {
   return report.location ?? report.address ?? report.place_name ?? report.locationName ?? "-";
 }
 
+type ReportWithAnalysisAliases = Report & {
+  latestJob?: Report["latest_job"];
+  latestAnalysisJob?: Report["latest_job"];
+  latest_analysis_job?: Report["latest_job"];
+  ai_analysis_status?: string | null;
+  detection_count?: number | string | null;
+  detected_count?: number | string | null;
+  processed_frames?: number | string | null;
+  processed_frame_count?: number | string | null;
+};
+
+type AnalysisJobWithMetrics = NonNullable<Report["latest_job"]> & {
+  detection_count?: number | string | null;
+  detected_count?: number | string | null;
+  processed_frames?: number | string | null;
+  processed_frame_count?: number | string | null;
+};
+
+const analysisStatusLabels: Record<string, string> = {
+  WAITING: "대기",
+  REQUESTED: "요청됨",
+  QUEUED: "대기열",
+  PROCESSING: "처리중",
+  ANALYZING: "분석중",
+  COMPLETED: "완료",
+  FAILED: "실패",
+};
+
+function getLatestAnalysisJob(report: Report): AnalysisJobWithMetrics | null {
+  const current = report as ReportWithAnalysisAliases;
+  const jobs = current.analysis_jobs ?? current.analysisJobs ?? [];
+
+  return (
+    (current.latest_job as AnalysisJobWithMetrics | null | undefined) ??
+    (current.latestJob as AnalysisJobWithMetrics | null | undefined) ??
+    (current.latestAnalysisJob as AnalysisJobWithMetrics | null | undefined) ??
+    (current.latest_analysis_job as AnalysisJobWithMetrics | null | undefined) ??
+    (jobs[0] as AnalysisJobWithMetrics | undefined) ??
+    null
+  );
+}
+
+function getReportAnalysisStatus(report: Report) {
+  const current = report as ReportWithAnalysisAliases;
+  const latestJob = getLatestAnalysisJob(report);
+
+  return (
+    current.analysis_status ??
+    current.analysisStatus ??
+    current.ai_analysis_status ??
+    latestJob?.job_status ??
+    latestJob?.status ??
+    null
+  );
+}
+
+function normalizeCount(value: number | string | null | undefined) {
+  if (value === null || value === undefined || value === "") return null;
+  return String(value);
+}
+
+function getReportDetectionCount(report: Report) {
+  const current = report as ReportWithAnalysisAliases;
+  const latestJob = getLatestAnalysisJob(report);
+
+  return normalizeCount(
+    current.detection_count ??
+    current.detected_count ??
+    latestJob?.detection_count ??
+    latestJob?.detected_count
+  );
+}
+
+function getReportProcessedFrames(report: Report) {
+  const current = report as ReportWithAnalysisAliases;
+  const latestJob = getLatestAnalysisJob(report);
+
+  return normalizeCount(
+    current.processed_frames ??
+    current.processed_frame_count ??
+    latestJob?.processed_frames ??
+    latestJob?.processed_frame_count
+  );
+}
+
+function getReportRiskText(report: Report) {
+  const latestJob = getLatestAnalysisJob(report);
+  const riskLevel = report.risk_level ?? latestJob?.risk_level ?? null;
+  const riskScore = report.risk_score ?? latestJob?.risk_score ?? null;
+
+  if (riskLevel && riskScore !== null && riskScore !== undefined) return `${riskLevel} (${riskScore})`;
+  if (riskLevel) return riskLevel;
+  if (riskScore !== null && riskScore !== undefined) return String(riskScore);
+  return "-";
+}
+
 function getBadgeTone(value: string): "slate" | "blue" | "green" | "amber" | "red" {
   if (["REJECTED", "DELETED", "URGENT", "HIGH", "CRITICAL"].includes(value)) return "red";
   if (["ANALYZING", "MEDIUM"].includes(value)) return "amber";
@@ -246,7 +342,7 @@ export default function ReportsPage() {
             </div>
           </div>
           <div className="overflow-auto">
-            <table className="w-full min-w-[1120px] text-sm">
+            <table className="w-full min-w-[1280px] text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3">제목</th>
@@ -254,6 +350,7 @@ export default function ReportsPage() {
                   <th className="px-4 py-3">상태</th>
                   <th className="px-4 py-3">우선순위</th>
                   <th className="px-4 py-3">위험도</th>
+                  <th className="px-4 py-3">AI 분석</th>
                   <th className="px-4 py-3">등록일</th>
                   <th className="px-4 py-3">액션</th>
                 </tr>
@@ -263,6 +360,9 @@ export default function ReportsPage() {
                   const status = getReportStatus(report);
                   const priority = getReportPriority(report);
                   const type = getReportType(report);
+                  const analysisStatus = getReportAnalysisStatus(report);
+                  const detectionCount = getReportDetectionCount(report);
+                  const processedFrames = getReportProcessedFrames(report);
                   return (
                     <tr key={getReportId(report)} className="border-t border-slate-100">
                       <td className="px-4 py-4">
@@ -272,7 +372,23 @@ export default function ReportsPage() {
                       <td className="px-4 py-4 font-semibold text-slate-600">{typeLabels[type] ?? type}</td>
                       <td className="px-4 py-4"><Badge tone={getBadgeTone(status)}>{statusLabels[status] ?? status}</Badge></td>
                       <td className="px-4 py-4"><Badge tone={getBadgeTone(priority)}>{priorityLabels[priority] ?? priority}</Badge></td>
-                      <td className="px-4 py-4 font-semibold text-slate-600">{report.risk_level ?? "-"}</td>
+                      <td className="px-4 py-4 font-semibold text-slate-600">{getReportRiskText(report)}</td>
+                      <td className="px-4 py-4">
+                        {analysisStatus ? (
+                          <div className="space-y-1">
+                            <Badge tone={getBadgeTone(analysisStatus)}>{analysisStatusLabels[analysisStatus] ?? analysisStatus}</Badge>
+                            {detectionCount || processedFrames ? (
+                              <p className="text-xs font-semibold text-slate-400">
+                                {detectionCount ? `감지 ${detectionCount}건` : null}
+                                {detectionCount && processedFrames ? " · " : null}
+                                {processedFrames ? `프레임 ${processedFrames}` : null}
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-sm font-semibold text-slate-400">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-4 font-semibold text-slate-500">{formatDateTime(getReportCreatedAt(report))}</td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
