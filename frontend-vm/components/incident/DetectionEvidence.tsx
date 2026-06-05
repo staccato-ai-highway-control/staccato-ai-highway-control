@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Incident } from "@/features/incidents/types";
-import { API_BASE_URL } from "@/lib/constants";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
 type IncidentWithSnapshotFields = Incident & {
   snapshot_url?: string | null;
@@ -33,26 +33,7 @@ function pickSnapshotUrl(incident: IncidentWithSnapshotFields) {
 }
 
 function normalizeSnapshotUrl(rawUrl?: string | null) {
-  if (!rawUrl || rawUrl === "null" || rawUrl === "undefined") return null;
-
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return null;
-
-  if (/^https?:\/\//.test(trimmed)) return trimmed;
-
-  const normalizedPath = trimmed.startsWith("/") ? trimmed : "/" + trimmed;
-
-  if (
-    normalizedPath.startsWith("/api/") ||
-    normalizedPath.startsWith("/event_media/") ||
-    normalizedPath.startsWith("/uploads/") ||
-    normalizedPath.startsWith("/static/") ||
-    normalizedPath.startsWith("/media/")
-  ) {
-    return `${API_BASE_URL.replace(/\/$/, "")}${normalizedPath}`;
-  }
-
-  return normalizedPath;
+  return normalizeMediaUrl(rawUrl);
 }
 
 export function DetectionEvidence({ incident }: { incident: Incident }) {

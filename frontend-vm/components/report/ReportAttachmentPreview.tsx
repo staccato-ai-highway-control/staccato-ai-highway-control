@@ -1,5 +1,6 @@
 "use client";
 
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 import { FileVideo } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { downloadReportAttachment, downloadReportAttachmentUrl, previewReportAttachment, previewReportAttachmentUrl } from "@/features/reports/api";
@@ -23,11 +24,11 @@ function getAttachmentType(attachment?: ReportAttachment, report?: Report) {
 }
 
 function getPreviewUrl(report: Report, attachment?: ReportAttachment) {
-  return attachment?.preview_url ?? attachment?.file_url ?? report.preview_url ?? report.thumbnail_url ?? undefined;
+  return normalizeMediaUrl(attachment?.preview_url ?? attachment?.file_url ?? report.preview_url ?? report.thumbnail_url ?? null) ?? undefined;
 }
 
 function getDownloadUrl(report: Report, attachment?: ReportAttachment) {
-  return attachment?.download_url ?? report.download_url ?? undefined;
+  return normalizeMediaUrl(attachment?.download_url ?? report.download_url ?? null) ?? undefined;
 }
 
 function isImageType(type: string) {
