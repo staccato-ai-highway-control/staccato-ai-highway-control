@@ -11,6 +11,7 @@ import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPre
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 import { approveReport, deleteReport, deleteReportAttachment, getReport, getReportAnalysisJobs, getReportAnalysisStatus, rejectReport, requestReportAnalysis, retryReportAnalysisJob, updateReport, updateReportStatus, uploadReportAttachments } from "@/features/reports/api";
 import type { Report, ReportAnalysisJob, ReportAnalysisStatus, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
 
@@ -602,7 +603,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
 
   const annotatedVideoUrl =
     analysisSummaryCandidates
-      .map((summary) => summary.annotated_video_url ?? summary.annotated_media?.video_url ?? null)
+      .map((summary) => normalizeMediaUrl(summary.annotated_video_url ?? summary.annotated_media?.video_url ?? null))
       .find(Boolean) ?? null;
 
   const annotatedImageUrl =
