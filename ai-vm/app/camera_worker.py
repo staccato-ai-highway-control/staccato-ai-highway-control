@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 
 from .analysis_queue import AnalysisFrame, AnalysisQueue
+from .bbox_store import clear_latest_bbox_metadata
 from .config import (
     AI_VM_PUBLIC_BASE_URL,
     CCTV_SOURCE_REFRESH_ENABLED,
@@ -114,6 +115,7 @@ class CameraWorker:
         self.started_at = self._utc_now()
         self._set_status(CameraStatus.INIT)
         self.event_clip_worker.start()
+        clear_latest_bbox_metadata(self.camera_id)
         self.inference_worker.start()
         self._thread = Thread(
             target=self._capture_loop,
@@ -128,6 +130,7 @@ class CameraWorker:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=join_timeout)
         self.inference_worker.stop(join_timeout=join_timeout)
+        clear_latest_bbox_metadata(self.camera_id)
         self.event_clip_worker.stop(join_timeout=join_timeout)
 
     def is_running(self) -> bool:
@@ -165,6 +168,24 @@ class CameraWorker:
     def get_latest_detection_result(self) -> dict | None:
         result = self.inference_worker.get_latest_result()
         return result.to_dict() if result else None
+
+    def get_latest_empty_bbox_metadata(self) -> dict | None:
+        with self.latest_frame_lock:
+            if self.latest_frame is None:
+                return None
+
+            height, width = self.latest_frame.shape[:2]
+            frame_id = self.frames_read
+
+        timestamp = self.last_frame_at or self._utc_now()
+        return {
+            "camera_id": self.camera_id,
+            "frame_id": frame_id,
+            "timestamp": timestamp.isoformat(),
+            "frame_width": width,
+            "frame_height": height,
+            "detections": [],
+        }
 
     def matches_source_identity(self, name: str | None = None, source_url: str | None = None) -> bool:
         clean_name = normalize_cctv_name(name)
@@ -404,8 +425,43 @@ class CameraWorker:
         )
 
     def _handle_inference_events(self, events: list[dict]) -> None:
-        for event in events:
-            self.event_clip_worker.enqueue_event(event)
+        if not events:
+            return
+
+        # Final camera-level throttle before clip writing / Flask relay.
+        # The detector can emit multiple events when track_id/roi changes,
+        # so only one automatic event per camera is allowed during cooldown.
+        from .config import EVENT_COOLDOWN_SECONDS
+
+        now = self._utc_now()
+        last_enqueued_at = getattr(self, "_last_auto_event_enqueued_at", None)
+
+        if last_enqueued_at is not None:
+            elapsed = (now - last_enqueued_at).total_seconds()
+            if elapsed < EVENT_COOLDOWN_SECONDS:
+                return
+
+        def event_score(event: dict) -> float:
+            detections = event.get("detections")
+            if isinstance(detections, list) and detections:
+                scores = []
+                for detection in detections:
+                    if isinstance(detection, dict):
+                        try:
+                            scores.append(float(detection.get("confidence") or 0.0))
+                        except (TypeError, ValueError):
+                            pass
+                if scores:
+                    return max(scores)
+
+            try:
+                return float(event.get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        selected_event = max(events, key=event_score)
+        self._last_auto_event_enqueued_at = now
+        self.event_clip_worker.enqueue_event(selected_event)
 
     def _set_status(self, status: CameraStatus) -> None:
         with self._status_lock:

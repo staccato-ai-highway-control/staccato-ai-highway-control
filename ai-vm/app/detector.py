@@ -38,6 +38,7 @@ class Detection:
     def to_dict(self) -> dict[str, Any]:
         return {
             "bbox": self.bbox,
+            "bbox_format": "xyxy",
             "class_id": self.class_id,
             "class_name": self.class_name,
             "confidence": self.confidence,
