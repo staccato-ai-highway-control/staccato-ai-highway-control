@@ -3,19 +3,20 @@
 import Link from "next/link";
 import { FileDown, FilePlus, Search } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
-import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
+import type { AuthUser } from "@/features/auth/types";
 import { downloadResourceFile, getResources } from "@/features/resources/api";
 import type { ResourceCategory, ResourceItem } from "@/features/resources/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 import { formatResourceDate, formatResourceFileSize, resourceCategoryLabels, resourceCategoryOptions, resourceCategoryTone } from "./resourceData";
+import { isResourceAdmin } from "./resourcePermissions";
 
 const PAGE_SIZE = 10;
 const categoryTabs: Array<ResourceCategory | "ALL"> = ["ALL", ...resourceCategoryOptions];
 
 export function ResourceList() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [category, setCategory] = useState<ResourceCategory | "ALL">("ALL");
   const [keyword, setKeyword] = useState("");
@@ -51,6 +52,10 @@ export function ResourceList() {
   }, [category, page, submittedKeyword]);
 
   useEffect(() => {
+    setAuthUser(getStoredAuthUser());
+  }, []);
+
+  useEffect(() => {
     loadResources();
   }, [loadResources]);
 
@@ -69,20 +74,21 @@ export function ResourceList() {
   }
 
   return (
-    <RequireSuperAdmin>
-      <AppLayout title="자료실">
-        <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
+      <section className="mx-auto max-w-6xl">
+        <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-2xl font-black text-slate-950">자료실</h2>
-            <p className="mt-2 text-sm font-semibold text-slate-500">STACCATO 프로젝트의 주요 문서와 회의 기록을 관리합니다.</p>
+            <Link href="/" className="text-sm font-black text-slate-950 no-underline">STACCATO</Link>
+            <h1 className="mt-3 text-3xl font-black">자료실</h1>
+            <p className="mt-2 text-sm font-semibold text-slate-600">STACCATO 프로젝트의 주요 문서와 회의 기록을 관리합니다.</p>
           </div>
-          <Link href="/resources/new" className="no-underline">
-            <Button type="button" className="gap-2">
+          {isResourceAdmin(authUser) ? (
+            <Link href="/resources/new" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-black text-white no-underline shadow-sm transition hover:bg-slate-800">
               <FilePlus className="h-4 w-4" aria-hidden="true" />
               자료 등록
-            </Button>
-          </Link>
-        </section>
+            </Link>
+          ) : null}
+        </header>
 
         <Card className="mb-5 p-5">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -109,7 +115,7 @@ export function ResourceList() {
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <h3 className="text-base font-black text-slate-950">자료 목록</h3>
+            <h2 className="text-base font-black text-slate-950">자료 목록</h2>
             <span className="text-sm font-semibold text-slate-500">{loading ? "불러오는 중" : `${total}건 · ${page}페이지`}</span>
           </div>
           <div className="overflow-x-auto">
@@ -153,7 +159,7 @@ export function ResourceList() {
             <button type="button" disabled={loading || page >= pages} onClick={() => setPage((current) => Math.min(pages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">다음</button>
           </div>
         </Card>
-      </AppLayout>
-    </RequireSuperAdmin>
+      </section>
+    </main>
   );
 }
