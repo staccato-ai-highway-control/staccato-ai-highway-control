@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
 import { Badge } from "@/components/common/Badge";
 import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
+import { RealtimePreviewToast } from "@/components/notifications/RealtimePreviewToast";
 import { IncidentStatusBadge } from "@/components/incident/IncidentStatusBadge";
 import { RiskLevelBadge } from "@/components/incident/RiskLevelBadge";
 import type { AuthUser } from "@/features/auth/types";
@@ -17,6 +18,8 @@ import type { Cctv as CctvItem } from "@/features/cctvs/types";
 import { getIncidents } from "@/features/incidents/api";
 import { incidentTypeLabels, type Incident } from "@/features/incidents/types";
 import { getReports } from "@/features/reports/api";
+import { getRealtimeEventPreviews } from "@/features/realtime/api";
+import type { RealtimeEventPreview } from "@/features/realtime/types";
 import type { Report } from "@/features/reports/types";
 import { getStoredAuthUser } from "@/lib/authStorage";
 
@@ -137,6 +140,10 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [previewEvent, setPreviewEvent] = useState<RealtimeEventPreview | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewMessage, setPreviewMessage] = useState<string | null>(null);
 
   async function loadDashboard() {
     setIsLoading(true);
@@ -168,6 +175,31 @@ export default function DashboardPage() {
     loadDashboard();
   }, []);
 
+  async function handleRealtimePreviewClick() {
+    setIsPreviewLoading(true);
+    setPreviewMessage(null);
+
+    try {
+      const events = await getRealtimeEventPreviews(5);
+      const latestEvent = events[0];
+
+      if (!latestEvent) {
+        setPreviewEvent(null);
+        setIsPreviewOpen(false);
+        setPreviewMessage("미리보기 가능한 이벤트가 없습니다.");
+        return;
+      }
+
+      setPreviewEvent(latestEvent);
+      setIsPreviewOpen(true);
+    } catch {
+      setPreviewMessage("실시간 알림 미리보기 데이터를 불러오지 못했습니다.");
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }
+
+
   const cards = useMemo<StatCard[]>(() => {
     const unresolved = incidents.filter(isUnresolvedIncident);
     const analyzingReports = reports.filter((report) => report.status === "ANALYZING" || getReportAnalysisStatus(report) === "ANALYZING");
@@ -198,12 +230,25 @@ export default function DashboardPage() {
             <h2 className="text-2xl font-black text-slate-950">통합 관제 대시보드</h2>
             <p className="mt-2 text-sm font-medium text-slate-500">이벤트, 신고, CCTV 상태를 실제 API 기준으로 확인합니다.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/incidents" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">이벤트 관리</Link>
-            <Link href="/reports" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">신고 관리</Link>
-            <button type="button" onClick={loadDashboard} className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
+          <div className="flex flex-col gap-2 lg:items-end">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={handleRealtimePreviewClick}
+                disabled={isPreviewLoading}
+                className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-950 px-4 text-sm font-black text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+              >
+                {isPreviewLoading ? "불러오는 중" : "시연용 실시간 알림"}
+              </button>
+              <Link href="/incidents" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">이벤트 관리</Link>
+              <Link href="/reports" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">신고 관리</Link>
+              <button type="button" onClick={loadDashboard} className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
+            </div>
+            <p className="max-w-md text-xs font-semibold text-slate-500 lg:text-right">저장된 이벤트 미리보기로 실시간 알림 팝업을 테스트합니다.</p>
           </div>
         </section>
+
+        {previewMessage ? <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-600">{previewMessage}</div> : null}
 
         {errorMessage && !isLoading ? (
           <ErrorPage
@@ -242,6 +287,7 @@ export default function DashboardPage() {
             </div>
           </DashboardPanel>
         </section> : null}
+        <RealtimePreviewToast event={previewEvent} open={isPreviewOpen} onClose={() => setIsPreviewOpen(false)} />
       </AppLayout>
     </RequireAuth>
   );
