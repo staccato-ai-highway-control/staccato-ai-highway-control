@@ -9,6 +9,7 @@ import { Badge } from "@/components/common/Badge";
 import { useRealtimeIncidents } from "@/features/realtime/useRealtimeIncidents";
 import type { RealtimeConnectionStatus, RealtimeIncidentEvent } from "@/features/realtime/types";
 import { formatKstDateTime } from "@/lib/dateTime";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
 type NotificationType = "INCIDENT" | "AI_ANALYSIS" | "REPORT" | "ADMIN" | "SYSTEM";
 type NotificationFilter = "ALL" | "UNREAD" | NotificationType;
@@ -21,6 +22,13 @@ type NotificationItem = {
   createdAt: string;
   isRead: boolean;
   source?: RealtimeIncidentEvent;
+};
+
+type NotificationMediaSource = RealtimeIncidentEvent & {
+  video_url?: string | null;
+  snapshot_url?: string | null;
+  preview_url?: string | null;
+  preview_type?: "video" | "image" | string | null;
 };
 
 const filterOptions: Array<{ label: string; value: NotificationFilter }> = [
@@ -109,6 +117,32 @@ function buildIncidentMessage(event: RealtimeIncidentEvent) {
   ].filter(Boolean);
 
   return parts.length > 0 ? parts.join(" · ") : "새로운 실시간 사고 이벤트가 수신되었습니다.";
+}
+
+function getNotificationVideoUrl(source?: RealtimeIncidentEvent) {
+  if (!source) return null;
+
+  const mediaSource = source as NotificationMediaSource;
+
+  return normalizeMediaUrl(
+    mediaSource.clip_path ??
+      mediaSource.video_url ??
+      (mediaSource.preview_type === "video" ? mediaSource.preview_url : null) ??
+      null
+  );
+}
+
+function getNotificationSnapshotUrl(source?: RealtimeIncidentEvent) {
+  if (!source) return null;
+
+  const mediaSource = source as NotificationMediaSource;
+
+  return normalizeMediaUrl(
+    mediaSource.snapshot_path ??
+      mediaSource.snapshot_url ??
+      (mediaSource.preview_type !== "video" ? mediaSource.preview_url : null) ??
+      null
+  );
 }
 
 function toNotificationItem(event: RealtimeIncidentEvent, readIds: Set<string>, deletedIds: Set<string>): NotificationItem | null {
@@ -239,6 +273,8 @@ export default function NotificationsPage() {
           {filteredNotifications.map((notification) => {
             const meta = typeMeta[notification.type];
             const Icon = meta.icon;
+            const videoUrl = getNotificationVideoUrl(notification.source);
+            const snapshotUrl = getNotificationSnapshotUrl(notification.source);
 
             return (
               <article
@@ -289,18 +325,18 @@ export default function NotificationsPage() {
                             onClick={(event) => event.stopPropagation()}
                             onKeyDown={(event) => event.stopPropagation()}
                           >
-                            {notification.source.clip_path ? (
+                            {videoUrl ? (
                               <div>
                                 <p className="mb-2 text-xs font-black text-slate-500">영상 미리보기</p>
                                 <video
-                                  src={notification.source.clip_path}
+                                  src={videoUrl}
                                   controls
                                   preload="metadata"
                                   playsInline
                                   className="max-h-48 w-full rounded-lg border border-slate-200 bg-black"
                                 />
                                 <a
-                                  href={notification.source.clip_path}
+                                  href={videoUrl}
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={(event) => event.stopPropagation()}
@@ -311,17 +347,17 @@ export default function NotificationsPage() {
                               </div>
                             ) : null}
 
-                            {notification.source.snapshot_path ? (
+                            {snapshotUrl ? (
                               <div>
                                 <p className="mb-2 text-xs font-black text-slate-500">스냅샷 미리보기</p>
                                 <img
-                                  src={notification.source.snapshot_path}
+                                  src={snapshotUrl}
                                   alt="이벤트 스냅샷"
                                   loading="lazy"
                                   className="max-h-48 w-full rounded-lg border border-slate-200 bg-white object-contain"
                                 />
                                 <a
-                                  href={notification.source.snapshot_path}
+                                  href={snapshotUrl}
                                   target="_blank"
                                   rel="noreferrer"
                                   onClick={(event) => event.stopPropagation()}

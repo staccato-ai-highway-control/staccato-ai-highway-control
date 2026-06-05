@@ -4,6 +4,7 @@ import { BellRing, ExternalLink, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { RealtimeEventPreview } from "@/features/realtime/types";
 import { formatKstDateTime } from "@/lib/dateTime";
+import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
 type RealtimePreviewToastProps = {
   event: RealtimeEventPreview | null;
@@ -38,8 +39,8 @@ function getPreviewKind(event: RealtimeEventPreview) {
 
 function getPreviewUrl(event: RealtimeEventPreview) {
   const previewKind = getPreviewKind(event);
-  if (previewKind === "video") return event.preview_url ?? event.video_url ?? null;
-  if (previewKind === "image") return event.preview_url ?? event.snapshot_url ?? null;
+  if (previewKind === "video") return normalizeMediaUrl(event.preview_url ?? event.video_url ?? null);
+  if (previewKind === "image") return normalizeMediaUrl(event.preview_url ?? event.snapshot_url ?? null);
   return null;
 }
 
