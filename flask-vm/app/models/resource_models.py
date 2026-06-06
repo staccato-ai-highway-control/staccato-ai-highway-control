@@ -46,5 +46,9 @@ class ProjectResource(db.Model):
 
     def to_detail_dict(self):
         data = self.to_list_dict()
-        data["download_url"] = f"/api/resources/{self.id}/download"
+        data["download_url"] = (
+            f"/api/resources/{self.id}/download"
+            if self.file_name and self.file_path
+            else None
+        )
         return data
