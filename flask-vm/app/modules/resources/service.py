@@ -22,6 +22,7 @@ DEFAULT_PAGE = 1
 DEFAULT_SIZE = 10
 MAX_SIZE = 100
 DEFAULT_VISIBILITY = "ADMIN_ALL"
+MAX_RESOURCE_FILE_SIZE = 50 * 1024 * 1024
 
 
 def list_resources(args) -> tuple[dict, int]:
@@ -223,6 +224,13 @@ def _save_resource_file(file):
     file.seek(0, os.SEEK_END)
     file_size = file.tell()
     file.seek(0)
+
+    if file_size > MAX_RESOURCE_FILE_SIZE:
+        return None, ({
+            "message": "Resource file is too large.",
+            "max_size": MAX_RESOURCE_FILE_SIZE,
+        }, 400)
+
     file.save(file_path)
 
     return {
