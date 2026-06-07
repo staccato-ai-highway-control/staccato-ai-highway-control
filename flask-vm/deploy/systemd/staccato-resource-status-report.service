@@ -1,0 +1,12 @@
+[Unit]
+Description=STACCATO resource access/status report generator
+After=network-online.target staccato-flask.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=staccato
+Group=staccato
+WorkingDirectory=/home/staccato/staccato/flask-vm
+Environment=PYTHONPATH=/home/staccato/staccato/flask-vm
+ExecStart=/home/staccato/staccato/flask-vm/.venv/bin/python /home/staccato/staccato/flask-vm/scripts/create_resource_status_report.py
