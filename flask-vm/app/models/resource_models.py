@@ -6,6 +6,7 @@ RESOURCE_CATEGORY_LABELS = {
     "COVER_LETTER": "자기소개서",
     "PRESENTATION": "프로젝트 발표자료",
     "MEETING_NOTE": "회의록",
+    "ACCESS_LOG": "접속 로그",
 }
 
 
