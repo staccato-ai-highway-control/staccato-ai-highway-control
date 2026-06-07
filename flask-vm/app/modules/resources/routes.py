@@ -18,12 +18,14 @@ RESOURCE_ADMIN_ROLES = ("SUPER_ADMIN", "CONTROL_ADMIN", "MAINTAINER")
 
 
 @resources_bp.get("")
+@require_roles(*RESOURCE_ADMIN_ROLES)
 def list_resources_api():
     result, status_code = list_resources(request.args)
     return jsonify(result), status_code
 
 
 @resources_bp.get("/<int:resource_id>")
+@require_roles(*RESOURCE_ADMIN_ROLES)
 def get_resource_detail_api(resource_id: int):
     result, status_code = get_resource_detail(resource_id)
     return jsonify(result), status_code
@@ -60,6 +62,7 @@ def delete_resource_api(resource_id: int):
 
 
 @resources_bp.get("/<int:resource_id>/download")
+@require_roles(*RESOURCE_ADMIN_ROLES)
 def download_resource_api(resource_id: int):
     result, status_code = download_resource(resource_id)
     if status_code == 200:
