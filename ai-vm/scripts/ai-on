@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE="staccato-ai-server.service"
+
+echo "========== AI-VM START =========="
+sudo systemctl daemon-reload
+sudo systemctl reset-failed "$SERVICE" 2>/dev/null || true
+sudo systemctl start "$SERVICE"
+
+sleep 5
+
+echo
+echo "========== STATUS =========="
+sudo systemctl status "$SERVICE" --no-pager -l | head -40
+
+echo
+echo "========== PORT 5001 =========="
+ss -ltnp | grep ':5001' || echo "ERROR: AI-vm 5001 is not listening"
+
+echo
+echo "========== HEALTH =========="
+curl --max-time 10 -sS http://localhost:5001/health || echo "AI-vm health check failed"
+
+echo
+echo "========== DONE =========="
