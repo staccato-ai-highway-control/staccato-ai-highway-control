@@ -25,7 +25,7 @@ DEFAULT_VISIBILITY = "ADMIN_ALL"
 MAX_RESOURCE_FILE_SIZE = 50 * 1024 * 1024
 
 
-def list_resources(args) -> tuple[dict, int]:
+def list_resources(args, current_user=None) -> tuple[dict, int]:
     page = _positive_int(args.get("page"), DEFAULT_PAGE, maximum=100000)
     size = _positive_int(args.get("size"), DEFAULT_SIZE, maximum=MAX_SIZE)
 
@@ -53,7 +53,7 @@ def list_resources(args) -> tuple[dict, int]:
     ).paginate(page=page, per_page=size, error_out=False)
 
     return {
-        "items": [resource.to_list_dict() for resource in pagination.items],
+        "items": [_serialize_resource(resource, current_user) for resource in pagination.items],
         "page": page,
         "size": size,
         "total": pagination.total,
@@ -61,12 +61,12 @@ def list_resources(args) -> tuple[dict, int]:
     }, 200
 
 
-def get_resource_detail(resource_id: int) -> tuple[dict, int]:
+def get_resource_detail(resource_id: int, current_user=None) -> tuple[dict, int]:
     resource = _get_active_resource(resource_id)
     if resource is None:
         return {"message": "Resource not found."}, 404
 
-    return resource.to_detail_dict(), 200
+    return _serialize_resource(resource, current_user, detail=True), 200
 
 
 def create_resource(form, file, current_user) -> tuple[dict, int]:
@@ -111,7 +111,7 @@ def create_resource(form, file, current_user) -> tuple[dict, int]:
     db.session.add(resource)
     db.session.commit()
 
-    return resource.to_detail_dict(), 201
+    return _serialize_resource(resource, current_user, detail=True), 201
 
 
 def update_resource(resource_id: int, form, file, current_user) -> tuple[dict, int]:
@@ -160,7 +160,7 @@ def update_resource(resource_id: int, form, file, current_user) -> tuple[dict, i
     db.session.add(resource)
     db.session.commit()
 
-    return resource.to_detail_dict(), 200
+    return _serialize_resource(resource, current_user, detail=True), 200
 
 
 def delete_resource(resource_id: int, current_user) -> tuple[dict, int]:
@@ -201,6 +201,27 @@ def download_resource(resource_id: int):
     response.headers["Cache-Control"] = "private, no-store"
 
     return response, 200
+
+
+def _serialize_resource(resource, current_user, detail=False):
+    data = resource.to_detail_dict() if detail else resource.to_list_dict()
+    is_author = bool(
+        current_user and resource.author_id == getattr(current_user, "id", None)
+    )
+    data["author_id"] = resource.author_id
+    data.setdefault(
+        "download_url",
+        f"/api/resources/{resource.id}/download"
+        if resource.file_name and resource.file_path
+        else None,
+    )
+    data["allowed_actions"] = {
+        "view": current_user is not None,
+        "update": is_author,
+        "delete": is_author,
+        "download": bool(data.get("download_url")),
+    }
+    return data
 
 
 def _save_resource_file(file):

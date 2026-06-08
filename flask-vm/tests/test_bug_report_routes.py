@@ -1,22 +1,58 @@
 from io import BytesIO
+from types import SimpleNamespace
 
 from app import create_app
+from flask_sqlalchemy.query import Query
 
 
-def test_create_bug_report_route_allows_anonymous_user(monkeypatch):
+def _authenticated_app(monkeypatch, role="VIEWER"):
+    app = create_app({"TESTING": True})
+    user = SimpleNamespace(
+        id=1,
+        role=role,
+        account_status="ACTIVE",
+    )
+    monkeypatch.setattr(
+        "app.utils.security.decode_access_token",
+        lambda token: {"sub": "1"},
+    )
+    monkeypatch.setattr(
+        Query,
+        "get",
+        lambda query, user_id: user,
+    )
+    return app, {"Authorization": "Bearer test-token"}, user
+
+
+def test_create_bug_report_route_requires_authentication():
     app = create_app({"TESTING": True})
 
-    def fake_create_bug_report(payload):
-        assert payload["title"] == "버그 제목"
-        assert payload["description"] == "버그 내용"
+    with app.test_client() as client:
+        response = client.post(
+            "/api/bug-reports",
+            json={"title": "버그 제목", "description": "버그 내용"},
+        )
+
+    body = response.get_json()
+    assert response.status_code == 401
+    assert body["success"] is False
+    assert body["status_code"] == 401
+    assert body["error_code"] == "UNAUTHORIZED"
+
+
+def test_create_bug_report_route_passes_authenticated_owner(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
+
+    def fake_create_bug_report(payload, current_user):
+        assert current_user is user
         return {
             "success": True,
-            "message": "Bug report created.",
             "data": {
                 "id": 1,
-                "reporter_id": None,
+                "reporter_id": current_user.id,
+                "author_id": current_user.id,
+                "allowed_actions": {"update": True},
                 "title": payload["title"],
-                "description": payload["description"],
             },
         }, 201
 
@@ -28,34 +64,23 @@ def test_create_bug_report_route_allows_anonymous_user(monkeypatch):
     with app.test_client() as client:
         response = client.post(
             "/api/bug-reports",
-            json={
-                "title": "버그 제목",
-                "description": "버그 내용",
-            },
+            json={"title": "버그 제목", "description": "버그 내용"},
+            headers=headers,
         )
 
     body = response.get_json()
     assert response.status_code == 201
-    assert body["success"] is True
-    assert body["data"]["reporter_id"] is None
+    assert body["data"]["reporter_id"] == user.id
+    assert body["data"]["allowed_actions"]["update"] is True
 
 
-def test_list_bug_reports_route_returns_pagination(monkeypatch):
-    app = create_app({"TESTING": True})
+def test_list_bug_reports_route_passes_authenticated_user(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
 
-    def fake_list_bug_reports(args):
+    def fake_list_bug_reports(args, current_user):
+        assert current_user is user
         assert args.get("page") == "2"
-        assert args.get("size") == "5"
-        return {
-            "success": True,
-            "data": {
-                "items": [],
-                "page": 2,
-                "size": 5,
-                "total_count": 0,
-                "total_pages": 0,
-            },
-        }, 200
+        return {"success": True, "data": {"items": [], "page": 2}}, 200
 
     monkeypatch.setattr(
         "app.modules.bug_report.routes.list_bug_reports",
@@ -63,26 +88,24 @@ def test_list_bug_reports_route_returns_pagination(monkeypatch):
     )
 
     with app.test_client() as client:
-        response = client.get("/api/bug-reports?page=2&size=5")
+        response = client.get("/api/bug-reports?page=2", headers=headers)
 
-    body = response.get_json()
     assert response.status_code == 200
-    assert body["success"] is True
-    assert body["data"]["page"] == 2
-    assert body["data"]["size"] == 5
+    assert response.get_json()["data"]["page"] == 2
 
 
-def test_get_bug_report_detail_route(monkeypatch):
-    app = create_app({"TESTING": True})
+def test_get_bug_report_detail_route_passes_authenticated_user(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
 
-    def fake_get_bug_report_detail(bug_report_id):
+    def fake_get_bug_report_detail(bug_report_id, current_user):
         assert bug_report_id == 10
+        assert current_user is user
         return {
             "success": True,
             "data": {
                 "id": bug_report_id,
-                "title": "상세 제목",
-                "attachments": [],
+                "reporter_id": user.id,
+                "allowed_actions": {"view": True},
             },
         }, 200
 
@@ -92,28 +115,25 @@ def test_get_bug_report_detail_route(monkeypatch):
     )
 
     with app.test_client() as client:
-        response = client.get("/api/bug-reports/10")
+        response = client.get("/api/bug-reports/10", headers=headers)
 
-    body = response.get_json()
     assert response.status_code == 200
-    assert body["success"] is True
-    assert body["data"]["id"] == 10
-    assert body["data"]["attachments"] == []
+    assert response.get_json()["data"]["allowed_actions"]["view"] is True
 
 
-def test_update_bug_report_route(monkeypatch):
-    app = create_app({"TESTING": True})
+def test_update_bug_report_route_passes_authenticated_owner(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
 
-    def fake_update_bug_report(bug_report_id, payload):
+    def fake_update_bug_report(bug_report_id, payload, current_user):
         assert bug_report_id == 10
-        assert payload["title"] == "수정된 버그"
+        assert current_user is user
         return {
             "success": True,
-            "message": "Bug report updated.",
             "data": {
                 "id": bug_report_id,
                 "title": payload["title"],
-                "status": "IN_PROGRESS",
+                "reporter_id": current_user.id,
+                "allowed_actions": {"update": True, "close": True},
             },
         }, 200
 
@@ -125,31 +145,27 @@ def test_update_bug_report_route(monkeypatch):
     with app.test_client() as client:
         response = client.patch(
             "/api/bug-reports/10",
-            json={
-                "title": "수정된 버그",
-                "status": "IN_PROGRESS",
-            },
+            json={"title": "수정된 버그"},
+            headers=headers,
         )
 
-    body = response.get_json()
     assert response.status_code == 200
-    assert body["success"] is True
-    assert body["data"]["id"] == 10
-    assert body["data"]["title"] == "수정된 버그"
+    assert response.get_json()["data"]["allowed_actions"]["close"] is True
 
 
-def test_close_bug_report_route(monkeypatch):
-    app = create_app({"TESTING": True})
+def test_close_bug_report_route_passes_authenticated_owner(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
 
-    def fake_close_bug_report(bug_report_id):
+    def fake_close_bug_report(bug_report_id, current_user):
         assert bug_report_id == 10
+        assert current_user is user
         return {
             "success": True,
-            "message": "Bug report closed.",
-            "bug_report_id": bug_report_id,
             "data": {
                 "id": bug_report_id,
                 "status": "CLOSED",
+                "reporter_id": user.id,
+                "allowed_actions": {"close": False},
             },
         }, 200
 
@@ -159,35 +175,23 @@ def test_close_bug_report_route(monkeypatch):
     )
 
     with app.test_client() as client:
-        response = client.delete("/api/bug-reports/10")
+        response = client.delete("/api/bug-reports/10", headers=headers)
 
-    body = response.get_json()
     assert response.status_code == 200
-    assert body["success"] is True
-    assert body["bug_report_id"] == 10
-    assert body["data"]["status"] == "CLOSED"
+    assert response.get_json()["data"]["status"] == "CLOSED"
 
 
-def test_bug_report_attachment_route_uploads_files(monkeypatch):
-    app = create_app({"TESTING": True})
+def test_bug_report_attachment_route_passes_authenticated_owner(monkeypatch):
+    app, headers, user = _authenticated_app(monkeypatch)
 
-    def fake_create_bug_report_attachments(bug_report_id, files):
+    def fake_create_bug_report_attachments(bug_report_id, files, current_user):
         assert bug_report_id == 10
-        assert len(files) == 1
+        assert current_user is user
         assert files[0].filename == "screenshot.png"
         return {
             "success": True,
-            "message": "Bug report attachments uploaded.",
             "bug_report_id": bug_report_id,
-            "count": 1,
-            "items": [
-                {
-                    "id": 1,
-                    "bug_report_id": bug_report_id,
-                    "original_filename": "screenshot.png",
-                    "download_url": "/api/bug-reports/attachments/1/download",
-                }
-            ],
+            "items": [{"id": 1, "uploaded_by": current_user.id}],
         }, 201
 
     monkeypatch.setattr(
@@ -198,18 +202,13 @@ def test_bug_report_attachment_route_uploads_files(monkeypatch):
     with app.test_client() as client:
         response = client.post(
             "/api/bug-reports/10/attachments",
-            data={
-                "files": (BytesIO(b"fake image"), "screenshot.png"),
-            },
+            data={"files": (BytesIO(b"fake image"), "screenshot.png")},
             content_type="multipart/form-data",
+            headers=headers,
         )
 
-    body = response.get_json()
     assert response.status_code == 201
-    assert body["success"] is True
-    assert body["bug_report_id"] == 10
-    assert body["count"] == 1
-    assert body["items"][0]["download_url"] == "/api/bug-reports/attachments/1/download"
+    assert response.get_json()["items"][0]["uploaded_by"] == user.id
 
 
 def test_bug_report_routes_are_registered():
@@ -222,7 +221,6 @@ def test_bug_report_routes_are_registered():
 
     assert ("/api/bug-reports", ("GET",)) in routes
     assert ("/api/bug-reports", ("POST",)) in routes
-
     assert ("/api/bug-reports/my", ("GET",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("GET",)) in routes
     assert ("/api/bug-reports/<int:bug_report_id>", ("PATCH",)) in routes

@@ -1,4 +1,5 @@
 from app.extensions import db
+from app.utils.bbox import build_bbox_metadata
 
 
 class AiEvent(db.Model):
@@ -30,6 +31,24 @@ class AiEvent(db.Model):
     def to_dict(self):
         raw_event = self.raw_event_json if isinstance(self.raw_event_json, dict) else {}
 
+        detections = raw_event.get("detections")
+        if not isinstance(detections, list):
+            detections = []
+
+        normalized_detections = []
+        for detection in detections:
+            if not isinstance(detection, dict):
+                continue
+            item = dict(detection)
+            detection_bbox = item.get("bbox", item.get("bbox_json"))
+            item["bbox_metadata"] = build_bbox_metadata(
+                detection_bbox,
+                coordinate_space=item.get("bbox_coordinate_space"),
+                frame_width=item.get("frame_width") or raw_event.get("frame_width"),
+                frame_height=item.get("frame_height") or raw_event.get("frame_height"),
+            )
+            normalized_detections.append(item)
+
         return {
             "event_id": self.event_id,
             "camera_id": self.camera_id,
@@ -42,6 +61,14 @@ class AiEvent(db.Model):
             "roi_id": self.roi_id,
             "lane_type": self.lane_type,
             "bbox": self.bbox_json,
+            "bbox_metadata": build_bbox_metadata(
+                self.bbox_json,
+                coordinate_space=raw_event.get("bbox_coordinate_space"),
+                frame_width=raw_event.get("frame_width"),
+                frame_height=raw_event.get("frame_height"),
+            ),
+            "detections": normalized_detections,
+            "detection_count": len(normalized_detections),
             "snapshot_url": self.snapshot_url,
             "video_url": self.video_url,
             "stream_url": self.stream_url,

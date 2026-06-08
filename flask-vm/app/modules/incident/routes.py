@@ -12,6 +12,7 @@ from app.models.ai_event_models import AiEvent
 from app.models.incident_support_models import IncidentStatusHistory
 from app.modules.incident.service import IncidentService
 from app.modules.report_upload.service import ReportUploadService
+from app.utils.bbox import build_bbox_metadata
 from app.utils.security import require_auth
 
 
@@ -160,7 +161,23 @@ def _to_frontend_incident(incident: Incident) -> dict:
 
     video_url = ai_event.video_url if ai_event and ai_event.video_url else ""
     stream_url = ai_event.stream_url if ai_event and ai_event.stream_url else ""
-    bbox = ai_event.bbox_json if ai_event and ai_event.bbox_json else None
+    bbox = None
+    if detection_log and detection_log.bbox_json:
+        bbox = detection_log.bbox_json
+    elif ai_event and ai_event.bbox_json:
+        bbox = ai_event.bbox_json
+
+    raw_ai_event = (
+        ai_event.raw_event_json
+        if ai_event and isinstance(ai_event.raw_event_json, dict)
+        else {}
+    )
+    bbox_metadata = build_bbox_metadata(
+        bbox,
+        coordinate_space=raw_ai_event.get("bbox_coordinate_space"),
+        frame_width=raw_ai_event.get("frame_width"),
+        frame_height=raw_ai_event.get("frame_height"),
+    )
 
     roi_type = "SHOULDER" if event_type == "SHOULDER_STOP" else "LANE"
     if detection_log and detection_log.roi_type:
@@ -189,6 +206,7 @@ def _to_frontend_incident(incident: Incident) -> dict:
         "videoUrl": video_url,
         "streamUrl": stream_url,
         "bbox": bbox,
+        "bbox_metadata": bbox_metadata,
         "roiType": roi_type,
         "movementDeltaPx": _to_float(
             detection_log.movement_delta_px if detection_log else None,

@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from app.extensions import db
 from app.models import DetectionLog, Incident, IncidentSnapshot, RealtimeEvent
 from app.modules.socketio import emitters as socket_emitters
+from app.utils.bbox import build_bbox_metadata
 
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,13 @@ def _build_socket_payload(
         "track_id": source_payload.get("track_id"),
         "roi_type": source_payload.get("roi_type"),
         "confidence": float(incident.confidence) if incident.confidence is not None else None,
+        "bbox": detection_log.bbox_json if detection_log else None,
+        "bbox_metadata": build_bbox_metadata(
+            detection_log.bbox_json if detection_log else None,
+            coordinate_space=source_payload.get("bbox_coordinate_space"),
+            frame_width=source_payload.get("frame_width"),
+            frame_height=source_payload.get("frame_height"),
+        ),
         "snapshot_path": snapshot.file_path if snapshot else source_payload.get("snapshot_path"),
         "clip_path": source_payload.get("clip_path"),
     }

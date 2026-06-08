@@ -242,7 +242,7 @@ def delete_report_draft(draft_id):
 @require_auth
 def get_report(report_id):
     try:
-        result, status_code = ReportUploadService.get_report(report_id)
+        result, status_code = ReportUploadService.get_report(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -262,12 +262,21 @@ def create_report():
             return jsonify({"success": False, "error": "파일이 업로드되지 않았습니다."}), 400
 
         report = ReportUploadService.create_report(user_id, data, files)
+        report_data = ReportUploadService._report_response(
+            report,
+            current_user=request.current_user,
+        )
 
         return jsonify({
             "success": True,
             "message": "리포트가 성공적으로 접수되었습니다.",
             "report_code": report.report_code,
             "report_id": report.id,
+            "reporter_id": report.reporter_id,
+            "author_id": report.reporter_id,
+            "analysis_status": report_data.get("analysis_status"),
+            "allowed_actions": report_data.get("allowed_actions"),
+            "data": report_data,
         }), 201
 
     except ValueError as e:
@@ -478,7 +487,7 @@ def delete_report_attachment(report_id, attachment_id):
 @require_auth
 def get_report_analysis_status(report_id):
     try:
-        result, status_code = ReportUploadService.get_analysis_status(report_id)
+        result, status_code = ReportUploadService.get_analysis_status(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -490,7 +499,7 @@ def get_report_analysis_status(report_id):
 @require_auth
 def list_report_analysis_jobs(report_id):
     try:
-        result, status_code = ReportUploadService.list_analysis_jobs(report_id)
+        result, status_code = ReportUploadService.list_analysis_jobs(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -539,7 +548,7 @@ def compare_analysis_jobs():
 @require_auth
 def get_report_analysis_job(job_id):
     try:
-        result, status_code = ReportUploadService.get_analysis_job(job_id)
+        result, status_code = ReportUploadService.get_analysis_job(job_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -568,10 +577,9 @@ def retry_report_analysis_job(job_id):
 @require_auth
 def request_report_analysis(report_id):
     try:
-        user_id = request.current_user.id
         result, status_code = ReportUploadService.request_report_analysis(
             report_id=report_id,
-            user_id=user_id,
+            current_user=request.current_user,
         )
         return jsonify(result), status_code
 

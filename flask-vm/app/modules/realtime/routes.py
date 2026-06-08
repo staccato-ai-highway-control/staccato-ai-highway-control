@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Blueprint, jsonify, request
 
 from app.models import RealtimeEvent
+from app.utils.bbox import build_bbox_metadata
 
 
 RECENT_INCIDENT_EVENT_NAME = "incident.created"
@@ -53,6 +54,10 @@ def _normalize_incident_payload(event: RealtimeEvent) -> dict:
         "track_id": payload.get("track_id"),
         "roi_type": payload.get("roi_type"),
         "confidence": payload.get("confidence"),
+        "bbox": payload.get("bbox"),
+        "bbox_metadata": payload.get("bbox_metadata") or build_bbox_metadata(
+            payload.get("bbox")
+        ),
         "snapshot_path": payload.get("snapshot_path"),
         "clip_path": payload.get("clip_path"),
     }
@@ -155,6 +160,8 @@ def _normalize_event_preview(event: RealtimeEvent) -> dict:
         "message": item.get("message"),
         "severity": item.get("severity"),
         "source_cctv_id": item.get("source_cctv_id"),
+        "bbox": item.get("bbox"),
+        "bbox_metadata": item.get("bbox_metadata"),
         "snapshot_url": snapshot_url,
         "video_url": video_url,
         "preview_url": video_url or snapshot_url,
