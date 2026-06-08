@@ -171,6 +171,70 @@ class ReportUploadService:
                 raise ValueError(f"영상 크기가 너무 큽니다. (최대 {max_mb}MB)")
 
     @staticmethod
+    def process_file_upload(file):
+        original_filename = ReportUploadService._clean_original_filename(file.filename)
+        stored_filename = ReportUploadService._stored_filename(original_filename)
+        file_type = ReportUploadService._get_file_type(original_filename)
+
+        upload_base = current_app.config.get("UPLOAD_BASE_PATH")
+        if not upload_base:
+            upload_base = os.path.join(
+                current_app.config.get("STORAGE_ROOT", "storage"),
+                "uploads",
+            )
+
+        os.makedirs(upload_base, exist_ok=True)
+        file_path = os.path.join(upload_base, stored_filename)
+
+        stream = getattr(file, "stream", None)
+        file_size = 0
+
+        if stream is not None:
+            try:
+                current_position = stream.tell()
+                stream.seek(0, os.SEEK_END)
+                file_size = stream.tell()
+                stream.seek(current_position)
+            except Exception:
+                file_size = 0
+
+        ReportUploadService._validate_file_size(file_type, file_size)
+
+        if stream is not None:
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+
+        file.save(file_path)
+
+        if file_size == 0 and os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+
+        import hashlib
+
+        file_hash = None
+        if os.path.exists(file_path):
+            hasher = hashlib.sha256()
+            with open(file_path, "rb") as saved_file:
+                for chunk in iter(lambda: saved_file.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            file_hash = hasher.hexdigest()
+
+        return {
+            "original_filename": original_filename,
+            "stored_filename": stored_filename,
+            "file_name": original_filename,
+            "storage_type": "LOCAL",
+            "file_path": file_path,
+            "file_type": file_type,
+            "file_size": file_size,
+            "file_hash": file_hash,
+            "mime_type": getattr(file, "mimetype", None) or "application/octet-stream",
+            "scan_status": "PENDING",
+        }
+
+    @staticmethod
     def _model_kwargs(model_cls, values):
         columns = {column.name for column in model_cls.__table__.columns}
         return {key: value for key, value in values.items() if key in columns}
