@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE="staccato-ai-server.service"
+
+echo "========== AI-VM STOP =========="
+sudo systemctl stop "$SERVICE" || true
+
+sleep 3
+
+echo
+echo "========== STATUS =========="
+sudo systemctl status "$SERVICE" --no-pager -l | head -30 || true
+
+echo
+echo "========== PORT 5001 =========="
+ss -ltnp | grep ':5001' || echo "AI-vm 5001 stopped"
+
+echo
+echo "========== HEALTH =========="
+curl --max-time 5 -sS http://localhost:5001/health || echo "AI-vm health check failed as expected"
+
+echo
+echo "========== DONE =========="

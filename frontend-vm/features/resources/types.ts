@@ -1,4 +1,4 @@
-export type ResourceCategory = "RESUME" | "COVER_LETTER" | "PRESENTATION" | "MEETING_NOTE";
+export type ResourceCategory = "RESUME" | "COVER_LETTER" | "PRESENTATION" | "MEETING_NOTE" | "ACCESS_LOG";
 
 export type ResourceVisibility = "ADMIN_ALL" | "SUPER_ADMIN_ONLY" | "OWNER_ONLY";
 

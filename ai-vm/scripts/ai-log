@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sudo journalctl -u staccato-ai-server.service --since "10 minutes ago" --no-pager -n 150

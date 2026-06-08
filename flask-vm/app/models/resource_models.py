@@ -6,6 +6,7 @@ RESOURCE_CATEGORY_LABELS = {
     "COVER_LETTER": "자기소개서",
     "PRESENTATION": "프로젝트 발표자료",
     "MEETING_NOTE": "회의록",
+    "ACCESS_LOG": "접속 로그",
 }
 
 
@@ -46,5 +47,9 @@ class ProjectResource(db.Model):
 
     def to_detail_dict(self):
         data = self.to_list_dict()
-        data["download_url"] = f"/api/resources/{self.id}/download"
+        data["download_url"] = (
+            f"/api/resources/{self.id}/download"
+            if self.file_name and self.file_path
+            else None
+        )
         return data
