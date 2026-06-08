@@ -10,6 +10,7 @@ import type { AuthUser } from "@/features/auth/types";
 import { deleteResource, downloadResourceFile, getResource } from "@/features/resources/api";
 import type { ResourceItem } from "@/features/resources/types";
 import { getStoredAuthUser } from "@/lib/authStorage";
+import { isApiError } from "@/lib/apiClient";
 import { formatResourceDate, formatResourceFileSize, resourceCategoryLabels, resourceCategoryTone, resourceVisibilityLabels } from "./resourceData";
 import { isResourceOwner } from "./resourcePermissions";
 
@@ -19,6 +20,7 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
   const [resource, setResource] = useState<ResourceItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -31,12 +33,16 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
     async function loadResource() {
       setLoading(true);
       setErrorMessage("");
+      setErrorStatus(null);
 
       try {
         const nextResource = await getResource(resourceId);
         if (!disposed) setResource(nextResource);
       } catch (error) {
-        if (!disposed) setErrorMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
+        if (!disposed) {
+          setErrorStatus(isApiError(error) ? error.statusCode : 500);
+          setErrorMessage(error instanceof Error ? error.message : "자료를 불러오지 못했습니다.");
+        }
       } finally {
         if (!disposed) setLoading(false);
       }
@@ -50,7 +56,7 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
   }, [resourceId]);
 
   async function handleDownload() {
-    if (!resource) return;
+    if (!resource?.file_name) return;
 
     try {
       await downloadResourceFile(resource.id, resource.file_name);
@@ -88,7 +94,7 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
           </Link>
         </div>
 
-        {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
+        {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700"><b>{errorStatus ?? 500}</b> · {errorMessage}</div> : null}
         {loading ? <Card className="p-10 text-center text-sm font-semibold text-slate-500">자료를 불러오는 중입니다.</Card> : null}
         {!loading && !resource ? <Card className="p-10 text-center text-sm font-semibold text-slate-500">요청한 자료를 찾을 수 없습니다.</Card> : null}
 
@@ -105,10 +111,12 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
                   <p className="mt-3 text-sm font-semibold text-slate-500">{resource.author_name} · {formatResourceDate(resource.created_at)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <button type="button" onClick={handleDownload} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 px-3 text-sm font-bold text-sky-700 transition hover:bg-sky-50">
-                    <Download className="h-4 w-4" aria-hidden="true" />
-                    다운로드
-                  </button>
+                  {resource.file_name ? (
+                    <button type="button" onClick={handleDownload} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-200 px-3 text-sm font-bold text-sky-700 transition hover:bg-sky-50">
+                      <Download className="h-4 w-4" aria-hidden="true" />
+                      다운로드
+                    </button>
+                  ) : null}
                   {canManage ? (
                     <>
                       <Link href={`/resources/${resource.id}/edit`} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">
@@ -133,8 +141,14 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
             <Card className="p-5">
               <h2 className="mb-3 text-base font-black text-slate-950">첨부파일</h2>
               <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
-                <p className="truncate text-sm font-black text-slate-950">{resource.file_name}</p>
-                <p className="mt-2 text-xs font-semibold text-slate-500">{resource.file_type} · {formatResourceFileSize(resource.file_size)}</p>
+                {resource.file_name ? (
+                  <>
+                    <p className="truncate text-sm font-black text-slate-950">{resource.file_name}</p>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">{resource.file_type || "파일"} · {formatResourceFileSize(resource.file_size ?? 0)}</p>
+                  </>
+                ) : (
+                  <p className="text-sm font-semibold text-slate-500">첨부된 파일이 없습니다.</p>
+                )}
               </div>
             </Card>
           </article>

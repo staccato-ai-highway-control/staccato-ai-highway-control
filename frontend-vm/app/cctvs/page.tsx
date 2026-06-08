@@ -10,31 +10,6 @@ import { CctvDetailModal } from "@/components/cctv/CctvDetailModal";
 import { RoiSettingsModal } from "@/components/cctv/RoiSettingsModal";
 import { getCameras, type CameraSlotConfig } from "@/features/cctvs/api";
 import type { Cctv } from "@/types/cctv";
-import type { ManualIncident, ManualIncidentPayload } from "@/types/incident";
-
-function formatNow() {
-  return new Intl.DateTimeFormat("ko-KR", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date());
-}
-
-function createManualIncident(
-  payload: ManualIncidentPayload,
-  sequence: number
-): ManualIncident {
-  return {
-    ...payload,
-    id: `manual-incident-${sequence}`,
-    incidentCode: `MAN-${String(sequence).padStart(4, "0")}`,
-    createdAt: formatNow(),
-  };
-}
 
 function getCameraLabel(cctv: Cctv, index: number) {
   const raw = cctv as Cctv & Record<string, unknown>;
@@ -75,7 +50,6 @@ function createSingleSlotConfig(cctv: Cctv | null): CameraSlotConfig[] {
 export default function CctvsPage() {
   const [selectedCctvId, setSelectedCctvId] = useState<string>("");
   const [selectedDetailCctv, setSelectedDetailCctv] = useState<Cctv | null>(null);
-  const [manualIncidents, setManualIncidents] = useState<ManualIncident[]>([]);
   const [cctvs, setCctvs] = useState<Cctv[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -111,30 +85,13 @@ export default function CctvsPage() {
   }, [cctvs, selectedCctvId]);
 
   const selectedCctvIndex = selectedCctv ? cctvs.findIndex((cctv) => cctv.id === selectedCctv.id) : -1;
-  const selectedCctvIncidents = selectedCctv
-    ? manualIncidents.filter((incident) => incident.cctvId === selectedCctv.id)
-    : [];
   const roiSlotConfig = useMemo(() => createSingleSlotConfig(selectedCctv), [selectedCctv]);
   const isMainStreamVisible = Boolean(selectedCctv && !isRoiSettingsOpen);
 
   useEffect(() => {
     setIsStreamReady(false);
-
-    if (!isMainStreamVisible) return;
-
-    const timer = window.setTimeout(() => {
-      setIsStreamReady(true);
-    }, 1200);
-
-    return () => window.clearTimeout(timer);
   }, [selectedCctv?.streamUrl, isMainStreamVisible]);
 
-  function handleCreateManualIncident(payload: ManualIncidentPayload) {
-    const incident = createManualIncident(payload, manualIncidents.length + 1);
-
-    setManualIncidents((current) => [incident, ...current]);
-    window.alert("시연용 이벤트가 생성되었습니다.");
-  }
 
   return (
     <RequireAuth>
@@ -234,7 +191,7 @@ export default function CctvsPage() {
                     onClick={() => setIsRoiSettingsOpen(true)}
                     className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800"
                   >
-                    ROI 설정
+                    ROI 임시 설정
                   </button>
                 </div>
               </div>
@@ -286,9 +243,7 @@ export default function CctvsPage() {
           <CctvDetailModal
             cctv={selectedDetailCctv}
             cctvIndex={selectedCctvIndex >= 0 ? selectedCctvIndex : 0}
-            incidents={selectedCctvIncidents}
             onClose={() => setSelectedDetailCctv(null)}
-            onCreateIncident={handleCreateManualIncident}
           />
         ) : null}
 

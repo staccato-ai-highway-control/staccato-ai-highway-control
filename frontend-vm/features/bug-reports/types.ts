@@ -14,8 +14,20 @@ export interface BugReportAttachment {
   uploaded_at?: string | null;
 }
 
+export interface BugReportAllowedActions {
+  update?: boolean;
+  close?: boolean;
+  upload_attachment?: boolean;
+  edit?: boolean;
+  delete?: boolean;
+}
+
 export interface BugReport {
   id: number | string;
+  reporter_id?: number | string | null;
+  author_id?: number | string | null;
+  user_id?: number | string | null;
+  allowed_actions?: BugReportAllowedActions | null;
   title: string;
   description?: string;
   category?: string;

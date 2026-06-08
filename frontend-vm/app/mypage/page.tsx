@@ -152,7 +152,11 @@ function ReportActivitySection() {
 
     try {
       const response = await getMyBugReports({ page: 1, size: 10, ...params });
-      setBugReports(response.items);
+      const currentUser = getStoredAuthUser();
+      const ownItems = currentUser?.id === undefined
+        ? []
+        : response.items.filter((item) => String(item.reporter_id ?? item.author_id ?? item.user_id) === String(currentUser.id));
+      setBugReports(ownItems);
     } catch {
       setBugReports([]);
       setBugReportsError("내 버그 리포트 목록을 불러오지 못했습니다.");

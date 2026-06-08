@@ -8,7 +8,9 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
 import { Badge } from "@/components/common/Badge";
 import { getMyReports, getReports, requestReportAnalysis } from "@/features/reports/api";
+import type { AuthUser } from "@/features/auth/types";
 import type { PaginatedReports, Report, ReportListParams } from "@/features/reports/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 type ReportFilter = {
   keyword: string;
@@ -126,10 +128,12 @@ const analysisStatusLabels: Record<string, string> = {
   WAITING: "대기",
   REQUESTED: "요청됨",
   QUEUED: "대기열",
+  RUNNING: "실행중",
   PROCESSING: "처리중",
   ANALYZING: "분석중",
   COMPLETED: "완료",
   FAILED: "실패",
+  CANCELLED: "취소됨",
 };
 
 function getLatestAnalysisJob(report: Report): AnalysisJobWithMetrics | null {
@@ -227,6 +231,7 @@ function toParams(filter: ReportFilter): ReportListParams {
 }
 
 export default function ReportsPage() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [filter, setFilter] = useState<ReportFilter>({ keyword: "", status: "", report_type: "", priority: "", page: 1, size: 10, mine: false });
   const [draftKeyword, setDraftKeyword] = useState("");
   const [result, setResult] = useState<PaginatedReports>({ items: [], page: 1, size: 10, total_count: 0, total_pages: 0 });
@@ -251,6 +256,7 @@ export default function ReportsPage() {
   }
 
   useEffect(() => {
+    setAuthUser(getStoredAuthUser());
     loadReports();
   }, [filter.keyword, filter.status, filter.report_type, filter.priority, filter.page, filter.size, filter.mine]);
 
@@ -277,6 +283,7 @@ export default function ReportsPage() {
     }
   }
 
+  const canOperateReports = authUser?.account_status?.toUpperCase() === "ACTIVE" && ["SUPER_ADMIN", "CONTROL_ADMIN"].includes(authUser.role ?? "");
   const reports = useMemo(() => result.items.filter((report) => getReportStatus(report) !== "DELETED"), [result.items]);
   const canPrev = result.page > 1;
   const canNext = result.total_pages > 0 && result.page < result.total_pages;
@@ -394,10 +401,10 @@ export default function ReportsPage() {
                         <div className="flex flex-wrap gap-2">
                           <Link href={`/reports/${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
                           <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
-                          <button type="button" onClick={() => handleRequestAnalysis(report)} disabled={analyzingId === getReportId(report)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
+                          {canOperateReports ? <button type="button" onClick={() => handleRequestAnalysis(report)} disabled={analyzingId === getReportId(report)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
                             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                             분석
-                          </button>
+                          </button> : null}
                         </div>
                       </td>
                     </tr>

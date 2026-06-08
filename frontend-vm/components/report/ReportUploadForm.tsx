@@ -30,6 +30,7 @@ function formatDraftDate(value?: string | null) {
 export function ReportUploadForm() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -54,6 +55,20 @@ export function ReportUploadForm() {
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     setSelectedFiles(Array.from(event.target.files ?? []));
+  }
+
+  function handleFileSelectClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleRemoveSelectedFile(fileIndex: number) {
+    const nextFiles = selectedFiles.filter((_, index) => index !== fileIndex);
+    setSelectedFiles(nextFiles);
+
+    if (!fileInputRef.current) return;
+    const dataTransfer = new DataTransfer();
+    nextFiles.forEach((file) => dataTransfer.items.add(file));
+    fileInputRef.current.files = dataTransfer.files;
   }
 
   function getFormString(formData: FormData, key: string) {
@@ -551,6 +566,7 @@ export function ReportUploadForm() {
       <label className="grid gap-2 text-sm font-semibold">
         이미지/영상 업로드
         <input
+          ref={fileInputRef}
           name="files"
           type="file"
           multiple
@@ -559,7 +575,11 @@ export function ReportUploadForm() {
           className="rounded-lg border border-slate-200 p-3"
         />
       </label>
-      <ReportFilePreview files={selectedFiles} />
+      <ReportFilePreview
+        files={selectedFiles}
+        onSelectFiles={handleFileSelectClick}
+        onRemoveFile={handleRemoveSelectedFile}
+      />
       {statusMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-staccato">{statusMessage}</p> : null}
       {errorMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{errorMessage}</p> : null}
       <button type="submit" disabled={isSubmitting || isCompleted} className="h-11 rounded-lg bg-staccato font-bold text-white disabled:opacity-60">

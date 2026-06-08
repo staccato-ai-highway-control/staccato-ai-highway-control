@@ -92,7 +92,7 @@ async function fetchAttachmentBlob(path: string) {
 }
 
 export async function fetchBugReports(params: BugReportListParams = {}) {
-  const response = await apiClient<RawBugReportListResponse>(`/api/bug-reports${buildQuery(params)}`, { auth: false });
+  const response = await apiClient<RawBugReportListResponse>(`/api/bug-reports${buildQuery(params)}`);
   return normalizeBugReportList(response);
 }
 
@@ -102,10 +102,15 @@ export async function getMyBugReports(params: BugReportListParams = {}) {
 }
 
 export async function fetchBugReport(id: string | number) {
-  const response = await apiClient<RawBugReportDetailResponse>(`/api/bug-reports/${id}`, { auth: false });
+  const response = await apiClient<RawBugReportDetailResponse>(
+    `/api/bug-reports/${id}`);
 
   if (typeof response === "object" && response !== null) {
-    const detail = response as { data?: BugReport; bug_report?: BugReport; report?: BugReport };
+    const detail = response as {
+      data?: BugReport;
+      bug_report?: BugReport;
+      report?: BugReport;};
+
     if (detail.data) return detail.data;
     if (detail.bug_report) return detail.bug_report;
     if (detail.report) return detail.report;
@@ -115,22 +120,35 @@ export async function fetchBugReport(id: string | number) {
 }
 
 export async function updateBugReport(id: string | number, payload: BugReportUpdateRequest) {
-  const response = await apiClient<FlexibleApiResponse<BugReport> | { bug_report?: BugReport }>(`/api/bug-reports/${id}`, {
-    method: "PATCH",
-    body: payload,
-  });
+  const response = await apiClient<FlexibleApiResponse<BugReport> | { bug_report?: BugReport }>(
+    `/api/bug-reports/${id}`,
+    {
+      method: "PATCH",
+      body: payload,
+    }
+  );
 
-  if (typeof response === "object" && response !== null && "bug_report" in response && (response as { bug_report?: BugReport }).bug_report) {
+  if (
+    typeof response === "object" &&
+    response !== null &&
+    "bug_report" in response &&
+    (response as { bug_report?: BugReport }).bug_report
+  ) {
     return (response as { bug_report: BugReport }).bug_report;
   }
 
-  return getEnvelopeData<BugReport>(response as FlexibleApiResponse<BugReport>);
+  return getEnvelopeData<BugReport>(
+    response as FlexibleApiResponse<BugReport>
+  );
 }
 
 export function closeBugReport(id: string | number) {
-  return apiClient<FlexibleApiResponse<BugReport> | { bug_report?: BugReport }>(`/api/bug-reports/${id}`, {
-    method: "DELETE",
-  });
+  return apiClient<FlexibleApiResponse<BugReport> | { bug_report?: BugReport }>(
+    `/api/bug-reports/${id}`,
+    {
+      method: "DELETE",
+    }
+  );
 }
 
 export async function createBugReport(payload: BugReportCreateRequest) {
@@ -138,7 +156,6 @@ export async function createBugReport(payload: BugReportCreateRequest) {
     "/api/bug-reports",
     {
       method: "POST",
-      auth: false,
       body: payload,
     }
   );

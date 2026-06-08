@@ -10,9 +10,9 @@ export type ResourceItem = {
   description: string;
   author_id: number;
   author_name: string;
-  file_name: string;
-  file_type: string;
-  file_size: number;
+  file_name?: string | null;
+  file_type?: string | null;
+  file_size?: number | null;
   visibility: ResourceVisibility;
   download_url?: string;
   created_at: string;
@@ -32,6 +32,8 @@ export type ResourceListResponse = {
   size: number;
   total: number;
   pages: number;
+  total_count?: number;
+  total_pages?: number;
 };
 
 export type CreateResourcePayload = {
@@ -40,7 +42,7 @@ export type CreateResourcePayload = {
   author_name?: string;
   description?: string;
   visibility: ResourceVisibility;
-  file: File;
+  file?: File | null;
 };
 
 export type UpdateResourcePayload = Partial<Omit<CreateResourcePayload, "file">> & {

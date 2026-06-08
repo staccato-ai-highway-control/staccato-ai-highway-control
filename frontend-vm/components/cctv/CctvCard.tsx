@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Cctv } from "@/types/cctv";
 
 const statusLabels = {
@@ -19,6 +19,13 @@ const cardBorderClasses = {
   MAINTENANCE: "border-yellow-300 hover:border-yellow-400",
 } as const;
 
+const STREAM_RETRY_DELAY_MS = 1500;
+
+function appendRetryParam(streamUrl: string, retryToken: number) {
+  const separator = streamUrl.includes("?") ? "&" : "?";
+  return `${streamUrl}${separator}retry=${retryToken}`;
+}
+
 
 export function CctvFrame({
   cctv,
@@ -36,18 +43,47 @@ export function CctvFrame({
   onStreamError?: () => void;
   onStreamLoad?: () => void;
 }) {
+  const [retryToken, setRetryToken] = useState(0);
+  const retryTimerRef = useRef<number | null>(null);
+  const streamUrl = useMemo(
+    () => (cctv.streamUrl ? appendRetryParam(cctv.streamUrl, retryToken) : undefined),
+    [cctv.streamUrl, retryToken]
+  );
+
+  useEffect(() => {
+    setRetryToken(0);
+
+    return () => {
+      if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+    };
+  }, [cctv.streamUrl, showStream]);
+
+  function handleStreamError() {
+    onStreamError?.();
+    if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+
+    retryTimerRef.current = window.setTimeout(() => {
+      setRetryToken(Date.now());
+      retryTimerRef.current = null;
+    }, STREAM_RETRY_DELAY_MS);
+  }
+
+  function handleStreamLoad() {
+    if (retryTimerRef.current) window.clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+    onStreamLoad?.();
+  }
+
   return (
     <div className={`relative overflow-hidden bg-slate-900 ${large ? "aspect-video" : "h-64"}`}>
-      {showStream && cctv.streamUrl ? (
+      {showStream && streamUrl ? (
         <img
-          src={cctv.streamUrl}
+          key={streamUrl}
+          src={streamUrl}
           alt={`${cctv.cctvCode ?? cctv.id} stream`}
           className="absolute inset-0 h-full w-full object-fill"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-            onStreamError?.();
-          }}
-          onLoad={onStreamLoad}
+          onError={handleStreamError}
+          onLoad={handleStreamLoad}
         />
       ) : null}
       {children}

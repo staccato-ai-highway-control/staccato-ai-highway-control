@@ -27,18 +27,21 @@ export async function fetchRecentIncidentEvents(limit = 30): Promise<RealtimeInc
 }
 
 function normalizeRealtimeEventPreviews(response: RealtimeEventPreviewApiResponse): RealtimeEventPreview[] {
-  if (Array.isArray(response)) return response;
+  let items: RealtimeEventPreview[] | undefined;
+  if (Array.isArray(response)) items = response;
+  else if (Array.isArray(response.items)) items = response.items;
+  else if (Array.isArray(response.events)) items = response.events;
+  else {
+    const data = response.data;
+    if (Array.isArray(data)) items = data;
+    else if (data && Array.isArray(data.items)) items = data.items;
+    else if (data && Array.isArray(data.events)) items = data.events;
+  }
 
-  if (Array.isArray(response.items)) return response.items;
-  if (Array.isArray(response.events)) return response.events;
-
-  const data = response.data;
-
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray(data.items)) return data.items;
-  if (data && Array.isArray(data.events)) return data.events;
-
-  return [];
+  if (!items) throw new Error("응답 형식 오류: 실시간 이벤트 배열이 없습니다.");
+  const invalid = items.some((item) => !item || item.realtime_event_id === undefined || !item.event_type || !item.message);
+  if (invalid) throw new Error("응답 형식 오류: 실시간 이벤트 필수 필드가 누락되었습니다.");
+  return items;
 }
 
 export async function getRealtimeEventPreviews(limit = 5): Promise<RealtimeEventPreview[]> {
