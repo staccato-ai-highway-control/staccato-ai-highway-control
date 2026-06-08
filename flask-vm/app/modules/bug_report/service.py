@@ -45,6 +45,42 @@ DEFAULT_STATUS = "OPEN"
 DEFAULT_PAGE = 1
 DEFAULT_SIZE = 10
 MAX_SIZE = 100
+ADMIN_ROLES = {"SUPER_ADMIN", "CONTROL_ADMIN"}
+
+
+def _is_admin(current_user) -> bool:
+    return bool(current_user and getattr(current_user, "role", None) in ADMIN_ROLES)
+
+
+def _can_manage_bug_report(bug_report, current_user) -> bool:
+    return bool(
+        current_user
+        and (
+            bug_report.reporter_id == getattr(current_user, "id", None)
+            or _is_admin(current_user)
+        )
+    )
+
+
+def _allowed_actions(bug_report, current_user) -> dict:
+    can_manage = _can_manage_bug_report(bug_report, current_user)
+    is_closed = bug_report.status in {"CLOSED", "REJECTED", "DUPLICATE"}
+    return {
+        "view": can_manage,
+        "update": can_manage and not is_closed,
+        "close": can_manage and not is_closed,
+        "add_attachment": can_manage and not is_closed,
+        "download_attachment": can_manage,
+    }
+
+
+def _serialize_bug_report(bug_report, current_user, attachments=None) -> dict:
+    data = bug_report.to_dict(attachments=attachments)
+    data["reporter_id"] = bug_report.reporter_id
+    data["author_id"] = bug_report.reporter_id
+    data["user_id"] = bug_report.reporter_id
+    data["allowed_actions"] = _allowed_actions(bug_report, current_user)
+    return data
 
 WRITABLE_FIELDS = (
     "title",
@@ -63,7 +99,7 @@ WRITABLE_FIELDS = (
 )
 
 
-def create_bug_report(payload: dict | None) -> tuple[dict, int]:
+def create_bug_report(payload: dict | None, current_user) -> tuple[dict, int]:
     data = payload if isinstance(payload, dict) else {}
 
     title = _clean_text(data.get("title"))
@@ -87,7 +123,7 @@ def create_bug_report(payload: dict | None) -> tuple[dict, int]:
 
     now = _utc_now_naive()
     bug_report = BugReport(
-        reporter_id=None,
+        reporter_id=current_user.id,
         assigned_to=None,
         title=title,
         description=description,
@@ -113,15 +149,17 @@ def create_bug_report(payload: dict | None) -> tuple[dict, int]:
     return {
         "success": True,
         "message": "Bug report created.",
-        "data": bug_report.to_dict(),
+        "data": _serialize_bug_report(bug_report, current_user),
     }, 201
 
 
-def list_bug_reports(args) -> tuple[dict, int]:
+def list_bug_reports(args, current_user) -> tuple[dict, int]:
     page = _positive_int(args.get("page"), DEFAULT_PAGE, maximum=100000)
     size = _positive_int(args.get("size"), DEFAULT_SIZE, maximum=MAX_SIZE)
 
     query = BugReport.query
+    if not _is_admin(current_user):
+        query = query.filter(BugReport.reporter_id == current_user.id)
 
     status = _normalize_choice(args.get("status"))
     if status:
@@ -154,7 +192,7 @@ def list_bug_reports(args) -> tuple[dict, int]:
         error_out=False,
     )
 
-    items = [item.to_dict(attachments=[]) for item in pagination.items]
+    items = [_serialize_bug_report(item, current_user, attachments=[]) for item in pagination.items]
 
     return {
         "success": True,
@@ -205,7 +243,7 @@ def list_my_bug_reports(args, current_user) -> tuple[dict, int]:
         error_out=False,
     )
 
-    items = [item.to_dict(attachments=[]) for item in pagination.items]
+    items = [_serialize_bug_report(item, current_user, attachments=[]) for item in pagination.items]
 
     return {
         "success": True,
@@ -219,13 +257,15 @@ def list_my_bug_reports(args, current_user) -> tuple[dict, int]:
     }, 200
 
 
-def get_bug_report_detail(bug_report_id: int) -> tuple[dict, int]:
+def get_bug_report_detail(bug_report_id: int, current_user) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
         return {
             "success": False,
             "error": "Bug report not found.",
         }, 404
+    if not _can_manage_bug_report(bug_report, current_user):
+        return {"success": False, "error": "Bug report access denied."}, 403
 
     attachments = (
         BugReportAttachment.query
@@ -236,19 +276,23 @@ def get_bug_report_detail(bug_report_id: int) -> tuple[dict, int]:
 
     return {
         "success": True,
-        "data": bug_report.to_dict(
-            attachments=[attachment.to_dict() for attachment in attachments]
+        "data": _serialize_bug_report(
+            bug_report,
+            current_user,
+            attachments=[attachment.to_dict() for attachment in attachments],
         ),
     }, 200
 
 
-def update_bug_report(bug_report_id: int, payload: dict | None) -> tuple[dict, int]:
+def update_bug_report(bug_report_id: int, payload: dict | None, current_user) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
         return {
             "success": False,
             "error": "Bug report not found.",
         }, 404
+    if not _can_manage_bug_report(bug_report, current_user):
+        return {"success": False, "error": "Bug report update denied."}, 403
 
     data = payload if isinstance(payload, dict) else {}
 
@@ -319,17 +363,19 @@ def update_bug_report(bug_report_id: int, payload: dict | None) -> tuple[dict, i
     return {
         "success": True,
         "message": "Bug report updated.",
-        "data": bug_report.to_dict(attachments=[]),
+        "data": _serialize_bug_report(bug_report, current_user, attachments=[]),
     }, 200
 
 
-def close_bug_report(bug_report_id: int) -> tuple[dict, int]:
+def close_bug_report(bug_report_id: int, current_user) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
         return {
             "success": False,
             "error": "Bug report not found.",
         }, 404
+    if not _can_manage_bug_report(bug_report, current_user):
+        return {"success": False, "error": "Bug report close denied."}, 403
 
     bug_report.status = "CLOSED"
     bug_report.updated_at = _utc_now_naive()
@@ -341,17 +387,19 @@ def close_bug_report(bug_report_id: int) -> tuple[dict, int]:
         "success": True,
         "message": "Bug report closed.",
         "bug_report_id": bug_report.id,
-        "data": bug_report.to_dict(attachments=[]),
+        "data": _serialize_bug_report(bug_report, current_user, attachments=[]),
     }, 200
 
 
-def create_bug_report_attachments(bug_report_id: int, files) -> tuple[dict, int]:
+def create_bug_report_attachments(bug_report_id: int, files, current_user) -> tuple[dict, int]:
     bug_report = db.session.get(BugReport, bug_report_id)
     if bug_report is None:
         return {
             "success": False,
             "error": "Bug report not found.",
         }, 404
+    if not _can_manage_bug_report(bug_report, current_user):
+        return {"success": False, "error": "Bug report attachment upload denied."}, 403
 
     files = files or []
     if not files:
@@ -396,7 +444,7 @@ def create_bug_report_attachments(bug_report_id: int, files) -> tuple[dict, int]
 
             attachment = BugReportAttachment(
                 bug_report_id=bug_report.id,
-                uploaded_by=None,
+                uploaded_by=current_user.id,
                 original_filename=original_filename,
                 stored_filename=stored_filename,
                 file_path=file_path,
@@ -443,13 +491,17 @@ def create_bug_report_attachments(bug_report_id: int, files) -> tuple[dict, int]
         raise
 
 
-def get_bug_report_attachment_file(attachment_id: int):
+def get_bug_report_attachment_file(attachment_id: int, current_user):
     attachment = db.session.get(BugReportAttachment, attachment_id)
     if attachment is None:
         return {
             "success": False,
             "error": "Bug report attachment not found.",
         }, 404
+
+    bug_report = db.session.get(BugReport, attachment.bug_report_id)
+    if not bug_report or not _can_manage_bug_report(bug_report, current_user):
+        return {"success": False, "error": "Bug report attachment access denied."}, 403
 
     if not attachment.file_path or not os.path.exists(attachment.file_path):
         return {

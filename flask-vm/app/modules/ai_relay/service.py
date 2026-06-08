@@ -7,6 +7,7 @@ from typing import Any
 
 from app.extensions import db
 from app.models import AiEvent, RealtimeEvent
+from app.utils.bbox import build_bbox_metadata
 
 
 DEFAULT_EVENT_LIMIT = 100
@@ -60,7 +61,8 @@ def store_event(payload: dict[str, Any], *, commit: bool = True) -> tuple[AiEven
     event.track_id = _optional_string(payload, "track_id")
     event.roi_id = _optional_string(payload, "roi_id")
     event.lane_type = _optional_string(payload, "lane_type")
-    event.bbox_json = payload.get("bbox")
+    detection = _first_detection(payload.get("detections"))
+    event.bbox_json = payload.get("bbox") or detection.get("bbox")
     event.snapshot_url = _optional_string(payload, "snapshot_url")
     event.video_url = _optional_string(payload, "video_url")
     event.stream_url = _optional_string(payload, "stream_url")
@@ -121,6 +123,7 @@ def _find_realtime_event_for_ai_event(event_id: str) -> RealtimeEvent | None:
 
 def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
     timestamp = event.event_timestamp.isoformat() if event.event_timestamp else None
+    raw_event = event.raw_event_json if isinstance(event.raw_event_json, dict) else {}
 
     return {
         "source": AI_RELAY_SOURCE,
@@ -137,6 +140,12 @@ def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
         "roi_type": event.roi_id,
         "lane_type": event.lane_type,
         "bbox": event.bbox_json,
+        "bbox_metadata": build_bbox_metadata(
+            event.bbox_json,
+            coordinate_space=raw_event.get("bbox_coordinate_space"),
+            frame_width=raw_event.get("frame_width"),
+            frame_height=raw_event.get("frame_height"),
+        ),
         "snapshot_path": _normalize_media_url(event.snapshot_url),
         "clip_path": _normalize_media_url(event.video_url),
         "snapshot_url": _normalize_media_url(event.snapshot_url),
@@ -321,7 +330,7 @@ def build_incident_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
             or _clean_string(detection.get("class"))
         ),
         "confidence": normalized.get("confidence", detection.get("confidence")),
-        "bbox": _normalize_incident_bbox(normalized.get("bbox")),
+        "bbox": _normalize_incident_bbox(normalized.get("bbox") or detection.get("bbox")),
         "snapshot_path": (
             _optional_string(normalized, "snapshot_path")
             or _optional_string(normalized, "snapshot_url")
@@ -360,12 +369,15 @@ def _normalize_incident_bbox(value: Any) -> dict[str, float] | None:
 
     if isinstance(value, (list, tuple)) and len(value) == 4:
         x1, y1, x2, y2 = value
-        return {
-            "x1": float(x1),
-            "y1": float(y1),
-            "x2": float(x2),
-            "y2": float(y2),
-        }
+        try:
+            return {
+                "x1": float(x1),
+                "y1": float(y1),
+                "x2": float(x2),
+                "y2": float(y2),
+            }
+        except (TypeError, ValueError) as exc:
+            raise RelayValidationError("bbox coordinates must be numbers") from exc
 
     raise RelayValidationError("bbox must be an object or [x1, y1, x2, y2] list")
 

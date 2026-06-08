@@ -79,6 +79,7 @@ def _create_realtime_event(
             "track_id": 17,
             "roi_type": "SHOULDER",
             "confidence": 0.91,
+            "bbox": {"x1": 10, "y1": 20, "x2": 30, "y2": 40},
             "snapshot_path": "/storage/generated/incidents/demo.jpg",
             "clip_path": "/storage/generated/incidents/demo.mp4",
         },
@@ -130,6 +131,8 @@ def test_recent_incident_events_returns_latest_incident_created_events(client, a
     assert items[0]["severity"] == "HIGH"
     assert items[0]["source_cctv_id"] == "CCTV-001"
     assert items[0]["message"] == "갓길 정차 의심 차량 감지"
+    assert items[0]["bbox_metadata"]["valid"] is True
+    assert items[0]["bbox_metadata"]["coordinates"]["x1"] == 10.0
     assert items[0]["snapshot_path"] == "/storage/generated/incidents/demo.jpg"
     assert items[0]["clip_path"] == "/storage/generated/incidents/demo.mp4"
 

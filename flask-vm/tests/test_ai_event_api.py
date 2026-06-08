@@ -74,6 +74,10 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
     assert body["event"]["snapshot_url"].endswith(".jpg")
     assert body["event"]["stream_url"].endswith(".mjpeg")
     assert body["event"]["bbox"] == [820, 430, 940, 510]
+    assert body["event"]["bbox_metadata"]["valid"] is True
+    assert body["event"]["bbox_metadata"]["format"] == "xyxy"
+    assert body["event"]["detection_count"] == 1
+    assert body["event"]["detections"][0]["bbox_metadata"]["present"] is False
     assert body["event"]["raw_event_json"]["detections"][0]["class"] == "car"
 
     with app.app_context():
