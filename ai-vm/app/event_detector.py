@@ -15,6 +15,7 @@ from .config import (
     EVENT_DANGER_LOW_RATIO,
     EVENT_DANGER_SECONDS,
     EVENT_HISTORY_LENGTH,
+    EVENT_MIN_CONFIDENCE,
     EVENT_STOPPED_MOVE_PX,
     EVENT_TRACK_MATCH_DISTANCE,
     EVENT_TRACK_STALE_FRAMES,
@@ -157,6 +158,8 @@ class EventDetector:
 
         for detection in detections:
             if detection.class_name not in self.vehicle_classes:
+                continue
+            if float(detection.confidence or 0.0) < EVENT_MIN_CONFIDENCE:
                 continue
 
             center = self._bottom_center(detection.bbox)
