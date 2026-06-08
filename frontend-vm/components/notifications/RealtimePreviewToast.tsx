@@ -76,16 +76,7 @@ function PreviewMedia({ event }: { event: RealtimeEventPreview }) {
     );
   }
 
-  return (
-    <div className="mt-3 grid aspect-video place-items-center rounded-lg border border-dashed border-slate-600 bg-slate-900/80 p-4 text-center">
-      <div>
-        <p className="text-sm font-black text-white">이벤트 미리보기 준비 중</p>
-        <p className="mt-2 text-xs font-semibold leading-5 text-slate-300">
-          AI 분석 결과 영상/스냅샷이 연결되면 이 영역에 표시됩니다.
-        </p>
-      </div>
-    </div>
-  );
+  return null;
 }
 
 export function RealtimePreviewToast({ event, open, onClose }: RealtimePreviewToastProps) {

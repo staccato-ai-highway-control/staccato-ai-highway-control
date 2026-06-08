@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getMe } from "@/features/auth/api";
+import { isApiError } from "@/lib/apiClient";
 import {
   clearStoredAuth,
   getStoredAccessToken,
@@ -55,7 +56,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
         if (isMounted) {
           setIsCheckingAuth(false);
         }
-      } catch {
+      } catch (error) {
+        if (isApiError(error) && error.statusCode === 403) {
+          router.replace("/forbidden");
+          return;
+        }
         clearStoredAuth();
         router.replace("/login");
       }

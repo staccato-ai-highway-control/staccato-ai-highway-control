@@ -3,7 +3,7 @@ import type { ResourceItem } from "@/features/resources/types";
 
 export function isResourceAdmin(user: AuthUser | null) {
   const status = user?.account_status?.toUpperCase();
-  return Boolean(user?.id && user.role && user.role !== "VIEWER" && !["PENDING", "REJECTED", "DELETED"].includes(status ?? ""));
+  return Boolean(user?.id && user.role && user.role !== "VIEWER" && status === "ACTIVE");
 }
 
 export function isResourceOwner(resource: ResourceItem, user: AuthUser | null) {

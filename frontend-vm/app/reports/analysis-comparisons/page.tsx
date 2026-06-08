@@ -7,6 +7,8 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
+import { ComparisonResultPanel } from "@/components/report/ComparisonResultPanel";
+import type { ComparisonMetricKey, ComparisonMetricType, DisplayComparisonMetric } from "@/components/report/comparisonTypes";
 import { createAnalysisComparison, getAnalysisComparisonCandidates } from "@/features/reports/api";
 import type { ReportAnalysisComparisonCandidate, ReportAnalysisComparisonMetric, ReportAnalysisComparisonResult } from "@/features/reports/types";
 
@@ -15,18 +17,6 @@ const COMPARISON_METRICS = [
   { key: "detection_count", label: "탐지 개수", type: "count" },
   { key: "max_confidence", label: "최고 신뢰도", type: "confidence" },
 ] as const;
-
-type ComparisonMetricKey = (typeof COMPARISON_METRICS)[number]["key"];
-type ComparisonMetricType = (typeof COMPARISON_METRICS)[number]["type"];
-
-interface DisplayComparisonMetric {
-  key: ComparisonMetricKey;
-  label: string;
-  type: ComparisonMetricType;
-  values: Record<string, number | null>;
-  delta: number;
-  allSame: boolean;
-}
 
 function getJobId(candidate: ReportAnalysisComparisonCandidate) {
   return candidate.job_id ?? candidate.analysis_job_id ?? candidate.id;
@@ -205,26 +195,6 @@ function buildDisplayMetrics(result: ReportAnalysisComparisonResult | null, sele
   }).filter((metric) => Object.values(metric.values).some((value) => value !== null));
 }
 
-function formatDisplayMetricValue(value: number | null, type: ComparisonMetricType) {
-  if (value === null) return "-";
-  if (type === "count") return `${Math.round(value).toLocaleString("ko-KR")}건`;
-  return `${(value * 100).toFixed(2)}%`;
-}
-
-function formatDisplayDelta(value: number, type: ComparisonMetricType) {
-  if (type === "count") return `${Math.round(value).toLocaleString("ko-KR")}건`;
-  return `${(value * 100).toFixed(2)}%`;
-}
-
-function buildComparisonSummary(metrics: DisplayComparisonMetric[], jobCount: number) {
-  if (metrics.length === 0) return "";
-  const allSame = metrics.every((metric) => metric.allSame);
-  if (allSame) {
-    return `선택된 ${jobCount}개 Job의 평균 신뢰도, 탐지 개수, 최고 신뢰도는 모두 동일합니다.`;
-  }
-  return `선택된 ${jobCount}개 Job의 지표 비교 결과입니다.`;
-}
-
 function formatDate(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -232,62 +202,13 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
-
 function ComparisonResultView({ result, selectedJobIds }: { result: ReportAnalysisComparisonResult; selectedJobIds: string[] }) {
   const metrics = buildDisplayMetrics(result, selectedJobIds);
-  const jobIds = (result.job_ids?.length ? result.job_ids.map(String) : selectedJobIds).filter(Boolean);
-  const summary = buildComparisonSummary(metrics, jobIds.length);
+  const jobIds = (result.job_ids?.length ? result.job_ids.map(String) : selectedJobIds)
+    .map(normalizeJobId)
+    .filter(Boolean);
 
-  return (
-    <div className="mt-5 border-t border-slate-100 pt-4">
-      <h4 className="text-sm font-black text-slate-800">비교 결과</h4>
-      {metrics.length === 0 ? <p className="mt-2 rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">표시할 지표가 없습니다.</p> : null}
-      {metrics.length > 0 ? (
-        <>
-          <div className="mt-2 rounded-lg bg-slate-50 p-4">
-            <p className="text-sm font-bold leading-6 text-slate-700">{summary}</p>
-            <dl className="mt-3 grid gap-2">
-              {metrics.map((metric) => {
-                const firstValue = Object.values(metric.values).find((value) => value !== null) ?? null;
-                return (
-                  <div key={metric.key} className="flex items-center justify-between gap-3 text-sm">
-                    <dt className="font-bold text-slate-500">{metric.label}</dt>
-                    <dd className="font-black text-slate-900">{formatDisplayMetricValue(firstValue, metric.type)}</dd>
-                  </div>
-                );
-              })}
-            </dl>
-            {metrics.every((metric) => metric.allSame) ? <p className="mt-3 text-xs font-black text-slate-500">모든 Job 동일</p> : null}
-          </div>
-
-          <div className="mt-3 overflow-x-auto rounded-lg border border-slate-100">
-            <table className="min-w-full divide-y divide-slate-100 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">지표</th>
-                  {jobIds.map((jobId) => (
-                    <th key={jobId} scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">Job {jobId}</th>
-                  ))}
-                  <th scope="col" className="whitespace-nowrap px-3 py-2 text-left text-xs font-black text-slate-500">차이</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
-                {metrics.map((metric) => (
-                  <tr key={metric.key}>
-                    <th scope="row" className="whitespace-nowrap px-3 py-2 text-left text-sm font-black text-slate-700">{metric.label}</th>
-                    {jobIds.map((jobId) => (
-                      <td key={`${metric.key}-${jobId}`} className="whitespace-nowrap px-3 py-2 font-bold text-slate-900">{formatDisplayMetricValue(metric.values[jobId] ?? null, metric.type)}</td>
-                    ))}
-                    <td className="whitespace-nowrap px-3 py-2 font-bold text-slate-900">{formatDisplayDelta(metric.delta, metric.type)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
+  return <ComparisonResultPanel metrics={metrics} jobIds={jobIds} />;
 }
 
 function AnalysisComparisonsContent() {
@@ -410,7 +331,7 @@ function AnalysisComparisonsContent() {
 
         {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="grid gap-5 xl:grid-cols-2">
           <Card className="overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
               <h3 className="text-lg font-black text-slate-950">후보 목록</h3>

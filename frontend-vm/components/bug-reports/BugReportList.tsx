@@ -63,7 +63,7 @@ export function BugReportList() {
     } catch {
       setReports([]);
       setTotalCount(0);
-      setErrorMessage("문의 목록을 불러오지 못했습니다.");
+      setErrorMessage("버그리포트 목록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export function BugReportList() {
         <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-black text-slate-950">STACCATO</p>
-            <h1 className="mt-3 text-3xl font-black">문의게시판</h1>
+            <h1 className="mt-3 text-3xl font-black">버그리포트</h1>
             <p className="mt-2 text-sm font-semibold text-slate-600">
               서비스 이용 중 발견한 오류나 개선 요청을 공개로 등록할 수 있습니다.
             </p>
@@ -95,7 +95,7 @@ export function BugReportList() {
             href="/bug-reports/new"
             className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-black text-white no-underline shadow-sm transition hover:bg-red-700"
           >
-            문의 등록하기
+            버그리포트 등록하기
           </Link>
         </header>
 
@@ -115,11 +115,11 @@ export function BugReportList() {
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-            <h2 className="text-base font-black">목록</h2>
+            <h2 className="text-base font-black">버그리포트 목록</h2>
             <span className="text-sm font-black text-slate-500">{totalCount}건</span>
           </div>
 
-          {loading ? <div className="p-10 text-center text-sm font-bold text-slate-500">문의 목록을 불러오는 중입니다.</div> : null}
+          {loading ? <div className="p-10 text-center text-sm font-bold text-slate-500">버그리포트 목록을 불러오는 중입니다.</div> : null}
 
           {!loading && errorMessage ? (
             <div className="p-10 text-center">
@@ -128,7 +128,7 @@ export function BugReportList() {
           ) : null}
 
           {!loading && !errorMessage && reports.length === 0 ? (
-            <div className="p-10 text-center text-sm font-black text-slate-500">등록된 문의가 없습니다.</div>
+            <div className="p-10 text-center text-sm font-black text-slate-500">등록된 버그리포트가 없습니다.</div>
           ) : null}
 
           {!loading && !errorMessage && reports.length > 0 ? (

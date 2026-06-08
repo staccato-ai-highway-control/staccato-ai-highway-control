@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileDown, FilePlus, Search } from "lucide-react";
+import { AlertCircle, FileDown, FilePlus2, RefreshCw, Search } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/common/Badge";
 import { Card } from "@/components/common/Card";
@@ -66,6 +66,8 @@ export function ResourceList() {
   }
 
   async function handleDownload(resource: ResourceItem) {
+    if (!resource.file_name) return;
+
     try {
       await downloadResourceFile(resource.id, resource.file_name);
     } catch (error) {
@@ -83,9 +85,14 @@ export function ResourceList() {
             <p className="mt-2 text-sm font-semibold text-slate-600">STACCATO 프로젝트의 주요 문서와 회의 기록을 관리합니다.</p>
           </div>
           {isResourceAdmin(authUser) ? (
-            <Link href="/resources/new" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-5 text-sm font-black text-white no-underline shadow-sm transition hover:bg-slate-800">
-              <FilePlus className="h-4 w-4" aria-hidden="true" />
-              자료 등록
+            <Link
+              href="/resources/new"
+              className="group inline-flex h-11 items-center justify-center gap-2.5 rounded-xl bg-staccato px-5 text-sm font-black text-white no-underline shadow-sm shadow-red-200 transition hover:-translate-y-0.5 hover:bg-staccato-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 transition group-hover:bg-white/20">
+                <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+              </span>
+              새 자료 등록
             </Link>
           ) : null}
         </header>
@@ -111,7 +118,26 @@ export function ResourceList() {
           </form>
         </Card>
 
-        {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
+        {errorMessage ? (
+          <div className="mb-5 flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+              <div>
+                <p className="font-black">자료 목록을 불러오지 못했습니다.</p>
+                <p className="mt-1 font-semibold text-red-700">{errorMessage}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={loadResources}
+              disabled={loading}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-3 font-black text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+              다시 시도
+            </button>
+          </div>
+        ) : null}
 
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -137,14 +163,16 @@ export function ResourceList() {
                     <td className="px-3 py-4"><Badge tone={resourceCategoryTone[resource.category]}>{resource.category_label || resourceCategoryLabels[resource.category]}</Badge></td>
                     <td className="truncate px-3 py-4 font-semibold text-slate-600">{resource.author_name}</td>
                     <td className="truncate px-3 py-4 font-semibold text-slate-500">{formatResourceDate(resource.created_at)}</td>
-                    <td className="px-3 py-4"><span className="block truncate font-semibold text-slate-600">{resource.file_name}</span><span className="text-xs font-semibold text-slate-400">{formatResourceFileSize(resource.file_size)}</span></td>
+                    <td className="px-3 py-4">{resource.file_name ? <><span className="block truncate font-semibold text-slate-600">{resource.file_name}</span><span className="text-xs font-semibold text-slate-400">{formatResourceFileSize(resource.file_size ?? 0)}</span></> : <span className="text-xs font-semibold text-slate-400">첨부 없음</span>}</td>
                     <td className="px-3 py-4">
                       <div className="flex flex-nowrap justify-end gap-1 whitespace-nowrap">
                         <Link href={`/resources/${resource.id}`} className="inline-flex min-h-8 items-center rounded-md border border-slate-200 px-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">보기</Link>
-                        <button type="button" onClick={() => handleDownload(resource)} className="inline-flex min-h-8 items-center gap-1 rounded-md border border-sky-200 px-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
-                          <FileDown className="h-3.5 w-3.5" aria-hidden="true" />
-                          다운로드
-                        </button>
+                        {resource.file_name ? (
+                          <button type="button" onClick={() => handleDownload(resource)} className="inline-flex min-h-8 items-center gap-1 rounded-md border border-sky-200 px-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50">
+                            <FileDown className="h-3.5 w-3.5" aria-hidden="true" />
+                            다운로드
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

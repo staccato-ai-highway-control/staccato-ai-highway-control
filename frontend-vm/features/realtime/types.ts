@@ -47,6 +47,13 @@ export type RealtimeConnectionStatus =
   | "disconnected"
   | "error";
 
+export type RealtimeBboxMetadata = {
+  frame_width?: number;
+  frame_height?: number;
+  bbox_format?: "xyxy" | "xywh" | string;
+  detections?: Array<Record<string, unknown>>;
+};
+
 export type RealtimeEventPreview = {
   realtime_event_id: number | string;
   event_type: string;
@@ -62,6 +69,7 @@ export type RealtimeEventPreview = {
   created_at?: string | null;
   has_video?: boolean;
   has_snapshot?: boolean;
+  bbox_metadata?: RealtimeBboxMetadata | null;
 };
 
 export type RealtimeEventPreviewApiResponse =

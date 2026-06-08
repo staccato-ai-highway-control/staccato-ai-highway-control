@@ -92,11 +92,6 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
       return;
     }
 
-    if (!isEditMode && !file) {
-      setErrorMessage("첨부파일을 선택해 주세요.");
-      return;
-    }
-
     if (file && !allowedResourceExtensions.includes(getExtension(file.name))) {
       setErrorMessage("허용되지 않은 파일 형식입니다.");
       return;
@@ -128,7 +123,7 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
         author_name: authorName.trim() || undefined,
         description: description.trim() || undefined,
         visibility,
-        file: file as File,
+        file,
       });
       router.push(`/resources/${createdResource.id}`);
     } catch (error) {
@@ -191,10 +186,10 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
                 </label>
 
                 <label className="grid gap-2">
-                  <span className="text-xs font-black text-slate-500">첨부파일 {isEditMode ? "교체" : "업로드"}</span>
+                  <span className="text-xs font-black text-slate-500">첨부파일 {isEditMode ? "교체" : "업로드"} <span className="font-semibold text-slate-400">(선택)</span></span>
                   <span className="flex min-h-14 cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-sm font-semibold text-slate-600 transition hover:bg-slate-100">
                     <Upload className="h-4 w-4 text-slate-400" aria-hidden="true" />
-                    <span className="truncate">{file?.name ?? (isEditMode ? `${resource?.file_name ?? "기존 파일"} 유지` : "업로드할 파일을 선택하세요.")}</span>
+                    <span className="truncate">{file?.name ?? (isEditMode ? `${resource?.file_name ?? "기존 파일"} 유지` : "첨부할 파일이 있다면 선택하세요.")}</span>
                     <input type="file" accept={accept} className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
                   </span>
                   <span className="text-xs font-semibold text-slate-400">허용 확장자: {allowedResourceExtensions.join(", ")}</span>

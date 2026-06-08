@@ -13,7 +13,10 @@ import {
   updateBugReport,
   uploadBugReportAttachments,
 } from "@/features/bug-reports/api";
+import type { AuthUser } from "@/features/auth/types";
 import type { BugReport, BugReportAttachment, BugReportUpdateRequest } from "@/features/bug-reports/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
+import { isApiError } from "@/lib/apiClient";
 
 const statusLabels: Record<string, string> = {
   OPEN: "열림",
@@ -69,15 +72,7 @@ function createEditDraft(report: BugReport): BugReportUpdateRequest {
     category: report.category ?? "GENERAL",
     severity: report.severity ?? "MINOR",
     priority: report.priority ?? "MEDIUM",
-    status: report.status ?? "OPEN",
     page_url: report.page_url ?? "",
-    steps_to_reproduce: report.steps_to_reproduce ?? "",
-    expected_result: report.expected_result ?? "",
-    actual_result: report.actual_result ?? "",
-    browser: report.browser ?? "",
-    os: report.os ?? "",
-    device: report.device ?? "",
-    app_version: report.app_version ?? "MVP",
   };
 }
 
@@ -90,6 +85,7 @@ function cleanPayload(payload: BugReportUpdateRequest): BugReportUpdateRequest {
 export function BugReportDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [report, setReport] = useState<BugReport | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [editDraft, setEditDraft] = useState<BugReportUpdateRequest>({});
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -98,25 +94,29 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [actionMessage, setActionMessage] = useState("");
 
   async function loadReport() {
     setLoading(true);
     setErrorMessage("");
+    setErrorStatus(null);
 
     try {
       const nextReport = await fetchBugReport(id);
       setReport(nextReport);
       if (isEditing) setEditDraft(createEditDraft(nextReport));
-    } catch {
+    } catch (error) {
       setReport(null);
-      setErrorMessage("버그 리포트를 불러오지 못했습니다.");
+      setErrorStatus(isApiError(error) ? error.statusCode : 500);
+      setErrorMessage(error instanceof Error ? error.message : "버그리포트를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    setAuthUser(getStoredAuthUser());
     loadReport();
   }, [id]);
 
@@ -139,11 +139,11 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
 
     try {
       await updateBugReport(report.id, cleanPayload(editDraft));
-      setActionMessage("버그 리포트가 수정되었습니다.");
+      setActionMessage("버그리포트가 수정되었습니다.");
       setIsEditing(false);
       await loadReport();
     } catch {
-      setActionMessage("버그 리포트를 수정하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setActionMessage("버그리포트를 수정하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSaving(false);
     }
@@ -151,7 +151,7 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
 
   async function handleCloseReport() {
     if (!report) return;
-    const confirmed = window.confirm("버그 리포트를 닫으시겠습니까?");
+    const confirmed = window.confirm("버그리포트를 닫으시겠습니까?");
     if (!confirmed) return;
 
     setClosing(true);
@@ -159,10 +159,10 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
 
     try {
       await closeBugReport(report.id);
-      setActionMessage("버그 리포트가 닫혔습니다.");
+      setActionMessage("버그리포트가 닫혔습니다.");
       await loadReport();
     } catch {
-      setActionMessage("버그 리포트를 닫지 못했습니다. 잠시 후 다시 시도해 주세요.");
+      setActionMessage("버그리포트를 닫지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setClosing(false);
     }
@@ -207,27 +207,36 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
     }
   }
 
+  const ownerId = report?.reporter_id ?? report?.author_id ?? report?.user_id;
+  const isActiveUser = authUser?.account_status?.toUpperCase() === "ACTIVE";
+  const isOwner = ownerId !== null && ownerId !== undefined && String(ownerId) === String(authUser?.id);
+  const isSuperAdmin = authUser?.role === "SUPER_ADMIN";
+  const allowedActions = report?.allowed_actions;
+  const canUpdate = Boolean(isActiveUser && (allowedActions?.update ?? allowedActions?.edit ?? (isSuperAdmin || isOwner)));
+  const canClose = Boolean(isActiveUser && (allowedActions?.close ?? allowedActions?.delete ?? (isSuperAdmin || isOwner)));
+  const canUploadAttachment = Boolean(isActiveUser && (allowedActions?.upload_attachment ?? (isSuperAdmin || isOwner)));
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
       <section className="mx-auto max-w-5xl">
         <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="text-sm font-black text-slate-950">STACCATO</p>
-            <h1 className="mt-3 text-3xl font-black">문의 상세</h1>
+            <h1 className="mt-3 text-3xl font-black">버그리포트 상세</h1>
             <p className="mt-2 text-sm font-semibold text-slate-600">등록된 오류나 개선 요청 내용을 확인합니다.</p>
           </div>
 
           <div className="flex flex-wrap gap-2 md:justify-end">
-            {report ? (
+            {report && (canUpdate || canClose) ? (
               <>
-                <button type="button" onClick={beginEdit} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+                {canUpdate ? <button type="button" onClick={beginEdit} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">
                   <Pencil className="h-4 w-4" aria-hidden="true" />
                   수정
-                </button>
-                <button type="button" onClick={handleCloseReport} disabled={closing || report.status === "CLOSED"} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-black text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                </button> : null}
+                {canClose ? <button type="button" onClick={handleCloseReport} disabled={closing || report.status === "CLOSED"} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-black text-red-700 transition hover:bg-red-50 disabled:opacity-50">
                   <XCircle className="h-4 w-4" aria-hidden="true" />
-                  {closing ? "닫는 중" : "버그 리포트 닫기"}
-                </button>
+                  {closing ? "닫는 중" : "버그리포트 닫기"}
+                </button> : null}
               </>
             ) : null}
             <Link href="/bug-reports" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 no-underline transition hover:bg-slate-50">
@@ -237,17 +246,18 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
         </header>
 
         {loading ? (
-          <Card className="p-10 text-center text-sm font-bold text-slate-500">문의 상세를 불러오는 중입니다.</Card>
+          <Card className="p-10 text-center text-sm font-bold text-slate-500">버그리포트 상세를 불러오는 중입니다.</Card>
         ) : null}
 
         {!loading && errorMessage ? (
           <Card className="p-10 text-center">
-            <p className="text-sm font-bold text-red-700">{errorMessage}</p>
+            <p className="text-3xl font-black text-red-700">{errorStatus ?? 500}</p>
+            <p className="mt-3 text-sm font-bold text-red-700">{errorMessage}</p>
           </Card>
         ) : null}
 
         {!loading && !errorMessage && !report ? (
-          <Card className="p-10 text-center text-sm font-black text-slate-500">버그 리포트를 찾을 수 없습니다.</Card>
+          <Card className="p-10 text-center text-sm font-black text-slate-500">버그리포트를 찾을 수 없습니다.</Card>
         ) : null}
 
         {!loading && !errorMessage && report ? (
@@ -256,7 +266,7 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
               <Card className="p-6">
                 <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <h2 className="text-lg font-black text-slate-950">문의 수정</h2>
+                    <h2 className="text-lg font-black text-slate-950">버그리포트 수정</h2>
                     <p className="mt-1 text-sm font-semibold text-slate-500">수정 가능한 항목만 저장합니다.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -271,103 +281,69 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4">
                   <label className="grid gap-2 text-sm font-bold text-slate-700">
                     제목
                     <input value={editDraft.title ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, title: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
                   </label>
+
                   <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    카테고리
-                    <input value={editDraft.category ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
+                    내용
+                    <textarea value={editDraft.description ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-36 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
                   </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    심각도
-                    <select value={editDraft.severity ?? "MINOR"} onChange={(event) => setEditDraft((current) => ({ ...current, severity: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400">
-                      {["MINOR", "MAJOR", "CRITICAL"].map((value) => <option key={value} value={value}>{value}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    우선순위
-                    <select value={editDraft.priority ?? "MEDIUM"} onChange={(event) => setEditDraft((current) => ({ ...current, priority: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400">
-                      {["LOW", "MEDIUM", "HIGH"].map((value) => <option key={value} value={value}>{value}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    상태
-                    <select value={editDraft.status ?? "OPEN"} onChange={(event) => setEditDraft((current) => ({ ...current, status: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400">
-                      {["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"].map((value) => <option key={value} value={value}>{statusLabels[value] ?? value}</option>)}
-                    </select>
-                  </label>
+
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <label className="grid gap-2 text-sm font-bold text-slate-700">
+                      카테고리
+                      <input value={editDraft.category ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, category: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-bold text-slate-700">
+                      심각도
+                      <select value={editDraft.severity ?? "MINOR"} onChange={(event) => setEditDraft((current) => ({ ...current, severity: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400">
+                        {["MINOR", "MAJOR", "CRITICAL"].map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-bold text-slate-700">
+                      우선순위
+                      <select value={editDraft.priority ?? "MEDIUM"} onChange={(event) => setEditDraft((current) => ({ ...current, priority: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400">
+                        {["LOW", "MEDIUM", "HIGH"].map((value) => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </label>
+                  </div>
+
                   <label className="grid gap-2 text-sm font-bold text-slate-700">
                     페이지 URL
                     <input value={editDraft.page_url ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, page_url: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700 md:col-span-2">
-                    내용
-                    <textarea value={editDraft.description ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-24 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700 md:col-span-2">
-                    재현 단계
-                    <textarea value={editDraft.steps_to_reproduce ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, steps_to_reproduce: event.target.value }))} className="min-h-20 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    기대 결과
-                    <textarea value={editDraft.expected_result ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, expected_result: event.target.value }))} className="min-h-20 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    실제 결과
-                    <textarea value={editDraft.actual_result ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, actual_result: event.target.value }))} className="min-h-20 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    브라우저
-                    <input value={editDraft.browser ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, browser: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    OS
-                    <input value={editDraft.os ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, os: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    디바이스
-                    <input value={editDraft.device ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, device: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    앱 버전
-                    <input value={editDraft.app_version ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, app_version: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
                   </label>
                 </div>
               </Card>
             ) : null}
 
-            <Card className="overflow-hidden">
-              <div className="border-b border-slate-100 p-6">
-                <div className="mb-4 flex flex-wrap gap-2">
+            <Card className="p-6">
+              <div className="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+                <h2 className="text-lg font-black text-slate-950">버그리포트 내용</h2>
+                <div className="flex flex-wrap gap-2">
                   <Badge tone={badgeTone(report.status)}>{statusLabels[report.status ?? ""] ?? report.status ?? "OPEN"}</Badge>
                   <Badge tone={badgeTone(report.severity)}>{report.severity ?? "MINOR"}</Badge>
                   <Badge tone={badgeTone(report.priority)}>{report.priority ?? "MEDIUM"}</Badge>
                 </div>
-                <h2 className="text-2xl font-black text-slate-950">{report.title || "제목 없음"}</h2>
-                <p className="mt-3 whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-600 [overflow-wrap:anywhere] [word-break:keep-all]">{report.description || "설명이 없습니다."}</p>
               </div>
 
-              <dl className="grid gap-3 p-6 md:grid-cols-2">
-                <DetailRow label="category" value={report.category} />
-                <DetailRow label="pageUrl" value={report.page_url} />
-                <DetailRow label="browser" value={report.browser} />
-                <DetailRow label="os" value={report.os} />
-                <DetailRow label="device" value={report.device} />
-                <DetailRow label="appVersion" value={report.app_version} />
-                <DetailRow label="createdAt" value={formatDate(report.created_at)} />
-                <DetailRow label="updatedAt" value={formatDate(report.updated_at)} />
-                <div className="md:col-span-2">
-                  <DetailRow label="stepsToReproduce" value={report.steps_to_reproduce} />
+              <dl className="grid gap-4">
+                <DetailRow label="제목" value={report.title || "제목 없음"} />
+                <DetailRow label="내용" value={report.description || "설명이 없습니다."} />
+                <div className="grid gap-4 md:grid-cols-3">
+                  <DetailRow label="카테고리" value={report.category ?? "GENERAL"} />
+                  <DetailRow label="심각도" value={report.severity ?? "MINOR"} />
+                  <DetailRow label="우선순위" value={report.priority ?? "MEDIUM"} />
                 </div>
-                <div className="md:col-span-2">
-                  <DetailRow label="expectedResult" value={report.expected_result} />
-                </div>
-                <div className="md:col-span-2">
-                  <DetailRow label="actualResult" value={report.actual_result} />
-                </div>
+                <DetailRow label="페이지 URL" value={report.page_url} />
               </dl>
+
+              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-100 pt-4 text-xs font-semibold text-slate-500">
+                <span>등록일 {formatDate(report.created_at)}</span>
+                <span>수정일 {formatDate(report.updated_at)}</span>
+              </div>
             </Card>
 
             <Card className="p-6">
@@ -376,20 +352,22 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                   <h2 className="text-lg font-black text-slate-950">첨부파일</h2>
                   <p className="mt-1 text-sm font-semibold text-slate-500">스크린샷이나 참고 파일을 추가하고 다운로드합니다.</p>
                 </div>
-                <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800">
-                  <Upload className="h-4 w-4" aria-hidden="true" />
-                  {uploading ? "업로드 중" : "파일 추가"}
-                  <input
-                    type="file"
-                    multiple
-                    disabled={uploading}
-                    onChange={(event) => {
-                      handleUpload(event.target.files);
-                      event.target.value = "";
-                    }}
-                    className="hidden"
-                  />
-                </label>
+                {canUploadAttachment ? (
+                  <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800">
+                    <Upload className="h-4 w-4" aria-hidden="true" />
+                    {uploading ? "업로드 중" : "파일 추가"}
+                    <input
+                      type="file"
+                      multiple
+                      disabled={uploading}
+                      onChange={(event) => {
+                        handleUpload(event.target.files);
+                        event.target.value = "";
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                ) : null}
               </div>
 
               {actionMessage ? <p className="mb-4 rounded-lg bg-slate-50 p-3 text-sm font-bold text-slate-700">{actionMessage}</p> : null}
