@@ -17,6 +17,7 @@ from app.modules.ai_relay.service import (
     build_replay,
     get_event,
     list_events,
+    serialize_event,
     store_event,
 )
 
@@ -70,7 +71,7 @@ def create_event():
             )
 
     event_dict = event.to_dict()
-    broadcast_queued = _emit("ai_event_received", event_dict)
+    broadcast_queued = _emit("ai_event_received", serialize_event(event))
     status_code = 201 if status == "created" else 200
 
     return jsonify({
@@ -91,7 +92,7 @@ def get_events():
         event_type=request.args.get("event_type"),
         status=request.args.get("status"),
     )
-    event_items = [event.to_dict() for event in events]
+    event_items = [serialize_event(event) for event in events]
 
     return jsonify({
         "ok": True,
@@ -107,7 +108,7 @@ def get_event_detail(event_id: str):
     if event is None:
         return jsonify({"ok": False, "success": False, "error": "event not found"}), 404
 
-    return jsonify({"ok": True, "success": True, "event": event.to_dict()}), 200
+    return jsonify({"ok": True, "success": True, "event": serialize_event(event)}), 200
 
 
 @ai_relay_bp.get("/replays/<event_id>")
