@@ -17,9 +17,14 @@ EVENT_ID_MAX_LENGTH = 191
 RECENT_INCIDENT_EVENT_NAME = "incident.created"
 AI_RELAY_SOURCE = "ai_relay"
 AI_VM_PUBLIC_BASE_URL = os.getenv("AI_VM_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
-AI_VM_INTERNAL_BASE_URLS = (
-    "http://127.0.0.1:5001",
-    "http://localhost:5001",
+AI_MEDIA_PUBLIC_BASE_URL = os.getenv("AI_MEDIA_PUBLIC_BASE_URL", AI_VM_PUBLIC_BASE_URL).rstrip("/")
+AI_VM_INTERNAL_BASE_URLS = tuple(
+    base.strip().rstrip("/")
+    for base in os.getenv(
+        "AI_VM_INTERNAL_BASE_URLS",
+        "http://127.0.0.1:5001,http://localhost:5001,http://192.168.0.186:5001",
+    ).split(",")
+    if base.strip()
 )
 
 
@@ -165,14 +170,19 @@ def _normalize_payload_urls(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _normalize_media_url(value: Any) -> str | None:
+def _normalize_media_url(value: Any, public_base_url: str | None = None) -> str | None:
     text = _clean_string(value)
     if not text:
         return None
 
+    target_base_url = (public_base_url or AI_VM_PUBLIC_BASE_URL).rstrip("/")
+
     for internal_base_url in AI_VM_INTERNAL_BASE_URLS:
         if text.startswith(internal_base_url):
-            return f"{AI_VM_PUBLIC_BASE_URL}{text[len(internal_base_url):]}"
+            return f"{target_base_url}{text[len(internal_base_url):]}"
+
+    if text.startswith(AI_VM_PUBLIC_BASE_URL):
+        return f"{target_base_url}{text[len(AI_VM_PUBLIC_BASE_URL):]}"
 
     return text
 
@@ -218,6 +228,35 @@ def get_event(event_id: str) -> AiEvent | None:
         return None
 
     return db.session.get(AiEvent, clean_event_id)
+
+
+def _normalize_payload_urls_for_public_response(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(payload)
+
+    for key in ("snapshot_url", "video_url", "stream_url"):
+        if key in normalized:
+            normalized[key] = _normalize_media_url(
+                normalized.get(key),
+                public_base_url=AI_MEDIA_PUBLIC_BASE_URL,
+            )
+
+    return normalized
+
+
+def serialize_event(event: AiEvent) -> dict[str, Any]:
+    event_dict = event.to_dict()
+
+    for key in ("snapshot_url", "video_url", "stream_url"):
+        event_dict[key] = _normalize_media_url(
+            event_dict.get(key),
+            public_base_url=AI_MEDIA_PUBLIC_BASE_URL,
+        )
+
+    raw_event = event_dict.get("raw_event_json")
+    if isinstance(raw_event, dict):
+        event_dict["raw_event_json"] = _normalize_payload_urls_for_public_response(raw_event)
+
+    return event_dict
 
 
 def build_replay(event: AiEvent) -> dict[str, Any]:
