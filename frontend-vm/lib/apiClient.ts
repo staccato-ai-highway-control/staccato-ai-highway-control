@@ -7,8 +7,9 @@ type ApiOptions = Omit<RequestInit, "body"> & {
   auth?: boolean;
 };
 
-type ApiErrorPayload = {
+export type ApiErrorPayload = {
   success?: boolean;
+  status_code?: number;
   error_code?: string;
   message?: string;
   error?: string;
@@ -16,7 +17,7 @@ type ApiErrorPayload = {
   details?: unknown;
 };
 
-const statusMessages: Record<number, string> = {
+export const statusMessages: Record<number, string> = {
   401: "로그인이 필요합니다.",
   403: "접근 권한이 없습니다.",
   404: "요청한 데이터를 찾을 수 없습니다.",
@@ -74,6 +75,35 @@ function safeErrorMessage(response: Response, message?: string | null) {
   return message;
 }
 
+function getErrorDetails(response: Response, payload: unknown) {
+  const errorPayload = typeof payload === "object" && payload !== null ? payload as ApiErrorPayload : null;
+  const message = errorPayload?.message ?? errorPayload?.error ?? errorPayload?.detail;
+  return {
+    message: typeof payload === "string" ? safeErrorMessage(response, payload) : safeErrorMessage(response, message),
+    errorCode: errorPayload?.error_code,
+    statusCode: errorPayload?.status_code ?? response.status,
+    payload,
+  };
+}
+
+export class ApiError extends Error {
+  statusCode: number;
+  errorCode?: string;
+  payload: unknown;
+
+  constructor(message: string, statusCode: number, errorCode?: string, payload?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.statusCode = statusCode;
+    this.errorCode = errorCode;
+    this.payload = payload;
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
 function getErrorMessage(response: Response, payload: unknown) {
   if (typeof payload === "object" && payload !== null) {
     const errorPayload = payload as ApiErrorPayload;
@@ -110,14 +140,16 @@ export async function apiClient<T>(path: string, options: ApiOptions = {}): Prom
   const payload = await parseResponseBody(response);
 
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) {
-      redirectToLogin();
-    }
-
-    throw new Error(getErrorMessage(response, payload));
+    if (response.status === 401) redirectToLogin();
+    const details = getErrorDetails(response, payload);
+    throw new ApiError(details.message, details.statusCode, details.errorCode, details.payload);
   }
 
   if (response.status === 204) return undefined as T;
+  if (typeof payload === "object" && payload !== null && (payload as ApiErrorPayload).success === false) {
+    const details = getErrorDetails(response, payload);
+    throw new ApiError(details.message, details.statusCode, details.errorCode, details.payload);
+  }
   return payload as T;
 }
 

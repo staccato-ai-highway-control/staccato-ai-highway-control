@@ -29,7 +29,6 @@ load_local_env()
 
 app = create_app()
 
-
 if __name__ == "__main__":
     port = int(os.getenv("FLASK_RUN_PORT") or os.getenv("PORT", "5000"))
 

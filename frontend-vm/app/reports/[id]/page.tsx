@@ -12,8 +12,11 @@ import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { Card } from "@/components/common/Card";
 import { normalizeMediaUrl } from "@/lib/mediaUrl";
+import { isApiError } from "@/lib/apiClient";
 import { approveReport, deleteReport, deleteReportAttachment, getReport, getReportAnalysisJobs, getReportAnalysisStatus, rejectReport, requestReportAnalysis, retryReportAnalysisJob, updateReport, updateReportStatus, uploadReportAttachments } from "@/features/reports/api";
+import type { AuthUser } from "@/features/auth/types";
 import type { Report, ReportAnalysisJob, ReportAnalysisStatus, ReportAttachment, UpdateReportPayload } from "@/features/reports/types";
+import { getStoredAuthUser } from "@/lib/authStorage";
 
 const reportTypeLabels: Record<string, string> = {
   GENERAL: "일반",
@@ -109,16 +112,16 @@ function getAnalysisSummaryValue(report: Report, status?: ReportAnalysisStatus |
 }
 
 function isAnalysisRunning(status: string) {
-  return ["QUEUED", "PROCESSING", "ANALYZING", "REQUESTED"].includes(status);
+  return ["QUEUED", "RUNNING", "PROCESSING", "ANALYZING", "REQUESTED"].includes(status);
 }
 
 function isAnalysisTerminal(status: string) {
-  return ["COMPLETED", "FAILED"].includes(status);
+  return ["COMPLETED", "FAILED", "CANCELLED"].includes(status);
 }
 
 function getBadgeTone(value: string): "slate" | "blue" | "green" | "amber" | "red" {
   if (["REJECTED", "DELETED", "URGENT", "HIGH", "CRITICAL", "FAILED"].includes(value)) return "red";
-  if (["QUEUED", "PROCESSING", "ANALYZING", "MEDIUM"].includes(value)) return "amber";
+  if (["QUEUED", "RUNNING", "PROCESSING", "ANALYZING", "MEDIUM"].includes(value)) return "amber";
   if (["CONVERTED_TO_INCIDENT", "COMPLETED", "LOW"].includes(value)) return "green";
   if (["REVIEWING", "REQUESTED", "WAITING", "NORMAL"].includes(value)) return "blue";
   return "slate";
@@ -258,10 +261,12 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const router = useRouter();
   const [report, setReport] = useState<Report | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [editDraft, setEditDraft] = useState<UpdateReportPayload>({});
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [requestingAnalysis, setRequestingAnalysis] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -293,6 +298,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   async function loadReport() {
     setLoading(true);
     setErrorMessage(null);
+    setErrorStatus(null);
     setActionError(null);
 
     try {
@@ -306,6 +312,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
       }
       if (isEditing) beginEdit(nextReport);
     } catch (error) {
+      setErrorStatus(isApiError(error) ? error.statusCode : 500);
       setErrorMessage(error instanceof Error ? error.message : "신고 상세를 불러오지 못했습니다.");
       setReport(null);
       setAnalysisJobs([]);
@@ -315,6 +322,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
   }
 
   useEffect(() => {
+    setAuthUser(getStoredAuthUser());
     loadReport();
   }, [id]);
 
@@ -578,13 +586,19 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
     return (
       <RequireAuth>
         <AppLayout title="신고 상세">
-          <ErrorPage statusCode={404} title="신고를 찾을 수 없습니다" description={errorMessage ?? "요청한 신고가 존재하지 않거나 접근할 수 없습니다."} actionLabel="신고 목록으로 이동" actionHref="/reports" secondaryActionLabel="대시보드로 이동" secondaryActionHref="/dashboard" />
+          <ErrorPage statusCode={errorStatus ?? 404} title={errorStatus === 403 ? "신고 접근 권한이 없습니다" : errorStatus === 500 ? "신고를 불러오지 못했습니다" : "신고를 찾을 수 없습니다"} description={errorMessage ?? "요청한 신고가 존재하지 않거나 접근할 수 없습니다."} actionLabel="신고 목록으로 이동" actionHref="/reports" secondaryActionLabel="대시보드로 이동" secondaryActionHref="/dashboard" />
         </AppLayout>
       </RequireAuth>
     );
   }
 
   const status = getReportStatus(report);
+  const isOperationsAdmin = authUser?.account_status?.toUpperCase() === "ACTIVE" && ["SUPER_ADMIN", "CONTROL_ADMIN"].includes(authUser.role ?? "");
+  const canApprove = isOperationsAdmin && (report.allowed_actions?.approve ?? true);
+  const canReject = isOperationsAdmin && (report.allowed_actions?.reject ?? true);
+  const canChangeStatus = isOperationsAdmin && (report.allowed_actions?.change_status ?? true);
+  const canRequestAnalysis = isOperationsAdmin && (report.allowed_actions?.request_analysis ?? true);
+  const canRetryAnalysis = isOperationsAdmin && (report.allowed_actions?.retry_analysis ?? true);
   const priority = getReportPriority(report);
   const reportType = getReportType(report);
   const purpose = getUploadPurpose(report);
@@ -649,14 +663,14 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                     삭제
                   </button>
-                  <button type="button" onClick={handleApprove} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 px-4 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
+                  {canApprove ? <button type="button" onClick={handleApprove} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 px-4 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">
                     <CheckCircle className="h-4 w-4" aria-hidden="true" />
                     승인
-                  </button>
-                  <button type="button" onClick={handleReject} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 px-4 text-sm font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50">
+                  </button> : null}
+                  {canReject ? <button type="button" onClick={handleReject} disabled={updatingOperation} className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber-200 px-4 text-sm font-bold text-amber-700 transition hover:bg-amber-50 disabled:opacity-50">
                     <XCircle className="h-4 w-4" aria-hidden="true" />
                     반려
-                  </button>
+                  </button> : null}
                 </div>
               </div>
 
@@ -820,10 +834,10 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                 </div>
               ) : null}
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis || isAnalysisRunning(analysisStatus)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
+                {canRequestAnalysis ? <button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis || isAnalysisRunning(analysisStatus)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
                   <Sparkles className="h-4 w-4" aria-hidden="true" />
                   {requestingAnalysis ? "요청 중" : "분석 요청"}
-                </button>
+                </button> : null}
                 <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-10 items-center rounded-lg border border-sky-200 px-4 text-sm font-bold text-sky-700 no-underline transition hover:bg-sky-50">
                   비교분석
                 </Link>
@@ -838,7 +852,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                     {analysisJobs.map((job, index) => {
                       const jobId = getJobId(job);
                       const jobStatus = getJobStatus(job);
-                      const canRetry = jobStatus === "FAILED" && Boolean(jobId);
+                      const canRetry = canRetryAnalysis && jobStatus === "FAILED" && Boolean(jobId);
 
                       return (
                         <div key={jobId ?? `analysis-job-${index}`} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -883,7 +897,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
               </dl>
             </Card>
 
-            <Card className="p-5">
+            {canChangeStatus ? <Card className="p-5">
               <h3 className="text-lg font-black text-slate-950">운영 상태 변경</h3>
               <div className="mt-4 grid gap-2">
                 {["SUBMITTED", "REVIEWING", "ANALYZING", "CONVERTED_TO_INCIDENT", "REJECTED", "CLOSED"].map((nextStatus) => (
@@ -892,7 +906,7 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
                   </button>
                 ))}
               </div>
-            </Card>
+            </Card> : null}
 
             <Card className="p-5">
               <h3 className="text-lg font-black text-slate-950">이벤트 전환 결과</h3>

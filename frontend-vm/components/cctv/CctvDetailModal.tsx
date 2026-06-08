@@ -1,11 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useState } from "react";
 import type { Cctv } from "@/types/cctv";
-import type { ManualIncident, ManualIncidentPayload } from "@/types/incident";
 import { CctvFrame, statusLabels } from "@/components/cctv/CctvCard";
-import { ManualIncidentForm } from "@/components/cctv/ManualIncidentForm";
 
 function formatConfidence(confidence?: number) {
   if (typeof confidence !== "number") return "-";
@@ -15,18 +12,12 @@ function formatConfidence(confidence?: number) {
 export function CctvDetailModal({
   cctv,
   cctvIndex,
-  incidents,
   onClose,
-  onCreateIncident,
 }: {
   cctv: Cctv;
   cctvIndex: number;
-  incidents: ManualIncident[];
   onClose: () => void;
-  onCreateIncident: (payload: ManualIncidentPayload) => void;
 }) {
-  const [isFormOpen, setIsFormOpen] = useState(false);
-
   const detailRows = [
     ["CCTV 코드", cctv.cctvCode],
     ["도로명", cctv.roadName],
@@ -69,44 +60,15 @@ export function CctvDetailModal({
                 ))}
               </dl>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsFormOpen((value) => !value)}
-              className="h-11 rounded-lg bg-orange-500 px-4 font-bold text-white transition hover:bg-orange-600"
-            >
-              {isFormOpen ? "등록 폼 닫기" : "수동 이벤트 트리거"}
-            </button>
+            <button type="button" disabled className="h-11 cursor-not-allowed rounded-lg bg-slate-300 px-4 font-bold text-white">수동 이벤트 API 미연결</button>
+            <p className="text-xs font-semibold leading-5 text-amber-700">실제 이벤트 생성 API가 연결되기 전에는 수동 이벤트를 생성하지 않습니다.</p>
           </aside>
         </div>
 
-        <div className="grid gap-5 border-t border-slate-200 p-5 xl:grid-cols-[1fr_360px]">
-          <div>
-            {isFormOpen ? (
-              <ManualIncidentForm cctv={cctv} onSubmit={onCreateIncident} />
-            ) : (
-              <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-semibold text-slate-500">
-                관리자 확인이 필요한 상황이면 수동 이벤트 트리거 버튼을 눌러 시연용 이벤트를 생성하세요.
-              </div>
-            )}
-          </div>
-          <div className="rounded-lg border border-slate-200 p-4">
-            <h3 className="font-black text-slate-950">최근 수동 이벤트 이력</h3>
-            <div className="mt-4 grid gap-3">
-              {incidents.length > 0 ? (
-                incidents.map((incident) => (
-                  <div key={incident.id} className="rounded-lg border border-slate-100 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <b className="text-sm text-slate-950">{incident.incidentCode}</b>
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">{incident.riskLevel}</span>
-                    </div>
-                    <p className="mt-2 text-sm font-semibold text-slate-700">{incident.title}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-400">{incident.createdAt}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-500">등록 이력이 없습니다.</p>
-              )}
-            </div>
+        <div className="border-t border-slate-200 p-5">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm font-semibold leading-6 text-amber-800">
+            <b className="block text-amber-950">수동 이벤트 생성 API가 아직 연결되지 않았습니다.</b>
+            로컬 시연 이벤트나 임의 이력은 표시하지 않습니다. <code>POST /api/cctvs/{"{camera_id}"}/manual-events</code> 연결 후 활성화됩니다.
           </div>
         </div>
       </section>

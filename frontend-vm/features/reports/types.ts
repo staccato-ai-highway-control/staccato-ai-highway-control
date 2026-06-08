@@ -1,6 +1,6 @@
 export type ReportType = "GENERAL" | "ACCIDENT" | "LANE_STOP_REPORT" | "SHOULDER_STOP_REPORT" | "UNKNOWN_REPORT" | string;
 export type UploadPurpose = "ANALYSIS" | "REPORT" | "NORMAL_REFERENCE" | "TEST_DEMO" | string;
-export type AnalysisStatus = "WAITING" | "REQUESTED" | "QUEUED" | "PROCESSING" | "ANALYZING" | "COMPLETED" | "FAILED" | string;
+export type AnalysisStatus = "WAITING" | "REQUESTED" | "QUEUED" | "RUNNING" | "PROCESSING" | "ANALYZING" | "COMPLETED" | "FAILED" | "CANCELLED" | string;
 export type ReportProcessingStatus = "SUBMITTED" | "REVIEWING" | "ANALYZING" | "CONVERTED_TO_INCIDENT" | "REJECTED" | "CLOSED" | "DELETED" | string;
 export type ReportPriority = "LOW" | "NORMAL" | "MEDIUM" | "HIGH" | "URGENT" | string;
 
@@ -93,6 +93,18 @@ export interface ReportAnalysisComparisonResult {
   created_at?: string | null;
 }
 
+export interface ReportAllowedActions {
+  update?: boolean;
+  delete?: boolean;
+  approve?: boolean;
+  reject?: boolean;
+  change_status?: boolean;
+  request_analysis?: boolean;
+  retry_analysis?: boolean;
+  upload_attachment?: boolean;
+  delete_attachment?: boolean;
+}
+
 export interface Report {
   id: number | string;
   report_code?: string;
@@ -104,6 +116,8 @@ export interface Report {
   reporter_id?: number;
   reporter_name?: string;
   reporter?: string;
+  author_id?: number | string | null;
+  allowed_actions?: ReportAllowedActions | null;
   cctv_id?: number | string | null;
   status?: string;
   priority?: string;

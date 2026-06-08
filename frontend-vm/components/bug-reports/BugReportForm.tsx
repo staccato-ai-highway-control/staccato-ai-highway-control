@@ -47,7 +47,7 @@ export function BugReportForm() {
       const nextId = "id" in response ? response.id : undefined;
       router.push(nextId ? `/bug-reports/${nextId}` : "/bug-reports");
     } catch {
-      setErrorMessage("문의 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+      setErrorMessage("버그리포트 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -58,7 +58,7 @@ export function BugReportForm() {
       <section className="mx-auto max-w-4xl">
         <header className="mb-6">
           <p className="text-sm font-black text-slate-950">STACCATO</p>
-          <h1 className="mt-3 text-3xl font-black">문의 등록</h1>
+          <h1 className="mt-3 text-3xl font-black">버그리포트 등록</h1>
         </header>
 
         <Card className="p-6">

@@ -148,6 +148,7 @@ EVENT_VEHICLE_CLASSES = {
     ).split(",")
     if item.strip()
 }
+EVENT_MIN_CONFIDENCE = float(os.environ.get("EVENT_MIN_CONFIDENCE", "0.45"))
 EVENT_HISTORY_LENGTH = int(os.environ.get("EVENT_HISTORY_LENGTH", "10"))
 EVENT_DANGER_LOW_RATIO = float(os.environ.get("EVENT_DANGER_LOW_RATIO", "0.3"))
 EVENT_DANGER_SECONDS = float(os.environ.get("EVENT_DANGER_SECONDS", "2.0"))

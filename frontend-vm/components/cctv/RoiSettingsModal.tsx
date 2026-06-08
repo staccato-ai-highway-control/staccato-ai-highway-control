@@ -113,7 +113,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
       cctvId: activeCctv.id,
     });
     setRoiConfig(saved);
-    window.alert(`${activeSlotNumber}번 카메라 ROI 설정이 저장되었습니다.`);
+    window.alert(`${activeSlotNumber}번 카메라 ROI가 이 브라우저에 임시 저장되었습니다. 서버에는 반영되지 않습니다.`);
   }
 
   return (
@@ -122,7 +122,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-xl font-black text-slate-950">ROI 설정</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">ROI 좌표는 원본 영상 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}으로 저장됩니다.</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">ROI API 미연결: 좌표는 이 브라우저에만 임시 보관됩니다. 원본 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="닫기">
             <X className="h-5 w-5" aria-hidden="true" />
@@ -190,8 +190,8 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
 
           <aside className="grid content-start gap-4">
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-800">
-              <b className="block text-blue-950">ROI 설정은 현재 선택한 카메라 기준으로 저장됩니다.</b>
-              클릭한 점은 화면 크기와 무관하게 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환 저장됩니다.
+              <b className="block text-blue-950">ROI API 미연결 · 브라우저 임시 저장</b>
+              서버나 다른 기기에는 반영되지 않습니다. 클릭한 점은 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환해 localStorage에만 보관합니다.
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -244,7 +244,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
               <button type="button" onClick={handleResetPolygon} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Polygon 초기화</button>
               <button type="button" onClick={handleSave} className="inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
                 <Save className="h-4 w-4" aria-hidden="true" />
-                전체 ROI 저장
+                브라우저에 임시 저장
               </button>
             </div>
           </aside>

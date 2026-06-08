@@ -25,7 +25,6 @@ type OverlayState = {
 type RawDetection = Record<string, unknown>;
 
 const BBOX_POLL_INTERVAL_MS = 1000;
-const AI_DETECTION_CAMERA_IDS = new Set(["camera-1", "camera-2"]);
 
 // AI-vm stream/ring buffer 기본 출력 크기.
 // API 응답에 frame_width/frame_height가 없을 때만 fallback으로 사용합니다.
@@ -54,12 +53,40 @@ function readNumber(value: unknown) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function getBboxMetadata(payload: unknown): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  const direct = record.bbox_metadata ?? record.bboxMetadata;
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct as Record<string, unknown>;
+  if (record.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+    const data = record.data as Record<string, unknown>;
+    const nested = data.bbox_metadata ?? data.bboxMetadata;
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) return nested as Record<string, unknown>;
+    if ((data.frame_width ?? data.frameWidth) !== undefined && (data.frame_height ?? data.frameHeight) !== undefined && (data.bbox_format ?? data.bboxFormat) !== undefined) return data;
+  }
+  if ((record.frame_width ?? record.frameWidth) !== undefined && (record.frame_height ?? record.frameHeight) !== undefined && (record.bbox_format ?? record.bboxFormat) !== undefined) return record;
+  return null;
+}
+
+function hasDetectionArray(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return Array.isArray(payload);
+  const record = payload as Record<string, unknown>;
+  const metadata = getBboxMetadata(payload);
+  if ([record.detections, record.items, record.results, record.objects, metadata?.detections, metadata?.items].some(Array.isArray)) return true;
+  if (record.data && typeof record.data === "object" && !Array.isArray(record.data)) {
+    const data = record.data as Record<string, unknown>;
+    return [data.detections, data.items, data.results, data.objects].some(Array.isArray);
+  }
+  return false;
+}
+
 function getRawDetections(payload: unknown): RawDetection[] {
   if (Array.isArray(payload)) return payload as RawDetection[];
   if (!payload || typeof payload !== "object") return [];
 
   const record = payload as Record<string, unknown>;
-  const candidates = [record.detections, record.items, record.results, record.objects];
+  const metadata = getBboxMetadata(payload);
+  const candidates = [record.detections, record.items, record.results, record.objects, metadata?.detections, metadata?.items];
 
   for (const candidate of candidates) {
     if (Array.isArray(candidate)) return candidate as RawDetection[];
@@ -99,6 +126,11 @@ function getDetectionFrameSize(payload: unknown): FrameSize | null {
   }
 
   const record = payload as Record<string, unknown>;
+  const metadata = getBboxMetadata(payload);
+  if (metadata) {
+    const metadataSize = getFrameSizeFromRecord(metadata);
+    if (metadataSize) return metadataSize;
+  }
   const direct = getFrameSizeFromRecord(record);
   if (direct) return direct;
 
@@ -116,6 +148,9 @@ function getBboxFormat(payload: unknown): "xyxy" | "xywh" | null {
   }
 
   const record = payload as Record<string, unknown>;
+  const metadata = getBboxMetadata(payload);
+  const metadataFormat = String(metadata?.bbox_format ?? metadata?.bboxFormat ?? "").toLowerCase();
+  if (metadataFormat === "xyxy" || metadataFormat === "xywh") return metadataFormat;
   const direct = String(record.bbox_format ?? record.bboxFormat ?? "").toLowerCase();
   if (direct === "xyxy" || direct === "xywh") return direct;
 
@@ -217,15 +252,12 @@ function normalizeBbox(detection: RawDetection, frameSize: FrameSize, payloadBbo
 }
 
 function normalizeOverlayState(payload: unknown): OverlayState {
+  if (!getBboxMetadata(payload)) throw new Error("응답 형식 오류: bbox metadata가 없습니다.");
   const frameSize = getDetectionFrameSize(payload);
   const bboxFormat = getBboxFormat(payload);
-
-  if (!frameSize) {
-    return {
-      frameSize: DEFAULT_FRAME_SIZE,
-      detections: [],
-    };
-  }
+  if (!frameSize) throw new Error("응답 형식 오류: frame_width와 frame_height가 없습니다.");
+  if (!bboxFormat) throw new Error("응답 형식 오류: bbox_format이 없습니다.");
+  if (!hasDetectionArray(payload)) throw new Error("응답 형식 오류: detections 배열이 없습니다.");
 
   const detections = getRawDetections(payload)
     .map((detection) => normalizeBbox(detection, frameSize, bboxFormat))
@@ -245,7 +277,6 @@ function formatConfidence(confidence?: number) {
 export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: boolean }) {
   const cameraId = useMemo(() => getCameraId(cctv), [cctv]);
   const bboxUrl = useMemo(() => getBboxUrl(cctv, cameraId), [cameraId, cctv]);
-  const isDetectionSupported = AI_DETECTION_CAMERA_IDS.has(cameraId);
   const [overlayState, setOverlayState] = useState<OverlayState>({
     frameSize: DEFAULT_FRAME_SIZE,
     detections: [],
@@ -261,7 +292,7 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
   }, [cameraId]);
 
   useEffect(() => {
-    if (!enabled || !isDetectionSupported) {
+    if (!enabled) {
       setOverlayState((current) => ({ ...current, detections: [] }));
       return;
     }
@@ -280,7 +311,7 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
           cache: "no-store",
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => null);
+        const payload = await response.json().catch(() => { throw new Error("응답 형식 오류: JSON을 파싱할 수 없습니다."); });
 
         if (!isMounted) return;
 
@@ -307,7 +338,7 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
       controller?.abort();
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [bboxUrl, enabled, isDetectionSupported]);
+  }, [bboxUrl, enabled]);
 
   if (!enabled) return null;
 
@@ -339,13 +370,13 @@ export function BboxDetectionOverlay({ cctv, enabled }: { cctv: Cctv; enabled: b
           </div>
         );
       })}
-      {!isDetectionSupported ? (
-        <div className="absolute left-4 top-4 rounded-lg border border-amber-200 bg-amber-50/95 px-3 py-2 text-xs font-bold text-amber-800 shadow-sm">
-          AI VM 객체 탐지는 현재 camera-1, camera-2 worker 기준으로 설정되어 있습니다. 현재 {cameraId}는 bbox polling을 생략합니다.
-        </div>
-      ) : errorMessage ? (
+      {errorMessage ? (
         <div className="absolute left-4 top-4 rounded-lg border border-red-200 bg-red-50/95 px-3 py-2 text-xs font-bold text-red-700 shadow-sm">
           {errorMessage}
+        </div>
+      ) : detections.length === 0 ? (
+        <div className="absolute left-4 top-4 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 text-xs font-bold text-slate-600 shadow-sm">
+          탐지된 객체가 없습니다.
         </div>
       ) : null}
     </div>

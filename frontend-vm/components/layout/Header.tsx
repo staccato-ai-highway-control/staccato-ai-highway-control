@@ -34,11 +34,13 @@ export function Header({
   isMobileMenuOpen,
   onMobileMenuToggle,
   onRealtimePreviewClick,
+  isRealtimePreviewLoading = false,
 }: {
   title: string;
   isMobileMenuOpen?: boolean;
   onMobileMenuToggle?: () => void;
   onRealtimePreviewClick?: () => void;
+  isRealtimePreviewLoading?: boolean;
 }) {
   const router = useRouter();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
@@ -81,9 +83,10 @@ export function Header({
                 key={badge.label}
                 type="button"
                 onClick={onRealtimePreviewClick}
-                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:brightness-95 " + badge.className}
+                disabled={isRealtimePreviewLoading}
+                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60 " + badge.className}
               >
-                {badge.label}
+                {isRealtimePreviewLoading ? "불러오는 중" : badge.label}
               </button>
             ) : (
               <span
