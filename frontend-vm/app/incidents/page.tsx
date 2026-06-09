@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
@@ -45,6 +46,10 @@ const statusOptions: Array<{ label: string; value: IncidentStatusFilter }> = [
   { label: "종결", value: "CLOSED" },
 ];
 
+const incidentStatusOptions = statusOptions.filter(
+  (option): option is { label: string; value: IncidentStatus } => option.value !== "ALL"
+);
+
 const pageSizeOptions = [10, 20, 50];
 
 function getIncidentAnalysisJobId(incident: Incident) {
@@ -66,6 +71,7 @@ function matchesSearch(incident: Incident, keyword: string) {
 }
 
 export default function IncidentsPage() {
+  const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [typeFilter, setTypeFilter] = useState<IncidentTypeFilter>("ALL");
   const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>("ALL");
@@ -76,6 +82,10 @@ export default function IncidentsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<IncidentStatus>("REVIEWING");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const [selectedIncidentIds, setSelectedIncidentIds] = useState<Set<string>>(new Set());
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   async function loadIncidents() {
     setLoading(true);
@@ -123,7 +133,88 @@ export default function IncidentsPage() {
   const visibleCurrentPage = Math.min(currentPage, totalPages);
   const pageStartIndex = filteredIncidents.length === 0 ? 0 : (visibleCurrentPage - 1) * pageSize + 1;
   const pageEndIndex = Math.min(visibleCurrentPage * pageSize, filteredIncidents.length);
-  const paginatedIncidents = filteredIncidents.slice((visibleCurrentPage - 1) * pageSize, visibleCurrentPage * pageSize);
+  const paginatedIncidents = useMemo(
+    () => filteredIncidents.slice((visibleCurrentPage - 1) * pageSize, visibleCurrentPage * pageSize),
+    [filteredIncidents, pageSize, visibleCurrentPage]
+  );
+  const visibleIncidentIds = useMemo(() => paginatedIncidents.map((incident) => incident.id), [paginatedIncidents]);
+  const allVisibleSelected = visibleIncidentIds.length > 0 && visibleIncidentIds.every((id) => selectedIncidentIds.has(id));
+  const someVisibleSelected = visibleIncidentIds.some((id) => selectedIncidentIds.has(id));
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+    }
+  }, [allVisibleSelected, someVisibleSelected]);
+
+  useEffect(() => {
+    setSelectedIncidentIds((current) => {
+      const visibleIds = new Set(visibleIncidentIds);
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [visibleIncidentIds]);
+
+  function toggleAllIncidents(checked: boolean) {
+    setSelectedIncidentIds(checked ? new Set(visibleIncidentIds) : new Set());
+  }
+
+  function toggleIncident(incidentId: string, checked: boolean) {
+    setSelectedIncidentIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(incidentId);
+      else next.delete(incidentId);
+      return next;
+    });
+  }
+
+  const selectedIncidents = useMemo(
+    () => paginatedIncidents.filter((incident) => selectedIncidentIds.has(incident.id)),
+    [paginatedIncidents, selectedIncidentIds]
+  );
+  const selectedAnalysisJobIds = useMemo(
+    () => selectedIncidents
+      .map(getIncidentAnalysisJobId)
+      .filter((jobId): jobId is string | number => jobId !== null && jobId !== undefined)
+      .map(String),
+    [selectedIncidents]
+  );
+  const canCompareSelected = selectedAnalysisJobIds.length >= 2 && selectedAnalysisJobIds.length <= 5;
+
+  async function handleBulkStatusChange() {
+    if (selectedIncidents.length === 0) return;
+    setBulkUpdating(true);
+    setErrorMessage(null);
+
+    const results = await Promise.allSettled(
+      selectedIncidents.map((incident) => updateIncidentStatus(incident.id, bulkStatus))
+    );
+    const succeededIds = new Set(
+      selectedIncidents
+        .filter((_, index) => results[index]?.status === "fulfilled")
+        .map((incident) => incident.id)
+    );
+
+    setIncidents((current) => current.map((incident) => (
+      succeededIds.has(incident.id) ? { ...incident, status: bulkStatus } : incident
+    )));
+    setSelectedIncidentIds(new Set());
+    setBulkUpdating(false);
+
+    const failedCount = results.length - succeededIds.size;
+    if (failedCount > 0) {
+      setErrorMessage(`${failedCount}건의 이벤트 상태를 변경하지 못했습니다.`);
+    }
+  }
+
+  function handleCompareSelected() {
+    if (!canCompareSelected) return;
+    const query = new URLSearchParams({
+      selectedJobIds: selectedAnalysisJobIds.join(","),
+      selectedJobId: selectedAnalysisJobIds[0],
+    });
+    router.push(`/reports/analysis-comparisons?${query.toString()}`);
+  }
 
   useEffect(() => {
     setCurrentPage(1);
@@ -175,22 +266,47 @@ export default function IncidentsPage() {
 
         {!(errorMessage && !loading && incidents.length === 0) ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `전체 ${filteredIncidents.length}건 · 현재 ${pageStartIndex}-${pageEndIndex}건 표시`}</span>
+            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `전체 ${filteredIncidents.length}건 · 현재 ${pageStartIndex}-${pageEndIndex}건 · ${selectedIncidentIds.size}건 선택`}</span>
             <button type="button" onClick={loadIncidents} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-sm">
+          {selectedIncidentIds.size > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-100 bg-sky-50/70 px-4 py-3">
+              <span className="text-sm font-black text-sky-800">{selectedIncidentIds.size}건 선택됨</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={bulkStatus}
+                  onChange={(event) => setBulkStatus(event.target.value as IncidentStatus)}
+                  disabled={bulkUpdating}
+                  aria-label="선택 이벤트 변경 상태"
+                  className="h-9 rounded-lg border border-sky-200 bg-white px-3 text-xs font-bold text-sky-800 disabled:opacity-50"
+                >
+                  {incidentStatusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={handleBulkStatusChange} disabled={bulkUpdating} className="h-9 rounded-lg bg-sky-700 px-3 text-xs font-black text-white transition hover:bg-sky-800 disabled:opacity-50">
+                  {bulkUpdating ? "변경 중" : "선택 상태 변경"}
+                </button>
+                <button type="button" onClick={handleCompareSelected} disabled={!canCompareSelected || bulkUpdating} title={canCompareSelected ? undefined : "분석 Job이 있는 이벤트를 2~5개 선택해 주세요."} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  선택 비교분석 ({selectedAnalysisJobIds.length})
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="w-full overflow-hidden">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3">incident_code</th>
-                  <th className="min-w-[140px] whitespace-nowrap px-4 py-3">이벤트 유형</th>
-                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3">제목</th>
-                  <th className="min-w-[220px] px-4 py-3">도로명/위치</th>
-                  <th className="min-w-[90px] whitespace-nowrap px-4 py-3">위험도</th>
-                  <th className="min-w-[100px] whitespace-nowrap px-4 py-3">상태</th>
-                  <th className="min-w-[170px] whitespace-nowrap px-4 py-3">탐지 시각</th>
-                  <th className="min-w-[100px] whitespace-nowrap px-4 py-3">담당자</th>
-                  <th className="sticky right-0 z-20 min-w-[420px] whitespace-nowrap border-l border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">액션</th>
+                  <th className="w-11 px-2 py-3 text-center"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={(event) => toggleAllIncidents(event.target.checked)} aria-label="현재 이벤트 전체 선택" className="h-4 w-4 rounded border-slate-300" /></th>
+                  <th className="w-[9%] px-2 py-3">코드</th>
+                  <th className="w-[9%] px-2 py-3">유형</th>
+                  <th className="w-[12%] px-2 py-3">제목</th>
+                  <th className="w-[13%] px-2 py-3">도로명/위치</th>
+                  <th className="w-[6%] px-2 py-3">위험도</th>
+                  <th className="w-[7%] px-2 py-3">상태</th>
+                  <th className="w-[11%] px-2 py-3">탐지 시각</th>
+                  <th className="w-[9%] px-2 py-3">담당자</th>
+                  <th className="w-[220px] px-2 py-3">액션</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,37 +316,46 @@ export default function IncidentsPage() {
 
                   return (
                     <tr key={incident.id} className="border-t border-slate-100 align-top">
-                      <td className="min-w-[180px] whitespace-nowrap px-4 py-4 font-bold text-slate-700"><span className="block max-w-[160px] truncate">{incident.code}</span></td>
-                      <td className="min-w-[140px] whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{incidentTypeLabels[incident.eventType]}</td>
-                      <td className="min-w-[180px] whitespace-nowrap px-4 py-4">
-                        <b className="block max-w-[220px] truncate text-slate-950">{incident.title}</b>
+                      <td className="px-2 py-4 text-center"><input type="checkbox" checked={selectedIncidentIds.has(incident.id)} onChange={(event) => toggleIncident(incident.id, event.target.checked)} aria-label={incident.title + " 선택"} className="h-4 w-4 rounded border-slate-300" /></td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-bold text-slate-700" title={incident.code}>{incident.code}</td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-600" title={incidentTypeLabels[incident.eventType]}>{incidentTypeLabels[incident.eventType]}</td>
+                      <td className="min-w-0 px-2 py-4">
+                        <b className="block truncate text-slate-950" title={incident.title}>{incident.title}</b>
                         <p className="mt-1 text-xs font-semibold text-slate-400">신뢰도 {Math.round(incident.confidence * 100)}%</p>
                       </td>
-                      <td className="min-w-[220px] px-4 py-4">
+                      <td className="min-w-0 px-2 py-4">
                         {roadName || location ? (
                           <>
-                            <b className="block max-w-[220px] truncate text-slate-700">{roadName || "-"}</b>
-                            {location ? <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-slate-500">{location}</p> : null}
+                            <b className="block truncate text-slate-700" title={roadName}>{roadName || "-"}</b>
+                            {location ? <p className="mt-1 truncate text-xs font-semibold text-slate-500" title={location}>{location}</p> : null}
                           </>
                         ) : (
                           <span className="font-semibold text-slate-500">-</span>
                         )}
                       </td>
-                      <td className="min-w-[90px] whitespace-nowrap px-4 py-4"><span className="inline-flex whitespace-nowrap"><RiskLevelBadge level={incident.riskLevel} /></span></td>
-                      <td className="min-w-[100px] whitespace-nowrap px-4 py-4"><span className="inline-flex whitespace-nowrap"><IncidentStatusBadge status={incident.status} /></span></td>
-                      <td className="min-w-[170px] whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{formatDetectedAt(incident.detectedAt)}</td>
-                      <td className="min-w-[100px] whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{incident.assignee?.trim() || "미배정"}</td>
-                      <td className="sticky right-0 z-10 min-w-[420px] whitespace-nowrap border-l border-slate-200 bg-white px-4 py-4 shadow-sm">
-                        <div className="flex flex-nowrap gap-2">
-                          <Link href={`/incidents/${incident.id}`} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
-                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "REVIEWING")} className="whitespace-nowrap rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50 disabled:opacity-50">검토중</button>
-                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "FALSE_POSITIVE")} className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50">오탐 처리</button>
+                      <td className="truncate whitespace-nowrap px-2 py-4"><RiskLevelBadge level={incident.riskLevel} /></td>
+                      <td className="truncate whitespace-nowrap px-2 py-4"><IncidentStatusBadge status={incident.status} /></td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-500" title={formatDetectedAt(incident.detectedAt)}>{formatDetectedAt(incident.detectedAt)}</td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-600" title={incident.assignee?.trim() || "미배정"}>{incident.assignee?.trim() || "미배정"}</td>
+                      <td className="px-2 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          <Link href={`/incidents/${incident.id}`} className="whitespace-nowrap rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
+                          <select
+                            value={incident.status}
+                            disabled={updatingId === incident.id}
+                            onChange={(event) => handleStatusChange(incident, event.target.value as IncidentStatus)}
+                            aria-label={`${incident.title} 상태 변경`}
+                            className="h-8 min-w-24 rounded-lg border border-sky-200 bg-white px-2 text-xs font-bold text-sky-700 outline-none transition focus:border-sky-400 disabled:cursor-wait disabled:opacity-50"
+                          >
+                            {incidentStatusOptions.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
                           {getIncidentAnalysisJobId(incident) ? (
-                            <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="whitespace-nowrap rounded-lg border border-sky-200 px-3 py-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
+                            <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="whitespace-nowrap rounded-lg border border-sky-200 px-2 py-1.5 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
                           ) : (
-                            <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="whitespace-nowrap rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
+                            <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="whitespace-nowrap rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
                           )}
-                          <button type="button" disabled={updatingId === incident.id} onClick={() => handleStatusChange(incident, "RESOLVED")} className="whitespace-nowrap rounded-lg border border-emerald-200 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50">처리 완료</button>
                         </div>
                       </td>
                     </tr>

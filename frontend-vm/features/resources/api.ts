@@ -4,6 +4,20 @@ import { apiClient, getEnvelopeData, type FlexibleApiResponse } from "@/lib/apiC
 import type { CreateResourcePayload, DeleteResourceResponse, GetResourcesParams, ResourceItem, ResourceListResponse, UpdateResourcePayload } from "./types";
 
 const RESOURCE_BASE_PATH = "/api/resources";
+const RESOURCE_CATEGORIES = new Set([
+  "RESUME",
+  "COVER_LETTER",
+  "PRESENTATION",
+  "MEETING_NOTE",
+]);
+
+function normalizeCategory(category: unknown) {
+  return String(category ?? "").trim().toUpperCase();
+}
+
+function isResourceCategory(category: unknown) {
+  return RESOURCE_CATEGORIES.has(normalizeCategory(category));
+}
 
 function buildQuery(params: GetResourcesParams = {}) {
   const query = new URLSearchParams();
@@ -36,11 +50,11 @@ export async function getResources(params: GetResourcesParams = {}) {
   const data = getEnvelopeData(response);
   const items = data.items ?? [];
 
-  const isAccessLogMode = String(params.category) === "ACCESS_LOG";
+  const isAccessLogMode = normalizeCategory(params.category) === "ACCESS_LOG";
 
   const visibleItems = isAccessLogMode
-    ? items.filter((item) => String(item.category) === "ACCESS_LOG")
-    : items.filter((item) => String(item.category) !== "ACCESS_LOG");
+    ? items.filter((item) => normalizeCategory(item.category) === "ACCESS_LOG")
+    : items.filter((item) => isResourceCategory(item.category));
 
   return {
     ...data,
