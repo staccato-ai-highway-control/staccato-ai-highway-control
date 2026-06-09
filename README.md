@@ -59,3 +59,34 @@ AI-based traffic incident control system for detecting stopped vehicles on drivi
 - `DB VM`, `Flask VM`, `Frontend VM`, `AI VM`은 각각 분리된 VM 기준으로 운영합니다.
 - 루트 `docker-compose.yml`과 비-AI VM의 Dockerfile은 삭제되었습니다.
 - 실제 서버 실행 상태, DB 데이터, 설치된 패키지는 Git pull만으로 복제되지 않습니다.
+
+---
+
+## 사용설명서 / 운영 문서
+
+STACCATO의 사용자 사용법, 관리자 운영 방법, 최종 릴리즈 검증 결과는 아래 문서를 참고합니다.
+
+| 문서 | 설명 |
+|---|---|
+| [사용자 매뉴얼](docs/STACCATO_USER_MANUAL.md) | 서비스 접속, 로그인, 이벤트 조회, 영상 확인, 실시간 알림 확인 방법 |
+| [관리자 매뉴얼](docs/STACCATO_ADMIN_MANUAL.md) | 이벤트 관리, 사용자 신고 확인, 운영 점검 항목 |
+| [릴리즈 체크리스트](docs/STACCATO_RELEASE_CHECKLIST.md) | 최종 MVP 릴리즈 전 검증 결과 |
+| [운영 문서](docs/operations/ai-vm-control.md) | AI-vm 서비스 제어 및 운영 참고 문서 |
+| [인프라 문서](docs/infra/vm-server-status.md) | VM 분리 구조와 서버 상태 기준 |
+
+## 기본 사용 흐름
+
+1. 브라우저에서 STACCATO 서비스에 접속합니다.
+2. 계정으로 로그인합니다.
+3. 대시보드 또는 관제 화면에서 이벤트 목록을 확인합니다.
+4. 이벤트 상세 화면에서 스냅샷, 탐지 정보, 영상을 확인합니다.
+5. 필요한 경우 이벤트 영상을 다운로드합니다.
+6. 실시간 알림 영역에서 신규 이벤트 발생 여부를 확인합니다.
+
+## 현재 접속 기준
+
+```text
+https://mbc-sw.iptime.org:3221
+```
+
+> 현재 시연/개발 환경은 자체서명 인증서를 사용하므로 브라우저에서 보안 경고가 표시될 수 있습니다.
