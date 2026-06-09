@@ -117,8 +117,11 @@ export default function SignupRequestsPage() {
 
       await loadSignupRequests();
     } catch (error) {
+      const message = error instanceof Error ? error.message : "신청 상태 변경에 실패했습니다.";
       setErrorMessage(
-        error instanceof Error ? error.message : "신청 상태 변경에 실패했습니다."
+        message === "Target user not found."
+          ? "신청 정보와 연결된 사용자 계정을 찾을 수 없습니다. 운영 DB의 사용자 연결 상태를 확인해 주세요."
+          : message
       );
     } finally {
       setActionRequestId(null);
@@ -159,87 +162,63 @@ export default function SignupRequestsPage() {
 
         <section>
           <Card className="overflow-hidden">
-            <div className="overflow-auto">
-              <table className="w-full min-w-[1320px] table-fixed text-sm">
-                <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+            <table className="w-full table-fixed text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="w-[10%] px-3 py-3">신청 ID</th>
+                  <th className="w-[18%] px-3 py-3">이름</th>
+                  <th className="w-[17%] px-3 py-3">요청 역할</th>
+                  <th className="w-[14%] px-3 py-3">상태</th>
+                  <th className="w-[16%] px-3 py-3">신청일</th>
+                  <th className="w-[240px] px-3 py-3">버튼</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
                   <tr>
-                    <th className="w-16 px-4 py-3">신청 ID</th>
-                    <th className="w-32 px-4 py-3">이름</th>
-                    <th className="w-56 px-4 py-3">이메일</th>
-                    <th className="w-36 px-4 py-3">전화번호</th>
-                    <th className="w-36 px-4 py-3">요청 역할</th>
-                    <th className="w-56 px-4 py-3">신청 사유</th>
-                    <th className="w-24 px-4 py-3">상태</th>
-                    <th className="w-40 px-4 py-3">신청일</th>
-                    <th className="w-72 px-4 py-3">버튼</th>
+                    <td colSpan={6} className="px-4 py-10 text-center font-semibold text-slate-500">
+                      회원가입 신청 목록을 불러오는 중입니다.
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center font-semibold text-slate-500">
-                        회원가입 신청 목록을 불러오는 중입니다.
+                ) : requests.length > 0 ? (
+                  requests.map((request) => (
+                    <tr key={request.id} className="border-t border-slate-100">
+                      <td className="truncate whitespace-nowrap px-3 py-4 font-black text-slate-950" title={String(request.id)}>{request.id}</td>
+                      <td className="truncate whitespace-nowrap px-3 py-4 font-semibold text-slate-700" title={request.name}>{request.name}</td>
+                      <td className="truncate whitespace-nowrap px-3 py-4">
+                        <Badge tone="blue">{roleLabels[request.requestedRole]}</Badge>
+                      </td>
+                      <td className="truncate whitespace-nowrap px-3 py-4">
+                        <Badge tone={statusTone[request.status]}>{statusLabels[request.status]}</Badge>
+                      </td>
+                      <td className="truncate whitespace-nowrap px-3 py-4 font-semibold text-slate-500" title={request.requestedAt}>{request.requestedAt}</td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap">
+                          <button type="button" onClick={() => setSelectedRequestId(request.id)} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                            <Eye className="h-3.5 w-3.5" />
+                            상세 보기
+                          </button>
+                          <Button type="button" disabled={request.status !== "REQUESTED" || actionRequestId === request.id} onClick={() => updateRequestStatus(request.id, "APPROVED")} className="min-h-9 gap-1 bg-emerald-600 px-2.5 text-xs hover:bg-emerald-700">
+                            <UserCheck className="h-3.5 w-3.5" />
+                            승인
+                          </Button>
+                          <button type="button" disabled={request.status !== "REQUESTED" || actionRequestId === request.id} onClick={() => updateRequestStatus(request.id, "REJECTED")} className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-2.5 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                            <UserX className="h-3.5 w-3.5" />
+                            거절
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ) : requests.length > 0 ? (
-                    requests.map((request) => (
-                      <tr key={request.id} className="border-t border-slate-100 align-top">
-                        <td className="whitespace-nowrap px-4 py-4 font-black text-slate-950">{request.id}</td>
-                        <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-700">{request.name}</td>
-                        <td className="truncate px-4 py-4 font-semibold text-slate-600" title={request.email}>{request.email}</td>
-                        <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-600">{request.phone}</td>
-                        <td className="whitespace-nowrap px-4 py-4">
-                          <Badge tone="blue">{roleLabels[request.requestedRole]}</Badge>
-                        </td>
-                        <td className="break-words px-4 py-4 font-semibold leading-6 text-slate-600">
-                          {request.reason}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-4">
-                          <Badge tone={statusTone[request.status]}>{statusLabels[request.status]}</Badge>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-4 font-semibold text-slate-500">{request.requestedAt}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-nowrap gap-2 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedRequestId(request.id)}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              상세 보기
-                            </button>
-                            <Button
-                              type="button"
-                              disabled={request.status !== "REQUESTED" || actionRequestId === request.id}
-                              onClick={() => updateRequestStatus(request.id, "APPROVED")}
-                              className="min-h-9 gap-1 bg-emerald-600 px-3 text-xs hover:bg-emerald-700"
-                            >
-                              <UserCheck className="h-3.5 w-3.5" />
-                              승인
-                            </Button>
-                            <button
-                              type="button"
-                              disabled={request.status !== "REQUESTED" || actionRequestId === request.id}
-                              onClick={() => updateRequestStatus(request.id, "REJECTED")}
-                              className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
-                            >
-                              <UserX className="h-3.5 w-3.5" />
-                              거절
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-10 text-center font-semibold text-slate-500">
-                        회원가입 신청 내역이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center font-semibold text-slate-500">
+                      회원가입 신청 내역이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </Card>
         </section>
 
@@ -275,14 +254,6 @@ export default function SignupRequestsPage() {
                   <b className="text-slate-950">{selectedRequest.name}</b>
                 </p>
                 <p className="flex justify-between gap-3">
-                  <span className="font-semibold text-slate-500">이메일</span>
-                  <b className="text-right text-slate-950">{selectedRequest.email}</b>
-                </p>
-                <p className="flex justify-between gap-3">
-                  <span className="font-semibold text-slate-500">전화번호</span>
-                  <b className="text-slate-950">{selectedRequest.phone}</b>
-                </p>
-                <p className="flex justify-between gap-3">
                   <span className="font-semibold text-slate-500">요청 역할</span>
                   <b className="text-slate-950">{roleLabels[selectedRequest.requestedRole]}</b>
                 </p>
@@ -292,12 +263,14 @@ export default function SignupRequestsPage() {
                 </p>
               </div>
 
-              <div className="mt-5">
-                <p className="text-xs font-black text-slate-400">신청 사유</p>
-                <p className="mt-2 rounded-lg border border-slate-100 bg-white p-3 text-sm font-semibold leading-6 text-slate-700">
-                  {selectedRequest.reason}
-                </p>
-              </div>
+              {isVisibleRequestReason(selectedRequest.reason) ? (
+                <div className="mt-5">
+                  <p className="text-xs font-black text-slate-400">신청 사유</p>
+                  <p className="mt-2 rounded-lg border border-slate-100 bg-white p-3 text-sm font-semibold leading-6 text-slate-700">
+                    {selectedRequest.reason}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
@@ -334,11 +307,15 @@ function mapSignupRequest(item: SignupRequestApiItem): AdminSignupRequest {
     requestedRole: item.requested_role,
     reason: item.request_memo ?? "-",
     status: item.request_status,
-    requestedAt: formatDateTime(item.created_at),
+    requestedAt: formatDate(item.created_at),
   };
 }
 
-function formatDateTime(value?: string | null) {
+function isVisibleRequestReason(reason: string) {
+  return reason !== "-" && !reason.toLowerCase().includes("pytest");
+}
+
+function formatDate(value?: string | null) {
   if (!value) return "-";
 
   const date = new Date(value);
@@ -351,9 +328,5 @@ function formatDateTime(value?: string | null) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
   }).format(date);
 }
