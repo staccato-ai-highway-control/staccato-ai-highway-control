@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { Search, Sparkles, Upload } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
 import { Badge } from "@/components/common/Badge";
-import { getMyReports, getReports, requestReportAnalysis } from "@/features/reports/api";
+import { getMyReports, getReports, requestReportAnalysis, updateReportStatus } from "@/features/reports/api";
 import type { AuthUser } from "@/features/auth/types";
 import type { PaginatedReports, Report, ReportListParams } from "@/features/reports/types";
 import { getStoredAuthUser } from "@/lib/authStorage";
@@ -21,6 +22,15 @@ type ReportFilter = {
   size: number;
   mine: boolean;
 };
+
+const reportStatusOptions = [
+  { label: "접수", value: "SUBMITTED" },
+  { label: "검토중", value: "REVIEWING" },
+  { label: "분석중", value: "ANALYZING" },
+  { label: "이벤트 전환", value: "CONVERTED_TO_INCIDENT" },
+  { label: "반려", value: "REJECTED" },
+  { label: "종결", value: "CLOSED" },
+];
 
 const statusOptions = [
   { label: "전체 상태", value: "" },
@@ -231,6 +241,7 @@ function toParams(filter: ReportFilter): ReportListParams {
 }
 
 export default function ReportsPage() {
+  const router = useRouter();
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [filter, setFilter] = useState<ReportFilter>({ keyword: "", status: "", report_type: "", priority: "", page: 1, size: 10, mine: false });
   const [draftKeyword, setDraftKeyword] = useState("");
@@ -238,6 +249,10 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [bulkStatus, setBulkStatus] = useState("REVIEWING");
+  const [bulkAction, setBulkAction] = useState<"status" | "analysis" | null>(null);
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
+  const selectAllRef = useRef<HTMLInputElement | null>(null);
 
   async function loadReports(nextFilter = filter) {
     setLoading(true);
@@ -287,6 +302,108 @@ export default function ReportsPage() {
   const reports = useMemo(() => result.items.filter((report) => getReportStatus(report) !== "DELETED"), [result.items]);
   const canPrev = result.page > 1;
   const canNext = result.total_pages > 0 && result.page < result.total_pages;
+  const visibleReportIds = useMemo(() => reports.map(getReportId), [reports]);
+  const allVisibleSelected = visibleReportIds.length > 0 && visibleReportIds.every((id) => selectedReportIds.has(id));
+  const someVisibleSelected = visibleReportIds.some((id) => selectedReportIds.has(id));
+
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someVisibleSelected && !allVisibleSelected;
+    }
+  }, [allVisibleSelected, someVisibleSelected]);
+
+  useEffect(() => {
+    setSelectedReportIds((current) => {
+      const visibleIds = new Set(visibleReportIds);
+      const next = new Set([...current].filter((id) => visibleIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [visibleReportIds]);
+
+  function toggleAllReports(checked: boolean) {
+    setSelectedReportIds(checked ? new Set(visibleReportIds) : new Set());
+  }
+
+  function toggleReport(reportId: string, checked: boolean) {
+    setSelectedReportIds((current) => {
+      const next = new Set(current);
+      if (checked) next.add(reportId);
+      else next.delete(reportId);
+      return next;
+    });
+  }
+
+  const selectedReports = useMemo(
+    () => reports.filter((report) => selectedReportIds.has(getReportId(report))),
+    [reports, selectedReportIds]
+  );
+  const selectedCompletedJobIds = useMemo(
+    () => selectedReports
+      .map((report) => {
+        const job = getLatestAnalysisJob(report);
+        const status = job?.job_status ?? job?.status;
+        const jobId = job?.analysis_job_id ?? job?.id;
+        return status === "COMPLETED" && jobId !== null && jobId !== undefined ? String(jobId) : null;
+      })
+      .filter((jobId): jobId is string => Boolean(jobId)),
+    [selectedReports]
+  );
+  const canCompareSelected = selectedCompletedJobIds.length >= 2 && selectedCompletedJobIds.length <= 5;
+
+  async function handleBulkStatusChange() {
+    if (!canOperateReports || selectedReports.length === 0) return;
+    setBulkAction("status");
+    setErrorMessage(null);
+
+    const results = await Promise.allSettled(selectedReports.map((report) => (
+      updateReportStatus(getReportId(report), {
+        status: bulkStatus,
+        reason: `목록에서 ${bulkStatus} 상태로 일괄 변경`,
+      })
+    )));
+    const succeededIds = new Set(
+      selectedReports
+        .filter((_, index) => results[index]?.status === "fulfilled")
+        .map(getReportId)
+    );
+
+    setResult((current) => ({
+      ...current,
+      items: current.items.map((report) => (
+        succeededIds.has(getReportId(report)) ? { ...report, status: bulkStatus } : report
+      )),
+    }));
+    setSelectedReportIds(new Set());
+    setBulkAction(null);
+
+    const failedCount = results.length - succeededIds.size;
+    if (failedCount > 0) setErrorMessage(`${failedCount}건의 신고 상태를 변경하지 못했습니다.`);
+  }
+
+  async function handleBulkAnalysis() {
+    if (!canOperateReports || selectedReports.length === 0) return;
+    setBulkAction("analysis");
+    setErrorMessage(null);
+
+    const results = await Promise.allSettled(
+      selectedReports.map((report) => requestReportAnalysis(getReportId(report)))
+    );
+    setBulkAction(null);
+    setSelectedReportIds(new Set());
+    await loadReports();
+
+    const failedCount = results.filter((result) => result.status === "rejected").length;
+    if (failedCount > 0) setErrorMessage(`${failedCount}건의 신고 분석을 요청하지 못했습니다.`);
+  }
+
+  function handleCompareSelected() {
+    if (!canCompareSelected) return;
+    const query = new URLSearchParams({
+      selectedJobIds: selectedCompletedJobIds.join(","),
+      selectedJobId: selectedCompletedJobIds[0],
+    });
+    router.push(`/reports/analysis-comparisons?${query.toString()}`);
+  }
 
   return (
     <RequireAuth>
@@ -340,7 +457,7 @@ export default function ReportsPage() {
 
         {!(errorMessage && !loading && result.items.length === 0) ? <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `${result.total_count || reports.length}건`}</span>
+            <span className="text-sm font-bold text-slate-700">{loading ? "불러오는 중" : `${result.total_count || reports.length}건 · ${selectedReportIds.size}건 선택`}</span>
             <div className="flex items-center gap-2">
               <select value={filter.size} onChange={(event) => updateFilter({ size: Number(event.target.value) })} className="h-9 rounded-lg border border-slate-200 px-2 text-xs font-bold text-slate-700">
                 {[10, 20, 50].map((size) => <option key={size} value={size}>{size}개</option>)}
@@ -348,18 +465,42 @@ export default function ReportsPage() {
               <button type="button" onClick={() => loadReports()} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">새로고침</button>
             </div>
           </div>
-          <div className="overflow-auto">
-            <table className="w-full min-w-[1280px] text-sm">
+          {selectedReportIds.size > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-100 bg-sky-50/70 px-4 py-3">
+              <span className="text-sm font-black text-sky-800">{selectedReportIds.size}건 선택됨</span>
+              <div className="flex flex-wrap items-center gap-2">
+                {canOperateReports ? (
+                  <>
+                    <select value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value)} disabled={bulkAction !== null} aria-label="선택 신고 변경 상태" className="h-9 rounded-lg border border-sky-200 bg-white px-3 text-xs font-bold text-sky-800 disabled:opacity-50">
+                      {reportStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                    <button type="button" onClick={handleBulkStatusChange} disabled={bulkAction !== null} className="h-9 rounded-lg bg-sky-700 px-3 text-xs font-black text-white transition hover:bg-sky-800 disabled:opacity-50">
+                      {bulkAction === "status" ? "변경 중" : "선택 상태 변경"}
+                    </button>
+                    <button type="button" onClick={handleBulkAnalysis} disabled={bulkAction !== null} className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-50">
+                      {bulkAction === "analysis" ? "요청 중" : "선택 분석 요청"}
+                    </button>
+                  </>
+                ) : null}
+                <button type="button" onClick={handleCompareSelected} disabled={!canCompareSelected || bulkAction !== null} title={canCompareSelected ? undefined : "완료된 분석 Job이 있는 신고를 2~5개 선택해 주세요."} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  선택 비교분석 ({selectedCompletedJobIds.length})
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="w-full overflow-hidden">
+            <table className="w-full table-fixed text-sm">
               <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-3">제목</th>
-                  <th className="px-4 py-3">신고 유형</th>
-                  <th className="px-4 py-3">상태</th>
-                  <th className="px-4 py-3">우선순위</th>
-                  <th className="px-4 py-3">위험도</th>
-                  <th className="px-4 py-3">AI 분석</th>
-                  <th className="px-4 py-3">등록일</th>
-                  <th className="px-4 py-3">액션</th>
+                  <th className="w-11 px-2 py-3 text-center"><input ref={selectAllRef} type="checkbox" checked={allVisibleSelected} onChange={(event) => toggleAllReports(event.target.checked)} aria-label="현재 신고 전체 선택" className="h-4 w-4 rounded border-slate-300" /></th>
+                  <th className="w-[18%] px-2 py-3">제목</th>
+                  <th className="w-[10%] px-2 py-3">신고 유형</th>
+                  <th className="w-[8%] px-2 py-3">상태</th>
+                  <th className="w-[8%] px-2 py-3">우선순위</th>
+                  <th className="w-[8%] px-2 py-3">위험도</th>
+                  <th className="w-[11%] px-2 py-3">AI 분석</th>
+                  <th className="w-[12%] px-2 py-3">등록일</th>
+                  <th className="w-[220px] px-2 py-3">액션</th>
                 </tr>
               </thead>
               <tbody>
@@ -372,15 +513,18 @@ export default function ReportsPage() {
                   const processedFrames = getReportProcessedFrames(report);
                   return (
                     <tr key={getReportId(report)} className="border-t border-slate-100">
-                      <td className="px-4 py-4">
-                        <b className="block max-w-[360px] truncate text-slate-950">{getReportTitle(report)}</b>
-                        <p className="mt-1 max-w-[420px] truncate text-xs font-semibold text-slate-400">{getReportCode(report)} · {getReportLocation(report)}</p>
+                      <td className="px-2 py-4 text-center">
+                        <input type="checkbox" checked={selectedReportIds.has(getReportId(report))} onChange={(event) => toggleReport(getReportId(report), event.target.checked)} aria-label={getReportTitle(report) + " 선택"} className="h-4 w-4 rounded border-slate-300" />
                       </td>
-                      <td className="px-4 py-4 font-semibold text-slate-600">{typeLabels[type] ?? type}</td>
-                      <td className="px-4 py-4"><Badge tone={getBadgeTone(status)}>{statusLabels[status] ?? status}</Badge></td>
-                      <td className="px-4 py-4"><Badge tone={getBadgeTone(priority)}>{priorityLabels[priority] ?? priority}</Badge></td>
-                      <td className="px-4 py-4 font-semibold text-slate-600">{getReportRiskText(report)}</td>
-                      <td className="px-4 py-4">
+                      <td className="min-w-0 px-2 py-4">
+                        <b className="block truncate text-slate-950" title={getReportTitle(report)}>{getReportTitle(report)}</b>
+                        <p className="mt-1 truncate text-xs font-semibold text-slate-400">{getReportCode(report)} · {getReportLocation(report)}</p>
+                      </td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-600" title={typeLabels[type] ?? type}>{typeLabels[type] ?? type}</td>
+                      <td className="truncate whitespace-nowrap px-2 py-4"><Badge tone={getBadgeTone(status)}>{statusLabels[status] ?? status}</Badge></td>
+                      <td className="truncate whitespace-nowrap px-2 py-4"><Badge tone={getBadgeTone(priority)}>{priorityLabels[priority] ?? priority}</Badge></td>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-600">{getReportRiskText(report)}</td>
+                      <td className="min-w-0 px-2 py-4">
                         {analysisStatus ? (
                           <div className="space-y-1">
                             <Badge tone={getBadgeTone(analysisStatus)}>{analysisStatusLabels[analysisStatus] ?? analysisStatus}</Badge>
@@ -396,11 +540,11 @@ export default function ReportsPage() {
                           <span className="text-sm font-semibold text-slate-400">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-4 font-semibold text-slate-500">{formatDateTime(getReportCreatedAt(report))}</td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          <Link href={`/reports/${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
-                          <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-9 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
+                      <td className="truncate whitespace-nowrap px-2 py-4 font-semibold text-slate-500" title={formatDateTime(getReportCreatedAt(report))}>{formatDateTime(getReportCreatedAt(report))}</td>
+                      <td className="px-2 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          <Link href={`/reports/${getReportId(report)}`} className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-2 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">상세 보기</Link>
+                          <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="inline-flex h-8 items-center rounded-lg border border-sky-200 px-2 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
                           {canOperateReports ? <button type="button" onClick={() => handleRequestAnalysis(report)} disabled={analyzingId === getReportId(report)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
                             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                             분석
