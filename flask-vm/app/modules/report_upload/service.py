@@ -1,0 +1,2776 @@
+import hashlib
+from copy import deepcopy
+import os
+import uuid
+from datetime import UTC, datetime, time
+from decimal import Decimal
+from pathlib import PurePath
+
+from flask import current_app, send_file
+from werkzeug.utils import secure_filename
+
+from app.utils.bbox import build_bbox_metadata
+
+
+class ReportUploadService:
+    ACTIVE_JOB_STATUSES = {"QUEUED", "RUNNING", "PROCESSING", "STARTED"}
+    ADMIN_ROLES = {"SUPER_ADMIN", "CONTROL_ADMIN"}
+    TERMINAL_ANALYSIS_STATUSES = {"COMPLETED", "FAILED", "CANCELLED"}
+
+    @staticmethod
+    def _normalize_analysis_status(status):
+        normalized = str(status or "").strip().upper()
+        if normalized in {"PROCESSING", "STARTED"}:
+            return "RUNNING"
+        if normalized in {"QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"}:
+            return normalized
+        return normalized or None
+
+    @staticmethod
+    def _is_admin(current_user):
+        return bool(
+            current_user
+            and getattr(current_user, "role", None) in ReportUploadService.ADMIN_ROLES
+        )
+
+    @staticmethod
+    def _allowed_actions(report, current_user):
+        is_owner = bool(
+            current_user
+            and report.reporter_id == getattr(current_user, "id", None)
+        )
+        is_admin = ReportUploadService._is_admin(current_user)
+        is_active = not (
+            getattr(report, "deleted_at", None)
+            or report.status in {"DELETED", "CANCELLED"}
+        )
+        can_manage = is_active and (is_owner or is_admin)
+        editable = can_manage and ReportUploadService._is_report_editable(report)
+
+        return {
+            "view": can_manage,
+            "update": editable,
+            "delete": can_manage and not bool(report.converted_incident_id),
+            "add_attachment": editable,
+            "delete_attachment": editable,
+            "download_attachment": can_manage,
+            "change_status": is_active and is_admin,
+            "approve": is_active and is_admin,
+            "reject": is_active and is_admin,
+            "analyze": is_active and is_admin,
+            "retry_analysis": is_active and is_admin,
+        }
+
+    @staticmethod
+    def _analysis_result_response(result_summary):
+        if not isinstance(result_summary, dict):
+            return result_summary
+
+        result = deepcopy(result_summary)
+        detections = result.get("detections")
+        if not isinstance(detections, list):
+            detections = []
+
+        normalized_detections = []
+        for detection in detections:
+            if not isinstance(detection, dict):
+                continue
+            item = dict(detection)
+            bbox = item.get("bbox", item.get("bbox_json"))
+            item["bbox_metadata"] = build_bbox_metadata(
+                bbox,
+                coordinate_space=item.get("bbox_coordinate_space"),
+                frame_width=item.get("frame_width") or result.get("frame_width"),
+                frame_height=item.get("frame_height") or result.get("frame_height"),
+            )
+            normalized_detections.append(item)
+
+        result["detections"] = normalized_detections
+        raw_count = result.get("count")
+        result["detection_count"] = (
+            raw_count if isinstance(raw_count, int) else len(normalized_detections)
+        )
+        return result
+
+    @staticmethod
+    def _analysis_job_response(job):
+        if job is None:
+            return None
+
+        data = ReportUploadService._to_dict(job)
+        data["result_summary"] = ReportUploadService._analysis_result_response(
+            data.get("result_summary")
+        )
+        analysis_status = ReportUploadService._normalize_analysis_status(job.job_status)
+        data["analysis_status"] = analysis_status
+        data["is_active"] = analysis_status in {"QUEUED", "RUNNING"}
+        data["is_terminal"] = analysis_status in ReportUploadService.TERMINAL_ANALYSIS_STATUSES
+        data["status_message"] = {
+            "QUEUED": "분석 요청이 등록되어 처리 대기 중입니다.",
+            "RUNNING": "AI 분석이 진행 중입니다.",
+            "COMPLETED": "AI 분석이 완료되었습니다.",
+            "FAILED": "AI 분석에 실패했습니다.",
+            "CANCELLED": "AI 분석이 취소되었습니다.",
+        }.get(analysis_status, "분석 상태를 확인할 수 없습니다.")
+        return data
+
+    @staticmethod
+    def _now():
+        return datetime.now(UTC)
+
+    @staticmethod
+    def _generate_report_code(now):
+        timestamp = now.strftime("%Y%m%d")
+        unique_suffix = uuid.uuid4().hex[:4].upper()
+        return f"REP-{timestamp}-{unique_suffix}"
+
+    @staticmethod
+    def _clean_original_filename(filename):
+        raw = str(filename or "").replace("\\", "/")
+        name = PurePath(raw).name.strip()
+        if not name:
+            raise ValueError("유효하지 않은 파일명입니다.")
+        return name
+
+    @staticmethod
+    def _stored_filename(original_filename):
+        ext = os.path.splitext(original_filename)[1].lower()
+        if not ext:
+            safe_name = secure_filename(original_filename)
+            ext = os.path.splitext(safe_name)[1].lower()
+
+        if not ext:
+            ext = ".bin"
+
+        return f"{uuid.uuid4().hex}{ext}"
+
+    @staticmethod
+    def _get_file_type(filename):
+        ext = os.path.splitext(str(filename).lower())[1].lstrip(".")
+        if not ext and "." in str(filename):
+            ext = str(filename).lower().rsplit(".", 1)[-1]
+
+        if ext in ["jpg", "jpeg", "png", "gif"]:
+            return "IMAGE"
+
+        if ext in ["mp4", "mov", "avi", "mkv"]:
+            return "VIDEO"
+
+        return "UNKNOWN"
+
+    @staticmethod
+    def _validate_file_size(file_type, file_length):
+        if file_type == "IMAGE":
+            max_mb = current_app.config.get("UPLOAD_MAX_IMAGE_SIZE_MB", 20)
+            if file_length > max_mb * 1024 * 1024:
+                raise ValueError(f"이미지 크기가 너무 큽니다. (최대 {max_mb}MB)")
+
+        if file_type == "VIDEO":
+            max_mb = current_app.config.get("UPLOAD_MAX_VIDEO_SIZE_MB", 500)
+            if file_length > max_mb * 1024 * 1024:
+                raise ValueError(f"영상 크기가 너무 큽니다. (최대 {max_mb}MB)")
+
+    @staticmethod
+    def process_file_upload(file):
+        original_filename = ReportUploadService._clean_original_filename(file.filename)
+        stored_filename = ReportUploadService._stored_filename(original_filename)
+        file_type = ReportUploadService._get_file_type(original_filename)
+
+        upload_base = current_app.config.get("UPLOAD_BASE_PATH")
+        if not upload_base:
+            upload_base = os.path.join(
+                current_app.config.get("STORAGE_ROOT", "storage"),
+                "uploads",
+            )
+
+        os.makedirs(upload_base, exist_ok=True)
+        file_path = os.path.join(upload_base, stored_filename)
+
+        stream = getattr(file, "stream", None)
+        file_size = 0
+
+        if stream is not None:
+            try:
+                current_position = stream.tell()
+                stream.seek(0, os.SEEK_END)
+                file_size = stream.tell()
+                stream.seek(current_position)
+            except Exception:
+                file_size = 0
+
+        ReportUploadService._validate_file_size(file_type, file_size)
+
+        if stream is not None:
+            try:
+                stream.seek(0)
+            except Exception:
+                pass
+
+        file.save(file_path)
+
+        if file_size == 0 and os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+
+        import hashlib
+
+        file_hash = None
+        if os.path.exists(file_path):
+            hasher = hashlib.sha256()
+            with open(file_path, "rb") as saved_file:
+                for chunk in iter(lambda: saved_file.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            file_hash = hasher.hexdigest()
+
+        return {
+            "original_filename": original_filename,
+            "stored_filename": stored_filename,
+            "file_name": original_filename,
+            "storage_type": "LOCAL",
+            "file_path": file_path,
+            "file_type": file_type,
+            "file_size": file_size,
+            "file_hash": file_hash,
+            "mime_type": getattr(file, "mimetype", None) or "application/octet-stream",
+            "scan_status": "PENDING",
+        }
+
+    @staticmethod
+    def _model_kwargs(model_cls, values):
+        columns = {column.name for column in model_cls.__table__.columns}
+        return {key: value for key, value in values.items() if key in columns}
+
+    @staticmethod
+    def _to_dict(model):
+        data = {}
+        for column in model.__table__.columns:
+            value = getattr(model, column.name)
+            if hasattr(value, "isoformat"):
+                value = value.isoformat()
+            elif isinstance(value, Decimal):
+                value = float(value)
+            data[column.name] = value
+        return data
+
+
+    @staticmethod
+    def _is_previewable_attachment(attachment):
+        mime_type = (getattr(attachment, "mime_type", None) or "").lower()
+        file_type = (getattr(attachment, "file_type", None) or "").upper()
+
+        return (
+            file_type in {"IMAGE", "VIDEO"}
+            or mime_type.startswith("image/")
+            or mime_type.startswith("video/")
+        )
+
+    @staticmethod
+    def _attachment_response(attachment):
+        data = ReportUploadService._to_dict(attachment)
+
+        is_previewable = ReportUploadService._is_previewable_attachment(attachment)
+        preview_url = (
+            f"/api/reports/attachments/{attachment.id}/preview"
+            if is_previewable
+            else None
+        )
+        download_url = f"/api/reports/attachments/{attachment.id}/download"
+
+        data["preview_url"] = preview_url
+        data["download_url"] = download_url
+
+        # 기존 DB 컬럼이 NULL이어도 프론트가 사용할 수 있는 URL을 보강합니다.
+        if not data.get("thumbnail_url") and preview_url:
+            data["thumbnail_url"] = preview_url
+        if not data.get("file_url"):
+            data["file_url"] = download_url
+
+        return data
+
+    @staticmethod
+    def _first_preview_url(attachments):
+        for attachment in attachments:
+            if ReportUploadService._is_previewable_attachment(attachment):
+                return f"/api/reports/attachments/{attachment.id}/preview"
+        return None
+
+    @staticmethod
+    def _attach_list_attachment_summaries(reports, items):
+        from app.models import ReportAttachment
+
+        report_ids = [report.id for report in reports]
+        if not report_ids:
+            return items
+
+        query = ReportAttachment.query.filter(ReportAttachment.report_id.in_(report_ids))
+
+        if hasattr(ReportAttachment, "deleted_at"):
+            query = query.filter(ReportAttachment.deleted_at.is_(None))
+
+        attachments = (
+            query
+            .order_by(ReportAttachment.report_id.asc(), ReportAttachment.id.asc())
+            .all()
+        )
+
+        grouped = {}
+        for attachment in attachments:
+            grouped.setdefault(attachment.report_id, []).append(attachment)
+
+        for item in items:
+            report_attachments = grouped.get(item.get("id"), [])
+            attachment_items = [
+                ReportUploadService._attachment_response(attachment)
+                for attachment in report_attachments
+            ]
+
+            item["attachments"] = attachment_items
+            item["attachment_count"] = len(attachment_items)
+            item["thumbnail_url"] = ReportUploadService._first_preview_url(report_attachments)
+
+        return items
+
+    @staticmethod
+    def _resolve_attachment_path(attachment):
+        raw_path = getattr(attachment, "file_path", None)
+        if not raw_path:
+            return None, {
+                "success": False,
+                "error": "첨부파일 경로가 없습니다.",
+            }, 404
+
+        file_path = os.path.abspath(raw_path)
+        upload_base = current_app.config.get("UPLOAD_BASE_PATH")
+
+        if not upload_base:
+            return None, {
+                "success": False,
+                "error": "UPLOAD_BASE_PATH 설정이 없습니다.",
+            }, 500
+
+        upload_base = os.path.abspath(upload_base)
+
+        try:
+            is_inside_upload_base = os.path.commonpath([upload_base, file_path]) == upload_base
+        except ValueError:
+            is_inside_upload_base = False
+
+        if not is_inside_upload_base:
+            current_app.logger.warning(
+                "Unsafe report attachment path blocked",
+                extra={
+                    "attachment_id": getattr(attachment, "id", None),
+                    "file_path": file_path,
+                    "upload_base": upload_base,
+                },
+            )
+            return None, {
+                "success": False,
+                "error": "허용되지 않은 첨부파일 경로입니다.",
+            }, 403
+
+        if not os.path.isfile(file_path):
+            current_app.logger.warning(
+                "Report attachment file missing",
+                extra={
+                    "attachment_id": getattr(attachment, "id", None),
+                    "file_path": file_path,
+                },
+            )
+            return None, {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        return file_path, None, 200
+
+    @staticmethod
+    def get_attachment_file(attachment_id, current_user, as_download=False):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        try:
+            attachment_id = int(attachment_id)
+        except (TypeError, ValueError):
+            return {
+                "success": False,
+                "error": "첨부파일 ID가 올바르지 않습니다.",
+            }, 400
+
+        if attachment_id <= 0:
+            return {
+                "success": False,
+                "error": "첨부파일 ID가 올바르지 않습니다.",
+            }, 400
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if not attachment or getattr(attachment, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        report = db.session.get(IncidentReport, attachment.report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 접근 권한이 없습니다.",
+            }, 403
+
+        if not as_download and not ReportUploadService._is_previewable_attachment(attachment):
+            return {
+                "success": False,
+                "error": "미리보기를 지원하지 않는 파일 형식입니다.",
+            }, 415
+
+        file_path, error_response, status_code = ReportUploadService._resolve_attachment_path(attachment)
+        if error_response:
+            return error_response, status_code
+
+        try:
+            if as_download:
+                attachment.download_count = (attachment.download_count or 0) + 1
+            else:
+                attachment.access_count = (attachment.access_count or 0) + 1
+
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception(
+                "Report attachment access counter update failed",
+                extra={"attachment_id": attachment.id},
+            )
+
+        original_filename = getattr(attachment, "original_filename", None)
+        stored_filename = getattr(attachment, "stored_filename", None)
+        download_name = secure_filename(original_filename or "") or stored_filename or f"attachment-{attachment.id}"
+
+        mimetype = getattr(attachment, "mime_type", None) or "application/octet-stream"
+
+        response = send_file(
+            file_path,
+            mimetype=mimetype,
+            as_attachment=as_download,
+            download_name=download_name,
+            conditional=True,
+            max_age=0,
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Cache-Control"] = "private, no-store"
+
+        return response, 200
+
+    @staticmethod
+    def _to_optional_decimal(value, field_name):
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+
+        try:
+            return Decimal(str(value))
+        except Exception as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
+
+    @staticmethod
+    def _report_response(report, include_children=True, current_user=None):
+        from app.models import ReportAnalysisJob, ReportAttachment, ReportLocation
+
+        data = ReportUploadService._to_dict(report)
+        data["reporter_id"] = report.reporter_id
+        data["author_id"] = report.reporter_id
+        data["allowed_actions"] = ReportUploadService._allowed_actions(
+            report,
+            current_user,
+        )
+
+        if not include_children:
+            return data
+
+        attachments_query = ReportAttachment.query.filter_by(report_id=report.id)
+        if hasattr(ReportAttachment, "deleted_at"):
+            attachments_query = attachments_query.filter(ReportAttachment.deleted_at.is_(None))
+        attachments = attachments_query.order_by(ReportAttachment.id.asc()).all()
+        locations = (
+            ReportLocation.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportLocation.id.asc())
+            .all()
+        )
+        jobs = (
+            ReportAnalysisJob.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportAnalysisJob.id.asc())
+            .all()
+        )
+
+        attachment_items = [ReportUploadService._attachment_response(item) for item in attachments]
+        data["attachments"] = attachment_items
+        data["attachment_count"] = len(attachment_items)
+        data["thumbnail_url"] = ReportUploadService._first_preview_url(attachments)
+
+        first_attachment = attachment_items[0] if attachment_items else None
+        data["attachment_id"] = first_attachment.get("id") if first_attachment else None
+        data["preview_url"] = first_attachment.get("preview_url") if first_attachment else None
+        data["download_url"] = first_attachment.get("download_url") if first_attachment else None
+
+        data["locations"] = [ReportUploadService._to_dict(item) for item in locations]
+        analysis_jobs = [ReportUploadService._analysis_job_response(item) for item in jobs]
+        data["analysis_jobs"] = analysis_jobs
+
+        latest_job = analysis_jobs[-1] if analysis_jobs else None
+        data["analysis_job_id"] = latest_job.get("id") if latest_job else None
+        data["analysis_status"] = latest_job.get("analysis_status") if latest_job else None
+        data["analysis_summary"] = latest_job.get("result_summary") if latest_job else None
+
+        return data
+
+    @staticmethod
+    def _to_positive_int(value, default, minimum=1, maximum=200):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = default
+
+        return max(minimum, min(parsed, maximum))
+
+    @staticmethod
+    def _to_bool(value):
+        if isinstance(value, bool):
+            return value
+
+        if value is None:
+            return False
+
+        return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+    @staticmethod
+    def _parse_date(value, field_name, end_of_day=False):
+        if value is None:
+            return None
+
+        raw = str(value).strip()
+        if not raw:
+            return None
+
+        try:
+            if len(raw) == 10:
+                parsed_date = datetime.fromisoformat(raw).date()
+                parsed_time = time.max if end_of_day else time.min
+                return datetime.combine(parsed_date, parsed_time)
+
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
+
+    @staticmethod
+    def _is_report_editable(report):
+        return report.status not in {"CLOSED", "CANCELLED", "DELETED"}
+
+    @staticmethod
+    def _can_manage_report(report, current_user):
+        return (
+            report.reporter_id == current_user.id
+            or current_user.role in {"SUPER_ADMIN", "CONTROL_ADMIN"}
+        )
+
+    @staticmethod
+    def _upsert_report_location(report_id, data, user_id=None):
+        from app.models import ReportLocation
+
+        now = ReportUploadService._now()
+        has_location_key = any(
+            key in data
+            for key in ("location", "address", "place_name", "latitude", "longitude")
+        )
+
+        if not has_location_key:
+            return
+
+        location_text = (
+            data.get("location")
+            or data.get("address")
+            or data.get("place_name")
+            or ""
+        ).strip()
+        latitude = ReportUploadService._to_optional_decimal(data.get("latitude"), "위도")
+        longitude = ReportUploadService._to_optional_decimal(data.get("longitude"), "경도")
+
+        if not location_text and latitude is None and longitude is None:
+            return
+
+        location = (
+            ReportLocation.query
+            .filter_by(report_id=report_id)
+            .order_by(ReportLocation.id.asc())
+            .first()
+        )
+
+        if location is None:
+            location = ReportLocation(**ReportUploadService._model_kwargs(
+                ReportLocation,
+                {
+                    "report_id": report_id,
+                    "location_source": "USER",
+                    "is_location_confirmed": 0,
+                    "created_at": now,
+                },
+            ))
+
+        for key, value in ReportUploadService._model_kwargs(
+            ReportLocation,
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "place_name": location_text or None,
+                "address_raw": location_text or None,
+                "updated_at": now,
+            },
+        ).items():
+            setattr(location, key, value)
+
+        return location
+
+
+    @staticmethod
+    def _draft_title(data):
+        title = data.get("title") or data.get("subject")
+        if title is not None:
+            title = str(title).strip()
+        return title or f"임시저장 신고 {ReportUploadService._now().strftime('%Y%m%d')}"
+
+    @staticmethod
+    def _to_optional_int(value, field_name):
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return None
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} 값이 올바르지 않습니다.") from exc
+
+    @staticmethod
+    def _is_draft(report):
+        return report.status == "DRAFT"
+
+    @staticmethod
+    def create_report_draft(current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        now = ReportUploadService._now()
+
+        cctv_id = ReportUploadService._to_optional_int(data.get("cctv_id"), "cctv_id")
+
+        report = IncidentReport(
+            report_code=ReportUploadService._generate_report_code(now),
+            report_type=data.get("report_type") or "GENERAL",
+            upload_purpose=data.get("upload_purpose") or "DRAFT",
+            report_source_type=data.get("report_source_type") or "WEB",
+            title=ReportUploadService._draft_title(data),
+            description=data.get("description"),
+            reporter_id=current_user.id,
+            cctv_id=cctv_id,
+            status="DRAFT",
+            priority=data.get("priority") or "NORMAL",
+            is_demo_data=0,
+            submitted_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+        try:
+            db.session.add(report)
+            db.session.flush()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+        except ValueError:
+            db.session.rollback()
+            raise
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report draft creation failed")
+            raise
+
+        return {
+            "success": True,
+            "message": "신고가 임시저장되었습니다.",
+            "draft": ReportUploadService._report_response(report, current_user=current_user),
+            "draft_id": report.id,
+        }, 201
+
+    @staticmethod
+    def list_report_drafts(args, current_user):
+        from app.models import IncidentReport
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 10)),
+            10,
+            maximum=200,
+        )
+
+        query = (
+            IncidentReport.query
+            .filter(IncidentReport.status == "DRAFT")
+            .filter(IncidentReport.reporter_id == current_user.id)
+        )
+
+        if hasattr(IncidentReport, "deleted_at"):
+            query = query.filter(IncidentReport.deleted_at.is_(None))
+
+        pagination = query.order_by(IncidentReport.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        drafts = [
+            ReportUploadService._report_response(
+                report, include_children=False, current_user=current_user
+            )
+            for report in pagination.items
+        ]
+
+        return {
+            "success": True,
+            "data": {
+                "items": drafts,
+                "page": page,
+                "size": size,
+                "total_count": pagination.total,
+                "total_pages": pagination.pages,
+            },
+            "drafts": drafts,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }, 200
+
+
+    @staticmethod
+    def submit_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportStatusHistory
+
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 상태의 신고만 최종 제출할 수 있습니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 제출 권한이 없습니다.",
+            }, 403
+
+        now = ReportUploadService._now()
+        previous_status = report.status
+
+        report.status = "SUBMITTED"
+        report.upload_purpose = "REPORT"
+        report.submitted_at = now
+        report.updated_at = now
+
+        history = ReportStatusHistory(
+            report_id=report.id,
+            previous_status=previous_status,
+            new_status="SUBMITTED",
+            changed_by=current_user.id,
+            change_reason="Draft submitted",
+            created_at=now,
+        )
+
+        db.session.add(history)
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 최종 제출되었습니다.",
+            "report": ReportUploadService._report_response(report, current_user=current_user),
+            "report_id": report.id,
+        }, 200
+
+
+    @staticmethod
+    def get_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, draft_id)
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 조회 권한이 없습니다.",
+            }, 403
+
+        return {
+            "success": True,
+            "draft": ReportUploadService._report_response(report, current_user=current_user),
+        }, 200
+
+    @staticmethod
+    def update_report_draft(draft_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 수정 권한이 없습니다.",
+            }, 403
+
+        try:
+            if "report_type" in data:
+                report.report_type = data.get("report_type") or report.report_type
+            if "upload_purpose" in data:
+                report.upload_purpose = data.get("upload_purpose") or report.upload_purpose
+            if "title" in data or "subject" in data:
+                report.title = ReportUploadService._draft_title(data)
+            if "description" in data:
+                report.description = data.get("description")
+            if "priority" in data:
+                report.priority = data.get("priority") or report.priority
+            if "cctv_id" in data:
+                report.cctv_id = ReportUploadService._to_optional_int(data.get("cctv_id"), "cctv_id")
+
+            report.updated_at = ReportUploadService._now()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+        except ValueError:
+            db.session.rollback()
+            raise
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report draft update failed", extra={"draft_id": draft_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 수정되었습니다.",
+            "draft": ReportUploadService._report_response(report, current_user=current_user),
+        }, 200
+
+    @staticmethod
+    def delete_report_draft(draft_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, draft_id)
+
+        if not report or report.status == "DELETED":
+            return {
+                "success": False,
+                "error": "임시저장 신고를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._is_draft(report):
+            return {
+                "success": False,
+                "error": "임시저장 신고가 아닙니다.",
+            }, 400
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "임시저장 신고 삭제 권한이 없습니다.",
+            }, 403
+
+        now = ReportUploadService._now()
+        report.status = "DELETED"
+        report.deleted_at = now
+        report.deleted_by = current_user.id
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "임시저장 신고가 삭제되었습니다.",
+        }, 200
+
+
+    @staticmethod
+    def list_reports(args, current_user=None, mine_only=False):
+        from app.models import IncidentReport
+        from sqlalchemy import or_
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 10)),
+            10,
+            maximum=200,
+        )
+
+        query = IncidentReport.query
+
+        status = args.get("status")
+        if status:
+            query = query.filter(IncidentReport.status == status)
+        else:
+            query = query.filter(IncidentReport.status.notin_(("CANCELLED", "DELETED")))
+            if hasattr(IncidentReport, "deleted_at"):
+                query = query.filter(IncidentReport.deleted_at.is_(None))
+
+        keyword = args.get("keyword")
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            query = query.filter(or_(
+                IncidentReport.title.ilike(like_keyword),
+                IncidentReport.description.ilike(like_keyword),
+                IncidentReport.report_code.ilike(like_keyword),
+            ))
+
+        filters = {
+            "report_type": IncidentReport.report_type,
+            "priority": IncidentReport.priority,
+            "risk_level": IncidentReport.risk_level,
+        }
+
+        for param_name, column in filters.items():
+            value = args.get(param_name)
+            if value:
+                query = query.filter(column == value)
+
+        cctv_id = args.get("cctv_id")
+        if cctv_id not in (None, ""):
+            try:
+                query = query.filter(IncidentReport.cctv_id == int(cctv_id))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("cctv_id 값이 올바르지 않습니다.") from exc
+
+        start_date = ReportUploadService._parse_date(args.get("start_date"), "start_date")
+        end_date = ReportUploadService._parse_date(args.get("end_date"), "end_date", end_of_day=True)
+
+        if start_date:
+            query = query.filter(IncidentReport.submitted_at >= start_date)
+
+        if end_date:
+            query = query.filter(IncidentReport.submitted_at <= end_date)
+
+        mine = mine_only or ReportUploadService._to_bool(args.get("mine"))
+        if current_user is None:
+            raise ValueError("신고 목록은 로그인 사용자가 필요합니다.")
+        if mine or not ReportUploadService._is_admin(current_user):
+            query = query.filter(IncidentReport.reporter_id == current_user.id)
+
+        pagination = query.order_by(IncidentReport.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        reports = list(pagination.items)
+        items = [
+            ReportUploadService._report_response(
+                report, include_children=False, current_user=current_user
+            )
+            for report in reports
+        ]
+        ReportUploadService._attach_list_attachment_summaries(reports, items)
+
+        data = {
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }
+
+        return {
+            "success": True,
+            "data": data,
+            "reports": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }, 200
+
+    @staticmethod
+    def get_report(report_id, current_user=None):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if (
+            current_user is not None
+            and not ReportUploadService._can_manage_report(report, current_user)
+        ):
+            return {"success": False, "error": "신고 조회 권한이 없습니다."}, 403
+
+        report_data = ReportUploadService._report_response(
+            report, current_user=current_user
+        )
+        return {
+            "success": True,
+            "data": report_data,
+            "report": report_data,
+        }, 200
+
+    @staticmethod
+    def create_report(user_id, data, files):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment, ReportLocation
+
+        saved_file_paths = []
+        now = ReportUploadService._now()
+
+        try:
+            report = IncidentReport(
+                report_code=ReportUploadService._generate_report_code(now),
+                report_type=data.get("report_type", "GENERAL"),
+                upload_purpose=data.get("upload_purpose", "ANALYSIS"),
+                report_source_type="WEB",
+                title=data.get("subject") or data.get("title") or f"New Report {now.strftime('%Y%m%d')}",
+                description=data.get("description"),
+                reporter_id=user_id,
+                status="SUBMITTED",
+                priority=data.get("priority", "NORMAL"),
+                is_demo_data=str(data.get("is_demo_data", "false")).lower() == "true",
+                submitted_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+
+            db.session.add(report)
+            db.session.flush()
+
+            upload_path = current_app.config.get("UPLOAD_BASE_PATH")
+            if not upload_path:
+                raise RuntimeError("UPLOAD_BASE_PATH 설정이 없습니다.")
+
+            os.makedirs(upload_path, exist_ok=True)
+
+            saved_count = 0
+
+            for file in files:
+                if not file or file.filename == "":
+                    continue
+
+                original_filename = ReportUploadService._clean_original_filename(file.filename)
+                file_type = ReportUploadService._get_file_type(original_filename)
+
+                if file_type == "UNKNOWN":
+                    raise ValueError("지원하지 않는 파일 형식입니다.")
+
+                file.seek(0, os.SEEK_END)
+                file_length = file.tell()
+                file.seek(0)
+
+                ReportUploadService._validate_file_size(file_type, file_length)
+
+                file.seek(0)
+                file_hash = hashlib.md5(file.read()).hexdigest()
+                file.seek(0)
+
+                stored_filename = ReportUploadService._stored_filename(original_filename)
+                file_full_path = os.path.join(upload_path, stored_filename)
+
+                file.save(file_full_path)
+                saved_file_paths.append(file_full_path)
+                saved_count += 1
+
+                attachment = ReportAttachment(
+                    report_id=report.id,
+                    file_type=file_type,
+                    original_filename=original_filename,
+                    stored_filename=stored_filename,
+                    storage_type="LOCAL",
+                    file_path=file_full_path,
+                    file_size=file_length,
+                    file_hash=file_hash,
+                    mime_type=file.content_type or "application/octet-stream",
+                    scan_status="PENDING",
+                    is_private=False,
+                    download_count=0,
+                    access_count=0,
+                    uploaded_by=user_id,
+                    uploaded_at=now,
+                    created_at=now,
+                )
+                db.session.add(attachment)
+
+            if saved_count == 0:
+                raise ValueError("저장 가능한 파일이 없습니다.")
+
+            location_text = (data.get("location") or data.get("address") or data.get("place_name") or "").strip()
+            latitude = ReportUploadService._to_optional_decimal(data.get("latitude"), "위도")
+            longitude = ReportUploadService._to_optional_decimal(data.get("longitude"), "경도")
+
+            if location_text or latitude is not None or longitude is not None:
+                location = ReportLocation(**ReportUploadService._model_kwargs(
+                    ReportLocation,
+                    {
+                        "report_id": report.id,
+                        "location_source": "USER",
+                        "latitude": latitude,
+                        "longitude": longitude,
+                        "place_name": location_text or None,
+                        "address_raw": location_text or None,
+                        "is_location_confirmed": 0,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                ))
+                db.session.add(location)
+
+            db.session.commit()
+            return report
+
+        except Exception:
+            db.session.rollback()
+
+            for path in saved_file_paths:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        current_app.logger.exception("업로드 파일 정리 실패", extra={"file_path": path})
+
+            current_app.logger.exception("Report creation failed")
+            raise
+
+
+    @staticmethod
+    def add_report_attachments(report_id, current_user, files):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None) or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {"success": False, "error": "첨부파일 추가 권한이 없습니다."}, 403
+
+        files = files or []
+        if not files:
+            return {"success": False, "error": "파일이 업로드되지 않았습니다."}, 400
+
+        upload_path = current_app.config.get("UPLOAD_BASE_PATH")
+        if not upload_path:
+            return {"success": False, "error": "UPLOAD_BASE_PATH 설정이 없습니다."}, 500
+
+        os.makedirs(upload_path, exist_ok=True)
+
+        now = ReportUploadService._now()
+        saved_file_paths = []
+        attachments = []
+
+        try:
+            for file in files:
+                if not file or file.filename == "":
+                    continue
+
+                original_filename = ReportUploadService._clean_original_filename(file.filename)
+                file_type = ReportUploadService._get_file_type(original_filename)
+
+                if file_type == "UNKNOWN":
+                    raise ValueError("지원하지 않는 파일 형식입니다.")
+
+                file.seek(0, os.SEEK_END)
+                file_length = file.tell()
+                file.seek(0)
+
+                ReportUploadService._validate_file_size(file_type, file_length)
+
+                file.seek(0)
+                file_hash = hashlib.md5(file.read()).hexdigest()
+                file.seek(0)
+
+                stored_filename = ReportUploadService._stored_filename(original_filename)
+                file_full_path = os.path.join(upload_path, stored_filename)
+
+                file.save(file_full_path)
+                saved_file_paths.append(file_full_path)
+
+                attachment = ReportAttachment(
+                    report_id=report.id,
+                    file_type=file_type,
+                    original_filename=original_filename,
+                    stored_filename=stored_filename,
+                    storage_type="LOCAL",
+                    file_path=file_full_path,
+                    file_size=file_length,
+                    file_hash=file_hash,
+                    mime_type=file.content_type or "application/octet-stream",
+                    scan_status="PENDING",
+                    is_private=False,
+                    download_count=0,
+                    access_count=0,
+                    uploaded_by=current_user.id,
+                    uploaded_at=now,
+                    created_at=now,
+                )
+                db.session.add(attachment)
+                attachments.append(attachment)
+
+            if not attachments:
+                raise ValueError("저장 가능한 파일이 없습니다.")
+
+            report.updated_at = now
+            db.session.add(report)
+            db.session.commit()
+
+            items = [ReportUploadService._attachment_response(item) for item in attachments]
+
+            return {
+                "success": True,
+                "message": "첨부파일이 추가되었습니다.",
+                "count": len(items),
+                "items": items,
+            }, 201
+
+        except Exception:
+            db.session.rollback()
+
+            for saved_path in saved_file_paths:
+                if saved_path and os.path.exists(saved_path):
+                    try:
+                        os.remove(saved_path)
+                    except OSError:
+                        current_app.logger.exception(
+                            "첨부파일 추가 실패 후 파일 정리 실패",
+                            extra={"file_path": saved_path},
+                        )
+
+            raise
+
+    @staticmethod
+    def delete_report_attachment(report_id, attachment_id, current_user, data=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None) or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if (
+            not attachment
+            or attachment.report_id != report.id
+            or getattr(attachment, "deleted_at", None)
+        ):
+            return {"success": False, "error": "첨부파일을 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {"success": False, "error": "첨부파일 삭제 권한이 없습니다."}, 403
+
+        data = data or {}
+        reason = ""
+        if isinstance(data, dict):
+            reason = str(data.get("reason") or data.get("delete_reason") or "").strip()
+
+        now = ReportUploadService._now()
+
+        attachment.deleted_by = current_user.id
+        attachment.delete_reason = reason or None
+        attachment.deleted_at = now
+        report.updated_at = now
+
+        db.session.add(attachment)
+        db.session.add(report)
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "첨부파일이 삭제되었습니다.",
+            "attachment_id": attachment.id,
+            "report_id": report.id,
+        }, 200
+
+    @staticmethod
+    def update_report(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        data = data or {}
+        report = db.session.get(IncidentReport, report_id)
+
+        if not report:
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "신고 수정 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "수정할 수 없는 신고 상태입니다.",
+            }, 400
+
+        try:
+            if "report_type" in data:
+                report.report_type = data.get("report_type") or report.report_type
+            if "upload_purpose" in data:
+                report.upload_purpose = data.get("upload_purpose") or report.upload_purpose
+            if "title" in data or "subject" in data:
+                report.title = data.get("title") or data.get("subject") or report.title
+            if "description" in data:
+                report.description = data.get("description")
+            if "priority" in data:
+                report.priority = data.get("priority") or report.priority
+
+            report.updated_at = ReportUploadService._now()
+
+            location = ReportUploadService._upsert_report_location(
+                report_id=report.id,
+                data=data,
+                user_id=current_user.id,
+            )
+            if location is not None:
+                db.session.add(location)
+
+            db.session.commit()
+
+        except ValueError as exc:
+            db.session.rollback()
+            return {
+                "success": False,
+                "error": str(exc),
+            }, 400
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report update failed", extra={"report_id": report_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "신고가 수정되었습니다.",
+            "data": ReportUploadService._report_response(
+                report, current_user=current_user
+            ),
+        }, 200
+
+    @staticmethod
+    def delete_report(report_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+
+        if not report:
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "신고 삭제 권한이 없습니다.",
+            }, 403
+
+        if report.converted_incident_id:
+            return {
+                "success": False,
+                "error": "이상상황으로 전환된 신고는 삭제할 수 없습니다.",
+            }, 409
+
+        active_job = (
+            ReportAnalysisJob.query
+            .filter(
+                ReportAnalysisJob.report_id == report.id,
+                ReportAnalysisJob.job_status.in_(ReportUploadService.ACTIVE_JOB_STATUSES),
+            )
+            .first()
+        )
+        if active_job:
+            return {
+                "success": False,
+                "error": "분석 중인 신고는 삭제할 수 없습니다.",
+            }, 409
+
+        if report.status in {"CANCELLED", "DELETED"}:
+            return {
+                "success": False,
+                "error": "이미 삭제 또는 취소 처리된 신고입니다.",
+            }, 400
+
+        now = ReportUploadService._now()
+        report.status = "CANCELLED"
+        report.deleted_at = now
+        report.deleted_by = current_user.id
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "신고가 삭제 또는 취소 처리되었습니다.",
+        }, 200
+
+
+
+    @staticmethod
+    def update_report_status(report_id, current_user, data):
+        if not ReportUploadService._is_admin(current_user):
+            return {"success": False, "error": "관리자 권한이 필요합니다."}, 403
+
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        if not isinstance(data, dict):
+            return {"success": False, "error": "Request body must be a JSON object."}, 400
+
+        allowed_statuses = {
+            "SUBMITTED",
+            "REVIEWING",
+            "ANALYZING",
+            "CONVERTED_TO_INCIDENT",
+            "REJECTED",
+            "CLOSED",
+        }
+
+        raw_status = data.get("status")
+        status = str(raw_status or "").strip().upper()
+
+        if not status:
+            return {"success": False, "error": "status 값이 필요합니다."}, 400
+
+        if status not in allowed_statuses:
+            return {
+                "success": False,
+                "error": f"허용되지 않는 status입니다: {status}",
+                "allowed_statuses": sorted(allowed_statuses),
+            }, 400
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+        reason = str(data.get("reason") or data.get("reject_reason") or "").strip()
+
+        report.status = status
+        report.updated_at = now
+
+        if status in {"REVIEWING", "ANALYZING", "CONVERTED_TO_INCIDENT", "REJECTED"}:
+            report.reviewed_by = current_user.id
+            report.reviewed_at = report.reviewed_at or now
+
+        if status == "REJECTED":
+            if not reason:
+                return {"success": False, "error": "반려 사유가 필요합니다."}, 400
+            report.reject_reason = reason
+
+        if status == "CLOSED":
+            report.closed_by = current_user.id
+            report.closed_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(
+            report, current_user=current_user
+        )
+
+        return {
+            "success": True,
+            "message": "신고 상태가 변경되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
+    @staticmethod
+    def approve_report(report_id, current_user, data=None):
+        if not ReportUploadService._is_admin(current_user):
+            return {"success": False, "error": "관리자 권한이 필요합니다."}, 403
+
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+
+        # MVP 기준 승인 상태는 운영자 검토 진입 상태로 정의합니다.
+        report.status = "REVIEWING"
+        report.reviewed_by = current_user.id
+        report.reviewed_at = report.reviewed_at or now
+        report.updated_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(
+            report, current_user=current_user
+        )
+
+        return {
+            "success": True,
+            "message": "신고가 승인되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
+    @staticmethod
+    def reject_report(report_id, current_user, data):
+        if not ReportUploadService._is_admin(current_user):
+            return {"success": False, "error": "관리자 권한이 필요합니다."}, 403
+
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        if not isinstance(data, dict):
+            return {"success": False, "error": "Request body must be a JSON object."}, 400
+
+        reason = str(data.get("reason") or data.get("reject_reason") or "").strip()
+        if not reason:
+            return {"success": False, "error": "반려 사유가 필요합니다."}, 400
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        now = ReportUploadService._now()
+
+        report.status = "REJECTED"
+        report.reject_reason = reason
+        report.reviewed_by = current_user.id
+        report.reviewed_at = report.reviewed_at or now
+        report.updated_at = now
+
+        db.session.commit()
+
+        report_data = ReportUploadService._report_response(
+            report, current_user=current_user
+        )
+
+        return {
+            "success": True,
+            "message": "신고가 반려되었습니다.",
+            "report": report_data,
+            "data": report_data,
+        }, 200
+
+
+    @staticmethod
+    def _extract_analysis_metrics(result_summary):
+        from collections import Counter
+
+        if not isinstance(result_summary, dict):
+            return {
+                "detection_count": 0,
+                "avg_confidence": None,
+                "max_confidence": None,
+                "label_counts": {},
+            }
+
+        detections = result_summary.get("detections")
+        if detections is None:
+            detections = result_summary.get("objects")
+        if detections is None:
+            detections = result_summary.get("items")
+        if not isinstance(detections, list):
+            detections = []
+
+        confidence_values = []
+        labels = []
+
+        for item in detections:
+            if not isinstance(item, dict):
+                continue
+
+            raw_confidence = (
+                item.get("confidence")
+                if item.get("confidence") is not None
+                else item.get("score")
+                if item.get("score") is not None
+                else item.get("conf")
+                if item.get("conf") is not None
+                else item.get("probability")
+            )
+
+            try:
+                if raw_confidence is not None:
+                    confidence_values.append(float(raw_confidence))
+            except (TypeError, ValueError):
+                pass
+
+            label = (
+                item.get("label")
+                or item.get("class_name")
+                or item.get("class")
+                or item.get("name")
+                or item.get("type")
+            )
+            if label:
+                labels.append(str(label))
+
+        raw_count = (
+            result_summary.get("count")
+            if result_summary.get("count") is not None
+            else result_summary.get("detection_count")
+            if result_summary.get("detection_count") is not None
+            else result_summary.get("total_count")
+        )
+
+        try:
+            detection_count = int(raw_count) if raw_count is not None else len(detections)
+        except (TypeError, ValueError):
+            detection_count = len(detections)
+
+        avg_confidence = (
+            round(sum(confidence_values) / len(confidence_values), 4)
+            if confidence_values
+            else None
+        )
+        max_confidence = round(max(confidence_values), 4) if confidence_values else None
+
+        return {
+            "detection_count": detection_count,
+            "avg_confidence": avg_confidence,
+            "max_confidence": max_confidence,
+            "label_counts": dict(Counter(labels)),
+            "raw_status": result_summary.get("status"),
+        }
+
+    @staticmethod
+    def _analysis_comparison_item(job, report=None, attachment=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        if report is None:
+            report = db.session.get(IncidentReport, job.report_id)
+        if attachment is None:
+            attachment = db.session.get(ReportAttachment, job.attachment_id)
+
+        result_summary = job.result_summary if isinstance(job.result_summary, dict) else {}
+        metrics = ReportUploadService._extract_analysis_metrics(result_summary)
+
+        return {
+            "job_id": job.id,
+            "analysis_job_id": job.id,
+            "job_status": job.job_status,
+            "analysis_type": job.analysis_type,
+            "ai_engine_type": job.ai_engine_type,
+            "primary_model_name": job.primary_model_name,
+            "primary_model_version": job.primary_model_version,
+            "progress_percent": float(job.progress_percent) if job.progress_percent is not None else None,
+            "latency_ms": job.latency_ms,
+            "requested_at": job.requested_at.isoformat() if job.requested_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "report": {
+                "id": report.id if report else None,
+                "report_id": report.id if report else None,
+                "report_code": report.report_code if report else None,
+                "title": report.title if report else None,
+                "report_type": report.report_type if report else None,
+                "status": report.status if report else None,
+                "priority": report.priority if report else None,
+                "risk_level": report.risk_level if report else None,
+                "risk_score": report.risk_score if report else None,
+                "submitted_at": report.submitted_at.isoformat() if report and report.submitted_at else None,
+            },
+            "attachment": {
+                "id": attachment.id if attachment else None,
+                "attachment_id": attachment.id if attachment else None,
+                "file_type": attachment.file_type if attachment else None,
+                "original_filename": attachment.original_filename if attachment else None,
+                "mime_type": attachment.mime_type if attachment else None,
+                "file_size": attachment.file_size if attachment else None,
+                "preview_url": (
+                    f"/api/reports/attachments/{attachment.id}/preview"
+                    if attachment and ReportUploadService._is_previewable_attachment(attachment)
+                    else None
+                ),
+                "download_url": (
+                    f"/api/reports/attachments/{attachment.id}/download"
+                    if attachment
+                    else None
+                ),
+            },
+            "metrics": metrics,
+            "result_summary": result_summary,
+        }
+
+    @staticmethod
+    def _build_comparison_metrics(items):
+        metric_keys = [
+            "detection_count",
+            "avg_confidence",
+            "max_confidence",
+        ]
+
+        metrics = {}
+        for key in metric_keys:
+            values = []
+            for item in items:
+                value = item.get("metrics", {}).get(key)
+                if value is None:
+                    continue
+                try:
+                    values.append({
+                        "job_id": item["job_id"],
+                        "value": float(value),
+                    })
+                except (TypeError, ValueError):
+                    continue
+
+            if not values:
+                metrics[key] = {
+                    "values": [],
+                    "min": None,
+                    "max": None,
+                    "delta": None,
+                    "highest_job_id": None,
+                    "lowest_job_id": None,
+                }
+                continue
+
+            sorted_values = sorted(values, key=lambda item: item["value"])
+            min_value = sorted_values[0]["value"]
+            max_value = sorted_values[-1]["value"]
+
+            metrics[key] = {
+                "values": values,
+                "min": min_value,
+                "max": max_value,
+                "delta": max_value - min_value,
+                "highest_job_id": sorted_values[-1]["job_id"],
+                "lowest_job_id": sorted_values[0]["job_id"],
+            }
+
+        return metrics
+
+    @staticmethod
+    def list_analysis_comparison_candidates(args, current_user):
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from sqlalchemy import or_
+
+        page = ReportUploadService._to_positive_int(args.get("page"), 1, maximum=100000)
+        size = ReportUploadService._to_positive_int(
+            args.get("size", args.get("limit", 20)),
+            20,
+            maximum=100,
+        )
+
+        status = str(args.get("status") or args.get("job_status") or "COMPLETED").strip().upper()
+        keyword = str(args.get("keyword") or "").strip()
+        report_id = args.get("report_id")
+
+        query = (
+            ReportAnalysisJob.query
+            .join(IncidentReport, ReportAnalysisJob.report_id == IncidentReport.id)
+            .outerjoin(ReportAttachment, ReportAnalysisJob.attachment_id == ReportAttachment.id)
+        )
+
+        if status and status != "ALL":
+            query = query.filter(ReportAnalysisJob.job_status == status)
+
+        query = query.filter(IncidentReport.deleted_at.is_(None))
+        query = query.filter(IncidentReport.status.notin_(("DELETED", "CANCELLED", "DRAFT")))
+
+        if current_user.role not in {"SUPER_ADMIN", "CONTROL_ADMIN"}:
+            query = query.filter(IncidentReport.reporter_id == current_user.id)
+
+        if report_id not in (None, ""):
+            try:
+                query = query.filter(ReportAnalysisJob.report_id == int(report_id))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("report_id 값이 올바르지 않습니다.") from exc
+
+        if keyword:
+            like_keyword = f"%{keyword}%"
+            query = query.filter(or_(
+                IncidentReport.title.ilike(like_keyword),
+                IncidentReport.report_code.ilike(like_keyword),
+                ReportAttachment.original_filename.ilike(like_keyword),
+            ))
+
+        pagination = query.order_by(ReportAnalysisJob.id.desc()).paginate(
+            page=page,
+            per_page=size,
+            error_out=False,
+        )
+
+        jobs = list(pagination.items)
+        report_ids = {job.report_id for job in jobs}
+        attachment_ids = {job.attachment_id for job in jobs}
+
+        reports = {
+            report.id: report
+            for report in IncidentReport.query.filter(IncidentReport.id.in_(report_ids)).all()
+        } if report_ids else {}
+
+        attachments = {
+            attachment.id: attachment
+            for attachment in ReportAttachment.query.filter(ReportAttachment.id.in_(attachment_ids)).all()
+        } if attachment_ids else {}
+
+        items = [
+            ReportUploadService._analysis_comparison_item(
+                job,
+                report=reports.get(job.report_id),
+                attachment=attachments.get(job.attachment_id),
+            )
+            for job in jobs
+        ]
+
+        data = {
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }
+
+        return {
+            "success": True,
+            "data": data,
+            "items": items,
+            "page": page,
+            "size": size,
+            "total_count": pagination.total,
+            "total_pages": pagination.pages,
+        }, 200
+
+    @staticmethod
+    def compare_analysis_jobs(data, current_user):
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+
+        raw_job_ids = data.get("job_ids") or data.get("analysis_job_ids")
+        if isinstance(raw_job_ids, str):
+            raw_job_ids = [item.strip() for item in raw_job_ids.split(",") if item.strip()]
+
+        if not isinstance(raw_job_ids, list):
+            raise ValueError("job_ids 배열이 필요합니다.")
+
+        job_ids = []
+        for raw_id in raw_job_ids:
+            try:
+                job_id = int(raw_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("job_ids에는 숫자 ID만 포함할 수 있습니다.") from exc
+
+            if job_id <= 0:
+                raise ValueError("job_ids에는 양수 ID만 포함할 수 있습니다.")
+
+            if job_id not in job_ids:
+                job_ids.append(job_id)
+
+        if len(job_ids) < 2:
+            raise ValueError("비교하려면 최소 2개의 분석 job이 필요합니다.")
+        if len(job_ids) > 5:
+            raise ValueError("한 번에 최대 5개의 분석 job만 비교할 수 있습니다.")
+
+        jobs = ReportAnalysisJob.query.filter(ReportAnalysisJob.id.in_(job_ids)).all()
+        job_map = {job.id: job for job in jobs}
+
+        missing_ids = [job_id for job_id in job_ids if job_id not in job_map]
+        if missing_ids:
+            return {
+                "success": False,
+                "error": "분석 작업을 찾을 수 없습니다.",
+                "missing_job_ids": missing_ids,
+            }, 404
+
+        ordered_jobs = [job_map[job_id] for job_id in job_ids]
+        not_completed_ids = [
+            job.id for job in ordered_jobs
+            if job.job_status != "COMPLETED"
+        ]
+
+        if not_completed_ids:
+            return {
+                "success": False,
+                "error": "COMPLETED 상태의 분석 job만 비교할 수 있습니다.",
+                "not_completed_job_ids": not_completed_ids,
+            }, 400
+
+        report_ids = {job.report_id for job in ordered_jobs}
+        attachment_ids = {job.attachment_id for job in ordered_jobs}
+
+        reports = {
+            report.id: report
+            for report in IncidentReport.query.filter(IncidentReport.id.in_(report_ids)).all()
+        }
+
+        attachments = {
+            attachment.id: attachment
+            for attachment in ReportAttachment.query.filter(ReportAttachment.id.in_(attachment_ids)).all()
+        } if attachment_ids else {}
+
+        unauthorized_job_ids = []
+        for job in ordered_jobs:
+            report = reports.get(job.report_id)
+            if not report or report.deleted_at is not None:
+                return {
+                    "success": False,
+                    "error": "분석 job에 연결된 신고를 찾을 수 없습니다.",
+                    "job_id": job.id,
+                }, 404
+
+            if not ReportUploadService._can_manage_report(report, current_user):
+                unauthorized_job_ids.append(job.id)
+
+        if unauthorized_job_ids:
+            return {
+                "success": False,
+                "error": "비교분석 조회 권한이 없는 분석 job이 포함되어 있습니다.",
+                "unauthorized_job_ids": unauthorized_job_ids,
+            }, 403
+
+        items = [
+            ReportUploadService._analysis_comparison_item(
+                job,
+                report=reports.get(job.report_id),
+                attachment=attachments.get(job.attachment_id),
+            )
+            for job in ordered_jobs
+        ]
+
+        comparison_metrics = ReportUploadService._build_comparison_metrics(items)
+
+        return {
+            "success": True,
+            "count": len(items),
+            "job_ids": job_ids,
+            "items": items,
+            "comparison": {
+                "metrics": comparison_metrics,
+                "report_ids": [item["report"]["id"] for item in items],
+            },
+            "data": {
+                "items": items,
+                "metrics": comparison_metrics,
+            },
+        }, 200
+
+
+    @staticmethod
+    def get_analysis_status(report_id, current_user=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+        if (
+            current_user is not None
+            and not ReportUploadService._can_manage_report(report, current_user)
+        ):
+            return {"success": False, "error": "분석 결과 조회 권한이 없습니다."}, 403
+
+        jobs = (
+            ReportAnalysisJob.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportAnalysisJob.id.desc())
+            .all()
+        )
+
+        latest_job = jobs[0] if jobs else None
+        latest_job_data = ReportUploadService._analysis_job_response(latest_job)
+
+        return {
+            "success": True,
+            "report_id": report.id,
+            "report_code": report.report_code,
+            "analysis_status": ReportUploadService._normalize_analysis_status(
+                latest_job.job_status if latest_job else None
+            ),
+            "analysis_job_id": latest_job.id if latest_job else None,
+            "analysis_summary": (
+                latest_job_data.get("result_summary") if latest_job_data else None
+            ),
+            "risk_level": report.risk_level,
+            "risk_score": report.risk_score,
+            "converted_incident_id": report.converted_incident_id,
+            "job_count": len(jobs),
+            "latest_job": latest_job_data,
+            "allowed_actions": ReportUploadService._allowed_actions(
+                report, current_user
+            ),
+        }, 200
+
+    @staticmethod
+    def list_analysis_jobs(report_id, current_user=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or report.deleted_at is not None:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+        if (
+            current_user is not None
+            and not ReportUploadService._can_manage_report(report, current_user)
+        ):
+            return {"success": False, "error": "분석 결과 조회 권한이 없습니다."}, 403
+
+        jobs = (
+            ReportAnalysisJob.query
+            .filter_by(report_id=report.id)
+            .order_by(ReportAnalysisJob.id.desc())
+            .all()
+        )
+
+        return {
+            "success": True,
+            "report_id": report.id,
+            "report_code": report.report_code,
+            "count": len(jobs),
+            "items": [ReportUploadService._analysis_job_response(job) for job in jobs],
+            "allowed_actions": ReportUploadService._allowed_actions(
+                report, current_user
+            ),
+        }, 200
+
+    @staticmethod
+    def get_analysis_job(job_id, current_user=None):
+        from app.extensions import db
+        from app.models import ReportAnalysisJob
+
+        job = db.session.get(ReportAnalysisJob, job_id)
+        if not job:
+            return {"success": False, "error": "분석 작업을 찾을 수 없습니다."}, 404
+
+        from app.models import IncidentReport
+        report = db.session.get(IncidentReport, job.report_id)
+        if current_user is not None and (
+            not report or not ReportUploadService._can_manage_report(report, current_user)
+        ):
+            return {"success": False, "error": "분석 결과 조회 권한이 없습니다."}, 403
+
+        item = ReportUploadService._analysis_job_response(job)
+        item["allowed_actions"] = ReportUploadService._allowed_actions(
+            report, current_user
+        )
+        return {
+            "success": True,
+            "item": item,
+            "allowed_actions": item["allowed_actions"],
+        }, 200
+
+
+    @staticmethod
+    def retry_analysis_job(job_id, current_user):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from app.modules.ai_gateway.service import AIGatewayService
+        from app.modules.socketio.emitters import emit_report_analysis_updated
+
+        job = db.session.get(ReportAnalysisJob, job_id)
+        if not job:
+            return {"success": False, "error": "분석 작업을 찾을 수 없습니다."}, 404
+
+        if job.job_status in ReportUploadService.ACTIVE_JOB_STATUSES:
+            return {
+                "success": False,
+                "error": "이미 진행 중인 분석 작업은 재시도할 수 없습니다.",
+                "job": ReportUploadService._analysis_job_response(job),
+            }, 409
+
+        if job.job_status != "FAILED":
+            return {
+                "success": False,
+                "error": "FAILED 상태의 분석 작업만 재시도할 수 있습니다.",
+                "job": ReportUploadService._analysis_job_response(job),
+            }, 400
+
+        report = db.session.get(IncidentReport, job.report_id)
+        if not report or report.deleted_at is not None or report.status in {"DELETED", "CANCELLED"}:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+
+        if not ReportUploadService._is_admin(current_user):
+            return {"success": False, "error": "분석 작업 재시도 권한이 없습니다."}, 403
+
+        attachment = db.session.get(ReportAttachment, job.attachment_id)
+        if not attachment or getattr(attachment, "deleted_at", None):
+            return {"success": False, "error": "분석 대상 첨부파일을 찾을 수 없습니다."}, 404
+
+        retry_started_at = ReportUploadService._now()
+
+        job.job_status = "QUEUED"
+        job.retry_count = (job.retry_count or 0) + 1
+        job.progress_percent = 0
+        job.error_message = None
+        job.failed_reason_code = None
+        job.completed_at = None
+        job.started_at = None
+        job.updated_at = retry_started_at
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        processing_started_at = ReportUploadService._now()
+        job.job_status = "PROCESSING"
+        job.started_at = processing_started_at
+        job.updated_at = processing_started_at
+        job.progress_percent = 10
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
+        success, response = AIGatewayService.request_analysis(
+            report.id,
+            attachment.file_path,
+            cctv_id=getattr(report, "cctv_id", None),
+            camera_id=camera_id,
+        )
+        completed_at = ReportUploadService._now()
+
+        if success:
+            result_summary = response if isinstance(response, dict) else {
+                "raw_response": str(response)
+            }
+
+            response_status = str(result_summary.get("status", "")).upper()
+            response_job_status = str(result_summary.get("job_status", "")).upper()
+
+            is_completed_result = (
+                response_status == "OK"
+                or "detections" in result_summary
+                or "count" in result_summary
+            )
+
+            if is_completed_result:
+                job.job_status = "COMPLETED"
+                job.completed_at = completed_at
+                job.updated_at = completed_at
+                job.progress_percent = 100
+                job.total_frames = job.total_frames or 1
+                job.processed_frames = job.processed_frames or 1
+                job.result_summary = result_summary
+                job.raw_result_path = None
+                job.error_message = None
+                job.failed_reason_code = None
+                job.primary_model_name = job.primary_model_name or "YOLO11"
+                job.primary_model_version = job.primary_model_version or "current.pt"
+            else:
+                job.job_status = (
+                    response_job_status
+                    if response_job_status in ReportUploadService.ACTIVE_JOB_STATUSES
+                    else "QUEUED"
+                )
+                job.updated_at = completed_at
+                job.progress_percent = job.progress_percent or 10
+                job.result_summary = result_summary
+                job.error_message = None
+                job.failed_reason_code = None
+        else:
+            job.job_status = "FAILED"
+            job.completed_at = completed_at
+            job.updated_at = completed_at
+            job.progress_percent = 100
+            job.failed_reason_code = (
+                response.get("status")
+                if isinstance(response, dict)
+                else "AI_REQUEST_FAILED"
+            )
+            job.error_message = str(response)[:2000]
+
+        db.session.add(job)
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        job_data = ReportUploadService._analysis_job_response(job)
+
+        return {
+            "success": success,
+            "message": "분석 작업을 재시도했습니다." if success else "분석 작업 재시도에 실패했습니다.",
+            "job": job_data,
+            "data": job_data,
+        }, 200 if success else 502
+
+
+
+    @staticmethod
+    def _is_report_admin(current_user):
+        return current_user.role in {"SUPER_ADMIN", "CONTROL_ADMIN"}
+
+    @staticmethod
+    def _require_report_admin(current_user):
+        if not ReportUploadService._is_report_admin(current_user):
+            return {
+                "success": False,
+                "error": "신고 운영 권한이 없습니다.",
+            }, 403
+        return None
+
+    @staticmethod
+    def _add_status_history(report, previous_status, new_status, changed_by, reason=None):
+        from app.models import ReportStatusHistory
+
+        history = ReportStatusHistory(
+            report_id=report.id,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=changed_by,
+            change_reason=reason,
+            created_at=ReportUploadService._now(),
+        )
+        return history
+
+    @staticmethod
+    def _apply_report_status(report, new_status, current_user, reason=None):
+        previous_status = report.status
+        now = ReportUploadService._now()
+
+        report.status = new_status
+        report.updated_at = now
+
+        if new_status in {"REVIEWING", "APPROVED", "REJECTED"}:
+            report.reviewed_by = current_user.id
+            report.reviewed_at = now
+
+        if new_status in {"CLOSED", "RESOLVED"}:
+            report.closed_by = current_user.id
+            report.closed_at = now
+
+        if new_status == "REJECTED":
+            report.reject_reason = reason
+
+        return ReportUploadService._add_status_history(
+            report=report,
+            previous_status=previous_status,
+            new_status=new_status,
+            changed_by=current_user.id,
+            reason=reason,
+        )
+
+    @staticmethod
+    def update_report_status(report_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport
+
+        permission_error = ReportUploadService._require_report_admin(current_user)
+        if permission_error:
+            return permission_error
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        new_status = str(data.get("status") or "").strip().upper()
+        allowed_statuses = {
+            "SUBMITTED",
+            "REVIEWING",
+            "APPROVED",
+            "REJECTED",
+            "CLOSED",
+            "RESOLVED",
+            "CANCELLED",
+            "DELETED",
+        }
+        if new_status not in allowed_statuses:
+            return {
+                "success": False,
+                "error": "변경할 상태값이 올바르지 않습니다.",
+            }, 400
+
+        if report.status == new_status:
+            return {
+                "success": True,
+                "message": "이미 동일한 상태입니다.",
+                "data": ReportUploadService._report_response(report),
+            }, 200
+
+        if report.status in {"DELETED", "CANCELLED"}:
+            return {
+                "success": False,
+                "error": "삭제 또는 취소된 신고는 상태를 변경할 수 없습니다.",
+            }, 400
+
+        reason = data.get("memo") or data.get("reason") or data.get("change_reason")
+
+        try:
+            history = ReportUploadService._apply_report_status(
+                report=report,
+                new_status=new_status,
+                current_user=current_user,
+                reason=reason,
+            )
+            db.session.add(history)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Report status update failed", extra={"report_id": report_id})
+            raise
+
+        return {
+            "success": True,
+            "message": "신고 상태가 변경되었습니다.",
+            "data": ReportUploadService._report_response(report),
+        }, 200
+
+    @staticmethod
+    def approve_report(report_id, current_user, data):
+        data = dict(data or {})
+        data["status"] = "APPROVED"
+        if "memo" not in data and "reason" not in data:
+            data["memo"] = "신고 승인"
+
+        result, status_code = ReportUploadService.update_report_status(
+            report_id=report_id,
+            current_user=current_user,
+            data=data,
+        )
+        if result.get("success"):
+            result["message"] = "신고가 승인되었습니다."
+        return result, status_code
+
+    @staticmethod
+    def reject_report(report_id, current_user, data):
+        data = dict(data or {})
+        reject_reason = data.get("reject_reason") or data.get("reason") or data.get("memo")
+        if not reject_reason:
+            return {
+                "success": False,
+                "error": "반려 사유가 필요합니다.",
+            }, 400
+
+        data["status"] = "REJECTED"
+        data["reason"] = reject_reason
+
+        result, status_code = ReportUploadService.update_report_status(
+            report_id=report_id,
+            current_user=current_user,
+            data=data,
+        )
+        if result.get("success"):
+            result["message"] = "신고가 반려되었습니다."
+        return result, status_code
+
+    @staticmethod
+    def add_report_attachments(report_id, current_user, files):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 추가 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "첨부파일을 추가할 수 없는 신고 상태입니다.",
+            }, 400
+
+        files = [file for file in (files or []) if file and getattr(file, "filename", "")]
+        if not files:
+            return {
+                "success": False,
+                "error": "파일이 업로드되지 않았습니다.",
+            }, 400
+
+        saved_file_paths = []
+        attachments = []
+        now = ReportUploadService._now()
+
+        try:
+            for file in files:
+                file_info = ReportUploadService.process_file_upload(file)
+                saved_file_paths.append(file_info["file_path"])
+                attachment = ReportAttachment(
+                    report_id=report.id,
+                    file_type=file_info["file_type"],
+                    original_filename=file_info["original_filename"],
+                    stored_filename=file_info["stored_filename"],
+                    storage_type=file_info["storage_type"],
+                    file_path=file_info["file_path"],
+                    file_size=file_info["file_size"],
+                    file_hash=file_info["file_hash"],
+                    mime_type=file_info["mime_type"],
+                    scan_status=file_info["scan_status"],
+                    is_private=False,
+                    download_count=0,
+                    access_count=0,
+                    uploaded_by=current_user.id,
+                    uploaded_at=now,
+                    created_at=now,
+                )
+                db.session.add(attachment)
+                attachments.append(attachment)
+
+            report.updated_at = now
+            db.session.commit()
+
+        except Exception:
+            db.session.rollback()
+            for path in saved_file_paths:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        current_app.logger.exception("첨부파일 추가 실패 후 파일 정리 실패", extra={"file_path": path})
+            raise
+
+        attachment_items = [ReportUploadService._attachment_response(item) for item in attachments]
+        return {
+            "success": True,
+            "message": "첨부파일이 추가되었습니다.",
+            "data": {
+                "report_id": report.id,
+                "attachments": attachment_items,
+                "attachment_count": len(attachment_items),
+            },
+        }, 201
+
+    @staticmethod
+    def delete_report_attachment(report_id, attachment_id, current_user, data):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+
+        report = db.session.get(IncidentReport, report_id)
+        if not report or getattr(report, "deleted_at", None):
+            return {
+                "success": False,
+                "error": "리포트를 찾을 수 없습니다.",
+            }, 404
+
+        if not ReportUploadService._can_manage_report(report, current_user):
+            return {
+                "success": False,
+                "error": "첨부파일 삭제 권한이 없습니다.",
+            }, 403
+
+        if not ReportUploadService._is_report_editable(report):
+            return {
+                "success": False,
+                "error": "첨부파일을 삭제할 수 없는 신고 상태입니다.",
+            }, 400
+
+        attachment = db.session.get(ReportAttachment, attachment_id)
+        if (
+            not attachment
+            or attachment.report_id != report.id
+            or getattr(attachment, "deleted_at", None)
+        ):
+            return {
+                "success": False,
+                "error": "첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        active_job = (
+            ReportAnalysisJob.query
+            .filter(
+                ReportAnalysisJob.report_id == report.id,
+                ReportAnalysisJob.attachment_id == attachment.id,
+                ReportAnalysisJob.job_status.in_(ReportUploadService.ACTIVE_JOB_STATUSES),
+            )
+            .first()
+        )
+        if active_job:
+            return {
+                "success": False,
+                "error": "분석 중인 첨부파일은 삭제할 수 없습니다.",
+            }, 409
+
+        now = ReportUploadService._now()
+        attachment.deleted_at = now
+        attachment.deleted_by = current_user.id
+        attachment.delete_reason = data.get("reason") or data.get("delete_reason")
+        report.updated_at = now
+
+        db.session.commit()
+
+        return {
+            "success": True,
+            "message": "첨부파일이 삭제 처리되었습니다.",
+        }, 200
+
+    @staticmethod
+    def process_report_analysis_job(job_id):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from app.modules.ai_gateway.service import AIGatewayService
+        from app.modules.socketio.emitters import emit_report_analysis_updated
+
+        job = db.session.get(ReportAnalysisJob, job_id)
+        if not job:
+            return {"success": False, "error": "분석 작업을 찾을 수 없습니다."}, 404
+
+        if job.job_status != "QUEUED":
+            return {
+                "success": False,
+                "error": "QUEUED 상태의 분석 작업만 처리할 수 있습니다.",
+                "job_status": job.job_status,
+            }, 409
+
+        report = db.session.get(IncidentReport, job.report_id)
+        attachment = db.session.get(ReportAttachment, job.attachment_id)
+
+        if not report or not attachment:
+            job.job_status = "FAILED"
+            job.failed_reason_code = "MISSING_REPORT_OR_ATTACHMENT"
+            job.error_message = "Report or attachment not found."
+            job.completed_at = ReportUploadService._now()
+            job.updated_at = job.completed_at
+            job.progress_percent = 100
+            db.session.commit()
+            emit_report_analysis_updated(job)
+            return {"success": False, "error": "신고 또는 첨부파일을 찾을 수 없습니다."}, 404
+
+        started_at = ReportUploadService._now()
+        job.job_status = "PROCESSING"
+        job.started_at = job.started_at or started_at
+        job.updated_at = started_at
+        job.progress_percent = 10
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
+        success, response = AIGatewayService.request_analysis(
+            report.id,
+            attachment.file_path,
+            cctv_id=getattr(report, "cctv_id", None),
+            camera_id=camera_id,
+        )
+        completed_at = ReportUploadService._now()
+
+        if success:
+            result_summary = response if isinstance(response, dict) else {"raw_response": str(response)}
+            is_completed = (
+                str(result_summary.get("status", "")).upper() == "OK"
+                or "detections" in result_summary
+                or "count" in result_summary
+            )
+
+            if is_completed:
+                job.job_status = "COMPLETED"
+                job.completed_at = completed_at
+                job.progress_percent = 100
+                job.total_frames = 1
+                job.processed_frames = 1
+                job.result_summary = result_summary
+                job.primary_model_name = "YOLO11"
+                job.primary_model_version = "current.pt"
+                job.error_message = None
+                job.failed_reason_code = None
+            else:
+                job.job_status = "QUEUED"
+                job.result_summary = result_summary
+                job.progress_percent = job.progress_percent or 10
+        else:
+            job.job_status = "FAILED"
+            job.completed_at = completed_at
+            job.progress_percent = 100
+            job.failed_reason_code = response.get("status") if isinstance(response, dict) else "AI_REQUEST_FAILED"
+            job.error_message = str(response)[:2000]
+
+        job.updated_at = completed_at
+        db.session.commit()
+        emit_report_analysis_updated(job)
+
+        return {
+            "success": job.job_status != "FAILED",
+            "job_id": job.id,
+            "job_status": job.job_status,
+            "analysis_status": ReportUploadService._normalize_analysis_status(
+                        job.job_status
+                    ),
+            "report_id": report.id,
+            "attachment_id": attachment.id,
+        }, 200
+
+    @staticmethod
+    def process_queued_report_analysis_jobs(limit=10):
+        from app.models import ReportAnalysisJob
+
+        limit = max(1, min(int(limit), 100))
+        jobs = (
+            ReportAnalysisJob.query
+            .filter(ReportAnalysisJob.job_status == "QUEUED")
+            .order_by(ReportAnalysisJob.id.asc())
+            .limit(limit)
+            .all()
+        )
+
+        items = []
+        for job in jobs:
+            result, status_code = ReportUploadService.process_report_analysis_job(job.id)
+            items.append({"job_id": job.id, "status_code": status_code, "result": result})
+
+        return {"success": True, "processed_count": len(items), "items": items}, 200
+
+    @staticmethod
+    def request_report_analysis(report_id, user_id=None, current_user=None):
+        from app.extensions import db
+        from app.models import IncidentReport, ReportAnalysisJob, ReportAttachment
+        from app.modules.socketio.emitters import emit_report_analysis_updated
+
+        now = ReportUploadService._now()
+        report = db.session.get(IncidentReport, report_id)
+
+        if not report:
+            return {"success": False, "error": "리포트를 찾을 수 없습니다."}, 404
+        if current_user is not None:
+            if not ReportUploadService._is_admin(current_user):
+                return {"success": False, "error": "분석 요청은 관리자 권한이 필요합니다."}, 403
+            user_id = current_user.id
+        if user_id is None:
+            return {"success": False, "error": "분석 요청 사용자가 필요합니다."}, 400
+
+        attachments = (
+            ReportAttachment.query
+            .filter(
+                ReportAttachment.report_id == report.id,
+                ReportAttachment.deleted_at.is_(None),
+            )
+            .order_by(ReportAttachment.id.asc())
+            .all()
+        )
+
+        if not attachments:
+            return {"success": False, "error": "분석할 첨부파일이 없습니다."}, 400
+
+        jobs = []
+        created = False
+
+        for attachment in attachments:
+            existing_job = (
+                ReportAnalysisJob.query
+                .filter(
+                    ReportAnalysisJob.report_id == report.id,
+                    ReportAnalysisJob.attachment_id == attachment.id,
+                    ReportAnalysisJob.job_status.in_(ReportUploadService.ACTIVE_JOB_STATUSES),
+                )
+                .order_by(ReportAnalysisJob.id.desc())
+                .first()
+            )
+
+            if existing_job:
+                jobs.append(existing_job)
+                continue
+
+            job = ReportAnalysisJob(
+                report_id=report.id,
+                attachment_id=attachment.id,
+                job_status="QUEUED",
+                analysis_type="INCIDENT_DETECTION",
+                ai_engine_type="YOLOV11",
+                confidence_threshold=0.450,
+                lane_stop_threshold=10,
+                shoulder_stop_threshold=15,
+                movement_threshold_px=5,
+                retry_count=0,
+                requested_by=user_id,
+                requested_at=now,
+                created_at=now,
+            )
+            db.session.add(job)
+            jobs.append(job)
+            created = True
+
+        db.session.commit()
+
+        for job in jobs:
+            emit_report_analysis_updated(job)
+
+        return {
+            "success": True,
+            "message": "분석 작업이 대기열에 등록되었습니다.",
+            "report_id": report.id,
+            "job_id": jobs[0].id if jobs else None,
+            "analysis_status": ReportUploadService._normalize_analysis_status(
+                jobs[0].job_status if jobs else None
+            ),
+            "allowed_actions": ReportUploadService._allowed_actions(
+                report, current_user
+            ),
+            "jobs": [
+                {
+                    "job_id": job.id,
+                    "report_id": job.report_id,
+                    "attachment_id": job.attachment_id,
+                    "job_status": job.job_status,
+                    "analysis_status": ReportUploadService._normalize_analysis_status(job.job_status),
+                }
+                for job in jobs
+            ],
+        }, 201 if created else 200

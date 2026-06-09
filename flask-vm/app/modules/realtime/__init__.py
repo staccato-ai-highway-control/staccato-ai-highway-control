@@ -1,0 +1,1 @@
+"""Realtime notification query module."""

@@ -1,0 +1,7 @@
+- 기존 관제 방식의 문제
+- AI CCTV 상시 관제 목적
+- AI Server가 CCTV 스트림을 일정 주기로 분석
+- LANE_STOP / SHOULDER_STOP 감지
+- Flask Server가 사건 저장 및 알림 생성
+- 관제자는 AI 감지 이벤트만 확인
+- 정탐/오탐 결과는 MLOps 재학습 데이터로 활용

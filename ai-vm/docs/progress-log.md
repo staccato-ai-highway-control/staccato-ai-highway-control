@@ -1,0 +1,63 @@
+# AI-VM 작업 로그
+
+## 2026-05-12
+
+### 완료한 작업
+
+- AI-VM 작업 브랜치 생성
+  - feat/ai-vm-integration
+- develop 브랜치 기준 ai-vm 폴더만 sparse-checkout
+- AI-VM 구조 문서 작성
+
+### 현재 상태
+
+```text
+ai-vm/
+├── docker-compose.yml
+├── docs/
+│   └── ai-vm-structure.md
+```
+
+### 미완료 작업
+- Docker 설치
+- ai-server 폴더 생성
+- ai-server FastAPI health API 구현
+- docker compose 실행 테스트
+- Flask VM에서 AI-VM API 호출 테스트
+
+### 다음 작업
+- Docker 설치
+- ai-server 기본 구조 생성
+- ai-server Mock 분석 API 구현
+- health check 테스트
+
+## 2026-05-12 추가 작업
+
+### 완료한 작업
+
+- Docker 설치 완료
+- ai-server 폴더 구조 생성
+- ai-server FastAPI health API 구현
+- ai-server Mock 분석 API 구현
+- ai-server health check 성공
+- ai-server Mock 분석 API 응답 확인
+
+### 확인된 API
+
+```bash
+curl http://localhost:8001/internal/ai/health
+curl -X POST http://localhost:8001/internal/ai/analyze
+```
+
+### 현재 완료 상태
+```
+AI-VM Docker 기반 서버 분리 실행 가능
+ai-server  : 8001
+Mock 분석 API 정상 동작
+```
+
+### 다음 작업
+
+1. Flask VM에서 AI-VM API 호출 테스트
+3. Flask → ai-server 분석 요청 API 연동
+5. Mock 분석 결과를 DB 저장 구조와 연결

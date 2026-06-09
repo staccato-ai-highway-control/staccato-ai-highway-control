@@ -1,0 +1,11 @@
+[Unit]
+Description=Run STACCATO resource access/status report every 3 hours
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=3h
+Persistent=true
+Unit=staccato-resource-status-report.service
+
+[Install]
+WantedBy=timers.target
