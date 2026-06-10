@@ -250,7 +250,7 @@ export default function ReportsPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [bulkStatus, setBulkStatus] = useState("REVIEWING");
-  const [bulkAction, setBulkAction] = useState<"status" | "analysis" | null>(null);
+  const [bulkAction, setBulkAction] = useState<"status" | null>(null);
   const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
   const selectAllRef = useRef<HTMLInputElement | null>(null);
 
@@ -380,20 +380,12 @@ export default function ReportsPage() {
     if (failedCount > 0) setErrorMessage(`${failedCount}건의 신고 상태를 변경하지 못했습니다.`);
   }
 
-  async function handleBulkAnalysis() {
+  function handleBulkAnalysis() {
     if (!canOperateReports || selectedReports.length === 0) return;
-    setBulkAction("analysis");
-    setErrorMessage(null);
-
-    const results = await Promise.allSettled(
-      selectedReports.map((report) => requestReportAnalysis(getReportId(report)))
-    );
-    setBulkAction(null);
-    setSelectedReportIds(new Set());
-    await loadReports();
-
-    const failedCount = results.filter((result) => result.status === "rejected").length;
-    if (failedCount > 0) setErrorMessage(`${failedCount}건의 신고 분석을 요청하지 못했습니다.`);
+    const query = new URLSearchParams({
+      reportIds: selectedReports.map(getReportId).join(","),
+    });
+    router.push(`/reports/analysis-request?${query.toString()}`);
   }
 
   function handleCompareSelected() {
@@ -478,7 +470,7 @@ export default function ReportsPage() {
                       {bulkAction === "status" ? "변경 중" : "선택 상태 변경"}
                     </button>
                     <button type="button" onClick={handleBulkAnalysis} disabled={bulkAction !== null} className="h-9 rounded-lg bg-slate-900 px-3 text-xs font-black text-white transition hover:bg-slate-800 disabled:opacity-50">
-                      {bulkAction === "analysis" ? "요청 중" : "선택 분석 요청"}
+                      선택 분석 요청
                     </button>
                   </>
                 ) : null}
