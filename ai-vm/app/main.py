@@ -973,11 +973,6 @@ async def detect_legacy_report_file(
         finally:
             if cap is not None:
                 cap.release()
-            if tmp_path is not None:
-                try:
-                    Path(tmp_path).unlink(missing_ok=True)
-                except Exception:
-                    pass
 
     else:
         np_buffer = np.frombuffer(payload, dtype=np.uint8)
