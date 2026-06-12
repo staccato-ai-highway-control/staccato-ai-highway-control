@@ -1,3 +1,4 @@
+# 역할: FastAPI 애플리케이션을 uvicorn으로 실행하는 서버 진입점입니다.
 import os
 
 import uvicorn

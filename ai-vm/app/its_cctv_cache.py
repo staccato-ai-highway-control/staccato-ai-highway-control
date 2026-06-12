@@ -1,3 +1,4 @@
+# 역할: ITS CCTV 목록을 로컬 JSON 캐시에 저장하고 TTL/스테일 정책에 따라 읽습니다.
 import json
 import os
 from datetime import datetime, timezone
@@ -12,14 +13,17 @@ from .config import (
 )
 
 
+# _utc_now 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# _format_timestamp 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _format_timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+# 문자열 timestamp를 datetime으로 안전하게 변환합니다.
 def _parse_timestamp(value: str) -> datetime | None:
     if not value:
         return None
@@ -30,6 +34,7 @@ def _parse_timestamp(value: str) -> datetime | None:
         return None
 
 
+# _age_seconds 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _age_seconds(updated_at: str, now: datetime | None = None) -> int | None:
     parsed = _parse_timestamp(updated_at)
     if parsed is None:
@@ -39,6 +44,7 @@ def _age_seconds(updated_at: str, now: datetime | None = None) -> int | None:
     return max(0, int(age))
 
 
+# save_its_cctv_cache 기능을 수행하는 함수입니다.
 def save_its_cctv_cache(
     items: list[dict[str, Any]],
     cache_path: Path | str = ITS_CCTV_CACHE_PATH,
@@ -67,12 +73,14 @@ def save_its_cctv_cache(
     }
 
 
+# is_cache_expired 기능을 수행하는 함수입니다.
 def is_cache_expired(age_seconds: int | None, ttl_seconds: int = ITS_CCTV_CACHE_TTL_SECONDS) -> bool:
     if age_seconds is None:
         return True
     return age_seconds > ttl_seconds
 
 
+# is_stale_cache_allowed 기능을 수행하는 함수입니다.
 def is_stale_cache_allowed(
     age_seconds: int | None,
     *,
@@ -84,6 +92,7 @@ def is_stale_cache_allowed(
     return age_seconds <= stale_max_age_seconds
 
 
+# load_its_cctv_cache 기능을 수행하는 함수입니다.
 def load_its_cctv_cache(
     cache_path: Path | str = ITS_CCTV_CACHE_PATH,
     *,

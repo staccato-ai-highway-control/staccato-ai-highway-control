@@ -1,3 +1,4 @@
+# 역할: .env와 환경 변수에서 서버, 모델, 스트림, 이벤트 감지 설정을 읽어 전역 상수로 제공합니다.
 from pathlib import Path
 import os
 
@@ -8,6 +9,7 @@ EVENT_MEDIA_DIR = Path(os.environ.get("EVENT_MEDIA_DIR", REPO_ROOT / "event_medi
 ROI_SETTINGS_PATH = Path(os.environ.get("ROI_SETTINGS_PATH", REPO_ROOT / "roi_settings.json"))
 
 
+# load_env_file 기능을 수행하는 함수입니다.
 def load_env_file(path: Path | str | None = None) -> None:
     env_path = Path(path) if path else ENV_ROOT / ".env"
     if not env_path.exists():
@@ -116,6 +118,7 @@ FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS"
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 REPORT_DETECT_MAX_UPLOAD_BYTES = int(os.environ.get("REPORT_DETECT_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
 
+# require_non_empty_secret 기능을 수행하는 함수입니다.
 def require_non_empty_secret(name: str, value: str) -> None:
     if not value:
         raise RuntimeError(f"{name} is required. Set it in ai-vm/.env or environment variables.")
