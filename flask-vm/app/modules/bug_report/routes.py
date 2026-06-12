@@ -24,14 +24,16 @@ bug_report_bp = Blueprint(
 
 
 @bug_report_bp.post("")
+@require_auth
 def create_bug_report_api():
-    result, status_code = create_bug_report(request.get_json(silent=True))
+    result, status_code = create_bug_report(request.get_json(silent=True), request.current_user)
     return jsonify(result), status_code
 
 
 @bug_report_bp.get("")
+@require_auth
 def list_bug_reports_api():
-    result, status_code = list_bug_reports(request.args)
+    result, status_code = list_bug_reports(request.args, request.current_user)
     return jsonify(result), status_code
 
 
@@ -46,31 +48,36 @@ def list_my_bug_reports_api():
 
 
 @bug_report_bp.get("/<int:bug_report_id>")
+@require_auth
 def get_bug_report_detail_api(bug_report_id: int):
-    result, status_code = get_bug_report_detail(bug_report_id)
+    result, status_code = get_bug_report_detail(bug_report_id, request.current_user)
     return jsonify(result), status_code
 
 
 @bug_report_bp.patch("/<int:bug_report_id>")
+@require_auth
 def update_bug_report_api(bug_report_id: int):
     result, status_code = update_bug_report(
         bug_report_id,
         request.get_json(silent=True),
+        request.current_user,
     )
     return jsonify(result), status_code
 
 
 @bug_report_bp.delete("/<int:bug_report_id>")
+@require_auth
 def close_bug_report_api(bug_report_id: int):
-    result, status_code = close_bug_report(bug_report_id)
+    result, status_code = close_bug_report(bug_report_id, request.current_user)
     return jsonify(result), status_code
 
 
 @bug_report_bp.post("/<int:bug_report_id>/attachments")
+@require_auth
 def create_bug_report_attachment_api(bug_report_id: int):
     try:
         files = request.files.getlist("files")
-        result, status_code = create_bug_report_attachments(bug_report_id, files)
+        result, status_code = create_bug_report_attachments(bug_report_id, files, request.current_user)
         return jsonify(result), status_code
     except Exception:
         return jsonify({
@@ -81,8 +88,9 @@ def create_bug_report_attachment_api(bug_report_id: int):
 
 
 @bug_report_bp.get("/attachments/<int:attachment_id>/download")
+@require_auth
 def download_bug_report_attachment_api(attachment_id: int):
-    result, status_code = get_bug_report_attachment_file(attachment_id)
+    result, status_code = get_bug_report_attachment_file(attachment_id, request.current_user)
     if status_code == 200:
         return result
     return jsonify(result), status_code

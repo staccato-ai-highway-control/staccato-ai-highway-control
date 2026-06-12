@@ -92,52 +92,6 @@ def download_report_attachment(attachment_id):
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
-@report_upload_bp.route("/<int:report_id>/attachments", methods=["POST"])
-@require_auth
-def add_report_attachments(report_id):
-    try:
-        files = request.files.getlist("files")
-
-        if not files:
-            return jsonify({"success": False, "error": "파일이 업로드되지 않았습니다."}), 400
-
-        result, status_code = ReportUploadService.add_report_attachments(
-            report_id=report_id,
-            current_user=request.current_user,
-            files=files,
-        )
-        return jsonify(result), status_code
-
-    except ValueError as e:
-        return jsonify({"success": False, "error": str(e)}), 400
-
-    except Exception:
-        logger.exception("리포트 첨부파일 추가 중 오류 발생")
-        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
-
-
-@report_upload_bp.route("/<int:report_id>/attachments/<int:attachment_id>", methods=["DELETE"])
-@require_auth
-def delete_report_attachment(report_id, attachment_id):
-    try:
-        data = request.get_json(silent=True) or {}
-        if not isinstance(data, dict):
-            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
-
-        result, status_code = ReportUploadService.delete_report_attachment(
-            report_id=report_id,
-            attachment_id=attachment_id,
-            current_user=request.current_user,
-            data=data,
-        )
-        return jsonify(result), status_code
-
-    except Exception:
-        logger.exception("리포트 첨부파일 삭제 중 오류 발생")
-        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
-
-
-
 @report_upload_bp.route("/drafts", methods=["POST"])
 @require_auth
 def create_report_draft():
@@ -242,7 +196,7 @@ def delete_report_draft(draft_id):
 @require_auth
 def get_report(report_id):
     try:
-        result, status_code = ReportUploadService.get_report(report_id)
+        result, status_code = ReportUploadService.get_report(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -262,12 +216,21 @@ def create_report():
             return jsonify({"success": False, "error": "파일이 업로드되지 않았습니다."}), 400
 
         report = ReportUploadService.create_report(user_id, data, files)
+        report_data = ReportUploadService._report_response(
+            report,
+            current_user=request.current_user,
+        )
 
         return jsonify({
             "success": True,
             "message": "리포트가 성공적으로 접수되었습니다.",
             "report_code": report.report_code,
             "report_id": report.id,
+            "reporter_id": report.reporter_id,
+            "author_id": report.reporter_id,
+            "analysis_status": report_data.get("analysis_status"),
+            "allowed_actions": report_data.get("allowed_actions"),
+            "data": report_data,
         }), 201
 
     except ValueError as e:
@@ -298,6 +261,21 @@ def update_report(report_id):
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
+@report_upload_bp.route("/<int:report_id>", methods=["DELETE"])
+@require_auth
+def delete_report(report_id):
+    try:
+        result, status_code = ReportUploadService.delete_report(
+            report_id=report_id,
+            current_user=request.current_user,
+        )
+        return jsonify(result), status_code
+
+    except Exception:
+        logger.exception("리포트 삭제 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
 @report_upload_bp.route("/<int:report_id>/status", methods=["PATCH"])
 @require_auth
 def update_report_status(report_id):
@@ -323,6 +301,9 @@ def update_report_status(report_id):
 def approve_report(report_id):
     try:
         data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
         result, status_code = ReportUploadService.approve_report(
             report_id=report_id,
             current_user=request.current_user,
@@ -355,18 +336,47 @@ def reject_report(report_id):
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
-@report_upload_bp.route("/<int:report_id>", methods=["DELETE"])
+@report_upload_bp.route("/<int:report_id>/attachments", methods=["POST"])
 @require_auth
-def delete_report(report_id):
+def add_report_attachments(report_id):
     try:
-        result, status_code = ReportUploadService.delete_report(
+        files = request.files.getlist("files")
+        if not files and request.files.get("file"):
+            files = [request.files["file"]]
+
+        result, status_code = ReportUploadService.add_report_attachments(
             report_id=report_id,
             current_user=request.current_user,
+            files=files,
+        )
+        return jsonify(result), status_code
+
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+    except Exception:
+        logger.exception("리포트 첨부파일 추가 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
+
+@report_upload_bp.route("/<int:report_id>/attachments/<int:attachment_id>", methods=["DELETE"])
+@require_auth
+def delete_report_attachment(report_id, attachment_id):
+    try:
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"success": False, "error": "Request body must be a JSON object."}), 400
+
+        result, status_code = ReportUploadService.delete_report_attachment(
+            report_id=report_id,
+            attachment_id=attachment_id,
+            current_user=request.current_user,
+            data=data,
         )
         return jsonify(result), status_code
 
     except Exception:
-        logger.exception("리포트 삭제 중 오류 발생")
+        logger.exception("리포트 첨부파일 삭제 중 오류 발생")
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
@@ -374,7 +384,7 @@ def delete_report(report_id):
 @require_auth
 def get_report_analysis_status(report_id):
     try:
-        result, status_code = ReportUploadService.get_analysis_status(report_id)
+        result, status_code = ReportUploadService.get_analysis_status(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -386,7 +396,7 @@ def get_report_analysis_status(report_id):
 @require_auth
 def list_report_analysis_jobs(report_id):
     try:
-        result, status_code = ReportUploadService.list_analysis_jobs(report_id)
+        result, status_code = ReportUploadService.list_analysis_jobs(report_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
@@ -435,11 +445,13 @@ def compare_analysis_jobs():
 @require_auth
 def get_report_analysis_job(job_id):
     try:
-        result, status_code = ReportUploadService.get_analysis_job(job_id)
+        result, status_code = ReportUploadService.get_analysis_job(job_id, request.current_user)
         return jsonify(result), status_code
 
     except Exception:
         logger.exception("리포트 분석 작업 상세 조회 중 오류 발생")
+        return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
+
         return jsonify({"success": False, "error": "서버 내부 오류가 발생했습니다."}), 500
 
 
@@ -462,10 +474,9 @@ def retry_report_analysis_job(job_id):
 @require_auth
 def request_report_analysis(report_id):
     try:
-        user_id = request.current_user.id
         result, status_code = ReportUploadService.request_report_analysis(
             report_id=report_id,
-            user_id=user_id,
+            current_user=request.current_user,
         )
         return jsonify(result), status_code
 

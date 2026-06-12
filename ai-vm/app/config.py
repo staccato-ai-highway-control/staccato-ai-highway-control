@@ -114,6 +114,17 @@ FLASK_RELAY_EVENTS_URL = os.environ.get(
 ).strip()
 FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS", "1.5"))
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
+REPORT_DETECT_MAX_UPLOAD_BYTES = int(os.environ.get("REPORT_DETECT_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+
+def require_non_empty_secret(name: str, value: str) -> None:
+    if not value:
+        raise RuntimeError(f"{name} is required. Set it in ai-vm/.env or environment variables.")
+
+
+require_non_empty_secret("DEV_PASSWORD", DEV_PASSWORD)
+require_non_empty_secret("DEV_ACCESS_TOKEN", DEV_ACCESS_TOKEN)
+require_non_empty_secret("INTERNAL_API_TOKEN", INTERNAL_API_TOKEN)
+
 EVENT_CLIP_PRE_SECONDS = float(os.environ.get("EVENT_CLIP_PRE_SECONDS", "5.0"))
 EVENT_CLIP_POST_SECONDS = float(os.environ.get("EVENT_CLIP_POST_SECONDS", "5.0"))
 MANUAL_EVENT_CLIP_PRE_SECONDS = float(os.environ.get("MANUAL_EVENT_CLIP_PRE_SECONDS", "5.0"))
@@ -153,6 +164,10 @@ EVENT_HISTORY_LENGTH = int(os.environ.get("EVENT_HISTORY_LENGTH", "10"))
 EVENT_DANGER_LOW_RATIO = float(os.environ.get("EVENT_DANGER_LOW_RATIO", "0.3"))
 EVENT_DANGER_SECONDS = float(os.environ.get("EVENT_DANGER_SECONDS", "2.0"))
 EVENT_STOPPED_MOVE_PX = float(os.environ.get("EVENT_STOPPED_MOVE_PX", "2.5"))
+EVENT_STOPPED_MIN_CONFIDENCE = float(os.environ.get("EVENT_STOPPED_MIN_CONFIDENCE", "0.60"))
+EVENT_STOPPED_MIN_BBOX_WIDTH = float(os.environ.get("EVENT_STOPPED_MIN_BBOX_WIDTH", "20.0"))
+EVENT_STOPPED_MIN_BBOX_HEIGHT = float(os.environ.get("EVENT_STOPPED_MIN_BBOX_HEIGHT", "20.0"))
+EVENT_STOPPED_MIN_BBOX_AREA = float(os.environ.get("EVENT_STOPPED_MIN_BBOX_AREA", "500.0"))
 EVENT_COOLDOWN_SECONDS = float(os.environ.get("EVENT_COOLDOWN_SECONDS", "60.0"))
 EVENT_TRACK_MATCH_DISTANCE = float(os.environ.get("EVENT_TRACK_MATCH_DISTANCE", "90.0"))
 EVENT_TRACK_STALE_FRAMES = int(os.environ.get("EVENT_TRACK_STALE_FRAMES", "30"))

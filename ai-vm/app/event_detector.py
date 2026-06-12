@@ -17,6 +17,10 @@ from .config import (
     EVENT_HISTORY_LENGTH,
     EVENT_MIN_CONFIDENCE,
     EVENT_STOPPED_MOVE_PX,
+    EVENT_STOPPED_MIN_BBOX_AREA,
+    EVENT_STOPPED_MIN_BBOX_HEIGHT,
+    EVENT_STOPPED_MIN_BBOX_WIDTH,
+    EVENT_STOPPED_MIN_CONFIDENCE,
     EVENT_TRACK_MATCH_DISTANCE,
     EVENT_TRACK_STALE_FRAMES,
     EVENT_VEHICLE_CLASSES,
@@ -95,6 +99,15 @@ class EventDetector:
 
         for item in tracked:
             move = moves.get(item.track_id, 0.0)
+
+            if not self._is_stopped_candidate_size_ok(item.detection.bbox):
+                self._slow_started_at.pop(item.track_id, None)
+                continue
+
+            if float(item.detection.confidence or 0.0) < EVENT_STOPPED_MIN_CONFIDENCE:
+                self._slow_started_at.pop(item.track_id, None)
+                continue
+
             is_relative_slow = flow_speed > 0 and move < flow_speed * EVENT_DANGER_LOW_RATIO
             is_absolute_stop = len(self._track_history[item.track_id]) >= 2 and move <= EVENT_STOPPED_MOVE_PX
             is_slow = is_relative_slow or is_absolute_stop
@@ -305,6 +318,23 @@ class EventDetector:
             "video_url": None,
             "stream_url": f"{base_url}/streams/{self.camera_id}.mjpeg",
         }
+
+    @staticmethod
+    def _is_stopped_candidate_size_ok(bbox: list[float]) -> bool:
+        try:
+            x1, y1, x2, y2 = [float(value) for value in bbox]
+        except (TypeError, ValueError):
+            return False
+
+        width = abs(x2 - x1)
+        height = abs(y2 - y1)
+        area = width * height
+
+        return (
+            width >= EVENT_STOPPED_MIN_BBOX_WIDTH
+            and height >= EVENT_STOPPED_MIN_BBOX_HEIGHT
+            and area >= EVENT_STOPPED_MIN_BBOX_AREA
+        )
 
     @staticmethod
     def _event_type_for_rois(roi_ids: list[str]) -> str:

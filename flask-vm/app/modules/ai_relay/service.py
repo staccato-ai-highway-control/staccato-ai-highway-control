@@ -7,6 +7,7 @@ from typing import Any
 
 from app.extensions import db
 from app.models import AiEvent, RealtimeEvent
+from app.utils.bbox import build_bbox_metadata
 
 
 DEFAULT_EVENT_LIMIT = 100
@@ -16,9 +17,14 @@ EVENT_ID_MAX_LENGTH = 191
 RECENT_INCIDENT_EVENT_NAME = "incident.created"
 AI_RELAY_SOURCE = "ai_relay"
 AI_VM_PUBLIC_BASE_URL = os.getenv("AI_VM_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
-AI_VM_INTERNAL_BASE_URLS = (
-    "http://127.0.0.1:5001",
-    "http://localhost:5001",
+AI_MEDIA_PUBLIC_BASE_URL = os.getenv("AI_MEDIA_PUBLIC_BASE_URL", AI_VM_PUBLIC_BASE_URL).rstrip("/")
+AI_VM_INTERNAL_BASE_URLS = tuple(
+    base.strip().rstrip("/")
+    for base in os.getenv(
+        "AI_VM_INTERNAL_BASE_URLS",
+        "http://127.0.0.1:5001,http://localhost:5001,http://192.168.0.186:5001",
+    ).split(",")
+    if base.strip()
 )
 
 
@@ -60,7 +66,8 @@ def store_event(payload: dict[str, Any], *, commit: bool = True) -> tuple[AiEven
     event.track_id = _optional_string(payload, "track_id")
     event.roi_id = _optional_string(payload, "roi_id")
     event.lane_type = _optional_string(payload, "lane_type")
-    event.bbox_json = payload.get("bbox")
+    detection = _first_detection(payload.get("detections"))
+    event.bbox_json = payload.get("bbox") or detection.get("bbox")
     event.snapshot_url = _optional_string(payload, "snapshot_url")
     event.video_url = _optional_string(payload, "video_url")
     event.stream_url = _optional_string(payload, "stream_url")
@@ -121,6 +128,7 @@ def _find_realtime_event_for_ai_event(event_id: str) -> RealtimeEvent | None:
 
 def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
     timestamp = event.event_timestamp.isoformat() if event.event_timestamp else None
+    raw_event = event.raw_event_json if isinstance(event.raw_event_json, dict) else {}
 
     return {
         "source": AI_RELAY_SOURCE,
@@ -137,6 +145,12 @@ def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
         "roi_type": event.roi_id,
         "lane_type": event.lane_type,
         "bbox": event.bbox_json,
+        "bbox_metadata": build_bbox_metadata(
+            event.bbox_json,
+            coordinate_space=raw_event.get("bbox_coordinate_space"),
+            frame_width=raw_event.get("frame_width"),
+            frame_height=raw_event.get("frame_height"),
+        ),
         "snapshot_path": _normalize_media_url(event.snapshot_url),
         "clip_path": _normalize_media_url(event.video_url),
         "snapshot_url": _normalize_media_url(event.snapshot_url),
@@ -156,14 +170,19 @@ def _normalize_payload_urls(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _normalize_media_url(value: Any) -> str | None:
+def _normalize_media_url(value: Any, public_base_url: str | None = None) -> str | None:
     text = _clean_string(value)
     if not text:
         return None
 
+    target_base_url = (public_base_url or AI_VM_PUBLIC_BASE_URL).rstrip("/")
+
     for internal_base_url in AI_VM_INTERNAL_BASE_URLS:
         if text.startswith(internal_base_url):
-            return f"{AI_VM_PUBLIC_BASE_URL}{text[len(internal_base_url):]}"
+            return f"{target_base_url}{text[len(internal_base_url):]}"
+
+    if text.startswith(AI_VM_PUBLIC_BASE_URL):
+        return f"{target_base_url}{text[len(AI_VM_PUBLIC_BASE_URL):]}"
 
     return text
 
@@ -209,6 +228,35 @@ def get_event(event_id: str) -> AiEvent | None:
         return None
 
     return db.session.get(AiEvent, clean_event_id)
+
+
+def _normalize_payload_urls_for_public_response(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(payload)
+
+    for key in ("snapshot_url", "video_url", "stream_url"):
+        if key in normalized:
+            normalized[key] = _normalize_media_url(
+                normalized.get(key),
+                public_base_url=AI_MEDIA_PUBLIC_BASE_URL,
+            )
+
+    return normalized
+
+
+def serialize_event(event: AiEvent) -> dict[str, Any]:
+    event_dict = event.to_dict()
+
+    for key in ("snapshot_url", "video_url", "stream_url"):
+        event_dict[key] = _normalize_media_url(
+            event_dict.get(key),
+            public_base_url=AI_MEDIA_PUBLIC_BASE_URL,
+        )
+
+    raw_event = event_dict.get("raw_event_json")
+    if isinstance(raw_event, dict):
+        event_dict["raw_event_json"] = _normalize_payload_urls_for_public_response(raw_event)
+
+    return event_dict
 
 
 def build_replay(event: AiEvent) -> dict[str, Any]:
@@ -321,7 +369,7 @@ def build_incident_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
             or _clean_string(detection.get("class"))
         ),
         "confidence": normalized.get("confidence", detection.get("confidence")),
-        "bbox": _normalize_incident_bbox(normalized.get("bbox")),
+        "bbox": _normalize_incident_bbox(normalized.get("bbox") or detection.get("bbox")),
         "snapshot_path": (
             _optional_string(normalized, "snapshot_path")
             or _optional_string(normalized, "snapshot_url")
@@ -360,12 +408,15 @@ def _normalize_incident_bbox(value: Any) -> dict[str, float] | None:
 
     if isinstance(value, (list, tuple)) and len(value) == 4:
         x1, y1, x2, y2 = value
-        return {
-            "x1": float(x1),
-            "y1": float(y1),
-            "x2": float(x2),
-            "y2": float(y2),
-        }
+        try:
+            return {
+                "x1": float(x1),
+                "y1": float(y1),
+                "x2": float(x2),
+                "y2": float(y2),
+            }
+        except (TypeError, ValueError) as exc:
+            raise RelayValidationError("bbox coordinates must be numbers") from exc
 
     raise RelayValidationError("bbox must be an object or [x1, y1, x2, y2] list")
 

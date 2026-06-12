@@ -7,6 +7,7 @@ from flask import Flask, send_from_directory, abort
 # ============================================================
 from app.config import Config
 from app.extensions import init_extensions
+from app.utils.api_errors import register_api_error_handlers
 
 
 
@@ -196,6 +197,7 @@ def create_app(test_config=None):
     init_extensions(app)
 
     register_blueprints(app)
+    register_api_error_handlers(app)
 
     # Register Socket.IO event handlers.
     from app.modules import socketio as socketio_module  # noqa: F401
