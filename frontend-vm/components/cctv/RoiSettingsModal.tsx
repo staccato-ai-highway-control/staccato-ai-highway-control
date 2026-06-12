@@ -1,16 +1,8 @@
-/**
- * 파일 역할: CCTV 영역에서 사용하는 RoiSettingsModal UI 컴포넌트입니다.
- * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
- */
 "use client";
 
-// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Eye, Save, Trash2, X } from "lucide-react";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { MouseEvent, useEffect, useMemo, useState } from "react";
-// 코드 설명: @/types/cctv 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Cctv } from "@/types/cctv";
-// 코드 설명: @/features/cctvs/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   getCameraRoiConfig,
   ORIGINAL_HEIGHT,
@@ -22,21 +14,18 @@ import {
   type RoiType,
 } from "@/features/cctvs/api";
 
-// 코드 설명: roiTypeLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const roiTypeLabels: Record<RoiType, string> = {
   DRIVING_LANE: "DRIVING_LANE · 주행 차로 분석 대상",
   SHOULDER: "SHOULDER · 갓길 정차 분석 대상",
   IGNORE_ZONE: "IGNORE_ZONE · 고속도로 밖 차량 제거 영역",
 };
 
-// 코드 설명: roiColors 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const roiColors: Record<RoiType, string> = {
   DRIVING_LANE: "#22c55e",
   SHOULDER: "#f59e0b",
   IGNORE_ZONE: "#ef4444",
 };
 
-// 코드 설명: RoiSettingsModalProps 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type RoiSettingsModalProps = {
   initialSlotNumber: 1 | 2;
   slotConfig: CameraSlotConfig[];
@@ -44,140 +33,96 @@ type RoiSettingsModalProps = {
   onClose: () => void;
 };
 
-// 코드 설명: getAvailableSlotNumbers 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getAvailableSlotNumbers(slotConfig: CameraSlotConfig[], initialSlotNumber: 1 | 2) {
-  // 코드 설명: slotNumbers 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const slotNumbers = slotConfig
     .filter((slot) => slot.cctvId && (slot.slotNumber === 1 || slot.slotNumber === 2))
     .map((slot) => slot.slotNumber as 1 | 2);
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: slotNumbers.length > 0 ? slotNumbers : [initialSlotNumber]
   return slotNumbers.length > 0 ? slotNumbers : [initialSlotNumber];
 }
 
-// 코드 설명: getSlotCctv 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getSlotCctv(slotNumber: 1 | 2, slotConfig: CameraSlotConfig[], cctvs: Cctv[]) {
-  // 코드 설명: slot 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const slot = slotConfig.find((item) => item.slotNumber === slotNumber);
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: cctvs.find((cctv) => cctv.id === slot?.cctvId) ?? cctvs[0]
   return cctvs.find((cctv) => cctv.id === slot?.cctvId) ?? cctvs[0];
 }
 
-// 코드 설명: getPolygonPoints 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getPolygonPoints(points: RoiPolygon["points"]) {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: points.map((point) => `${point.x},${point.y}`).join(" ")
   return points.map((point) => `${point.x},${point.y}`).join(" ");
 }
 
-// 코드 설명: RoiSettingsModal 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose }: RoiSettingsModalProps) {
-  // 코드 설명: [activeSlotNumber, setActiveSlotNumber] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [activeSlotNumber, setActiveSlotNumber] = useState<1 | 2>(initialSlotNumber);
-  // 코드 설명: [activeRoiIndex, setActiveRoiIndex] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [activeRoiIndex, setActiveRoiIndex] = useState<1 | 2 | 3>(1);
-  // 코드 설명: availableSlotNumbers 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const availableSlotNumbers = useMemo(() => getAvailableSlotNumbers(slotConfig, initialSlotNumber), [initialSlotNumber, slotConfig]);
-  // 코드 설명: activeCctv 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const activeCctv = useMemo(() => getSlotCctv(activeSlotNumber, slotConfig, cctvs), [activeSlotNumber, cctvs, slotConfig]);
-  // 코드 설명: [roiConfig, setRoiConfig] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [roiConfig, setRoiConfig] = useState<CameraRoiConfig>(() => getCameraRoiConfig(initialSlotNumber, activeCctv.id));
-  // 코드 설명: activePolygon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const activePolygon = roiConfig.polygons.find((polygon) => polygon.roiIndex === activeRoiIndex) ?? roiConfig.polygons[0];
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !availableSlotNumbers.includes(activeSlotNumber)
     if (!availableSlotNumbers.includes(activeSlotNumber)) {
-      // 코드 설명: setActiveSlotNumber 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setActiveSlotNumber(availableSlotNumbers[0]);
     }
   }, [activeSlotNumber, availableSlotNumbers]);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: setRoiConfig 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setRoiConfig(getCameraRoiConfig(activeSlotNumber, activeCctv.id));
-    // 코드 설명: setActiveRoiIndex 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setActiveRoiIndex(1);
   }, [activeCctv.id, activeSlotNumber]);
 
-  // 코드 설명: updatePolygon 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function updatePolygon(updater: (polygon: RoiPolygon) => RoiPolygon) {
-    // 코드 설명: setRoiConfig 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setRoiConfig((current) => ({
       ...current,
       polygons: current.polygons.map((polygon) => (polygon.roiIndex === activeRoiIndex ? updater(polygon) : polygon)),
     }));
   }
 
-  // 코드 설명: handleCanvasClick 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleCanvasClick(event: MouseEvent<SVGSVGElement>) {
-    // 코드 설명: rect 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const rect = event.currentTarget.getBoundingClientRect();
-    // 코드 설명: displayX 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const displayX = event.clientX - rect.left;
-    // 코드 설명: displayY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const displayY = event.clientY - rect.top;
-    // 코드 설명: scaleX 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const scaleX = ORIGINAL_WIDTH / rect.width;
-    // 코드 설명: scaleY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const scaleY = ORIGINAL_HEIGHT / rect.height;
-    // 코드 설명: point 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const point = {
       x: Math.round(displayX * scaleX),
       y: Math.round(displayY * scaleY),
     };
 
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: updatePolygon((polygon) => ({ ...polygon, points: [...polygon.points, p…
     updatePolygon((polygon) => ({ ...polygon, points: [...polygon.points, point] }));
   }
 
-  // 코드 설명: handleTypeChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleTypeChange(roiType: RoiType) {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: updatePolygon((polygon) => ({ ...polygon, roiType }));
     updatePolygon((polygon) => ({ ...polygon, roiType }));
   }
 
-  // 코드 설명: handleNameChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleNameChange(roiName: string) {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: updatePolygon((polygon) => ({ ...polygon, roiName }));
     updatePolygon((polygon) => ({ ...polygon, roiName }));
   }
 
-  // 코드 설명: handleDeletePoint 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleDeletePoint(index: number) {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: updatePolygon((polygon) => ({ ...polygon, points: polygon.points.filter…
     updatePolygon((polygon) => ({ ...polygon, points: polygon.points.filter((_, pointIndex) => pointIndex !== index) }));
   }
 
-  // 코드 설명: handleResetPolygon 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleResetPolygon() {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: updatePolygon((polygon) => ({ ...polygon, points: [] }));
     updatePolygon((polygon) => ({ ...polygon, points: [] }));
   }
 
-  // 코드 설명: handleSave 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleSave() {
-    // 코드 설명: saved 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const saved = saveCameraRoiConfig(activeSlotNumber, {
       ...roiConfig,
       cameraSlotNumber: activeSlotNumber,
       cctvId: activeCctv.id,
     });
-    // 코드 설명: setRoiConfig 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setRoiConfig(saved);
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.alert(`${activeSlotNumber}번 카메라 ROI가 이 브라우저에 임시 저장되었습니다. 서버에는 반영…
-    window.alert(`${activeSlotNumber}번 카메라 ROI가 이 브라우저에 임시 저장되었습니다. 서버에는 반영되지 않습니다.`);
+    window.alert(`${activeSlotNumber}번 카메라 ROI 설정이 저장되었습니다.`);
   }
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 px-4 py-6">
       <section className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-xl bg-white shadow-2xl">
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-xl font-black text-slate-950">ROI 설정</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">ROI API 미연결: 좌표는 이 브라우저에만 임시 보관됩니다. 원본 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">ROI 좌표는 원본 영상 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}으로 저장됩니다.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="닫기">
             <X className="h-5 w-5" aria-hidden="true" />
@@ -210,7 +155,6 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
                     alt={`${activeCctv.cctvCode ?? activeCctv.id} ROI preview`}
                     className="absolute inset-0 h-full w-full object-contain"
                     onError={(event) => {
-                      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.currentTarget.style.display = "none";
                       event.currentTarget.style.display = "none";
                     }}
                   />
@@ -223,12 +167,9 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
                   aria-label="ROI 좌표 편집 영역"
                 >
                   {roiConfig.polygons.map((polygon) => {
-                    // 코드 설명: color 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
                     const color = roiColors[polygon.roiType];
-                    // 코드 설명: points 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
                     const points = getPolygonPoints(polygon.points);
 
-                    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
                     return (
                       <g key={polygon.id} opacity={polygon.roiIndex === activeRoiIndex ? 1 : 0.35}>
                         {polygon.points.length >= 3 ? <polygon points={points} fill={color} fillOpacity="0.18" stroke={color} strokeWidth="5" /> : null}
@@ -249,8 +190,8 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
 
           <aside className="grid content-start gap-4">
             <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-800">
-              <b className="block text-blue-950">ROI API 미연결 · 브라우저 임시 저장</b>
-              서버나 다른 기기에는 반영되지 않습니다. 클릭한 점은 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환해 localStorage에만 보관합니다.
+              <b className="block text-blue-950">ROI 설정은 현재 선택한 카메라 기준으로 저장됩니다.</b>
+              클릭한 점은 화면 크기와 무관하게 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환 저장됩니다.
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -303,7 +244,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
               <button type="button" onClick={handleResetPolygon} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Polygon 초기화</button>
               <button type="button" onClick={handleSave} className="inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
                 <Save className="h-4 w-4" aria-hidden="true" />
-                브라우저에 임시 저장
+                전체 ROI 저장
               </button>
             </div>
           </aside>
