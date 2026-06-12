@@ -1,22 +1,43 @@
+/**
+ * 파일 역할: 마이페이지 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 "use client";
 
+// 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useState } from "react";
+// 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
+// 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
+// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
+// 코드 설명: @/components/mypage/PendingApprovalMyPage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { PendingApprovalMyPage } from "@/components/mypage/PendingApprovalMyPage";
+// 코드 설명: @/components/mypage/ProfileSummary 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ProfileSummary } from "@/components/mypage/ProfileSummary";
+// 코드 설명: @/components/mypage/SecurityCard 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { SecurityCard } from "@/components/mypage/SecurityCard";
+// 코드 설명: @/components/mypage/ControlAdminMyPage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ControlAdminMyPage } from "@/components/mypage/ControlAdminMyPage";
+// 코드 설명: @/components/mypage/SuperAdminMyPage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { SuperAdminMyPage } from "@/components/mypage/SuperAdminMyPage";
+// 코드 설명: @/features/reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getMyReportDrafts, getMyReports, getReportDraft } from "@/features/reports/api";
+// 코드 설명: @/features/bug-reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getMyBugReports } from "@/features/bug-reports/api";
+// 코드 설명: @/features/reports/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Report, ReportDraft } from "@/features/reports/types";
+// 코드 설명: @/features/bug-reports/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { BugReport } from "@/features/bug-reports/types";
+// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
+// 코드 설명: @/lib/authStorage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { clearStoredAuth, getStoredAuthUser } from "@/lib/authStorage";
 
+// 코드 설명: statusLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const statusLabels: Record<string, string> = {
   SUBMITTED: "접수",
   REVIEWING: "검토중",
@@ -27,6 +48,7 @@ const statusLabels: Record<string, string> = {
   DRAFT: "임시저장",
 };
 
+// 코드 설명: priorityLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const priorityLabels: Record<string, string> = {
   LOW: "낮음",
   NORMAL: "보통",
@@ -35,6 +57,7 @@ const priorityLabels: Record<string, string> = {
   URGENT: "긴급",
 };
 
+// 코드 설명: bugStatusLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const bugStatusLabels: Record<string, string> = {
   OPEN: "접수",
   TRIAGED: "분류됨",
@@ -45,6 +68,7 @@ const bugStatusLabels: Record<string, string> = {
   DUPLICATE: "중복",
 };
 
+// 코드 설명: severityLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const severityLabels: Record<string, string> = {
   BLOCKER: "차단",
   CRITICAL: "치명",
@@ -53,19 +77,27 @@ const severityLabels: Record<string, string> = {
   TRIVIAL: "사소",
 };
 
+// 코드 설명: RoleContent 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function RoleContent({ user }: { user: AuthUser | null }) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: user?.account_status?.toUpperCase() === "PENDING"
   if (user?.account_status?.toUpperCase() === "PENDING") {
+    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return <PendingApprovalMyPage user={user} />;
   }
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: user?.role === "SUPER_ADMIN"
   if (user?.role === "SUPER_ADMIN") {
+    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return <SuperAdminMyPage />;
   }
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: user?.role === "CONTROL_ADMIN"
   if (user?.role === "CONTROL_ADMIN") {
+    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return <ControlAdminMyPage />;
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <h3 className="text-lg font-black text-slate-950">계정 확인 필요</h3>
@@ -76,135 +108,219 @@ function RoleContent({ user }: { user: AuthUser | null }) {
   );
 }
 
+// 코드 설명: formatDate 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatDate(value?: string | null) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !value
   if (!value) return "-";
+  // 코드 설명: date 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const date = new Date(value);
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: Number.isNaN(date.getTime())
   if (Number.isNaN(date.getTime())) return value;
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", d…
   return new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
+// 코드 설명: getReportTitle 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getReportTitle(report: Report | ReportDraft) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: report.title ?? report.subject ?? "제목 없음"
   return report.title ?? report.subject ?? "제목 없음";
 }
 
+// 코드 설명: getDraftId 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getDraftId(draft: ReportDraft) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: draft.draft_id ?? draft.id
   return draft.draft_id ?? draft.id;
 }
 
+// 코드 설명: getReportType 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getReportType(report: ReportDraft) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: report.report_type ?? report.reportType ?? "GENERAL"
   return report.report_type ?? report.reportType ?? "GENERAL";
 }
 
+// 코드 설명: getBugAttachmentCount 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getBugAttachmentCount(report: BugReport) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: report.attachments?.length ?? report.attachment_count ?? 0
   return report.attachments?.length ?? report.attachment_count ?? 0;
 }
 
+// 코드 설명: ReportActivitySection 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function ReportActivitySection() {
+  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
+  // 코드 설명: [reports, setReports] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [reports, setReports] = useState<Report[]>([]);
+  // 코드 설명: [drafts, setDrafts] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [drafts, setDrafts] = useState<ReportDraft[]>([]);
+  // 코드 설명: [bugReports, setBugReports] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [bugReports, setBugReports] = useState<BugReport[]>([]);
+  // 코드 설명: [loadingReports, setLoadingReports] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loadingReports, setLoadingReports] = useState(true);
+  // 코드 설명: [loadingDrafts, setLoadingDrafts] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loadingDrafts, setLoadingDrafts] = useState(true);
+  // 코드 설명: [loadingBugReports, setLoadingBugReports] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loadingBugReports, setLoadingBugReports] = useState(true);
+  // 코드 설명: [loadingDraftId, setLoadingDraftId] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [loadingDraftId, setLoadingDraftId] = useState<string | null>(null);
+  // 코드 설명: [reportsError, setReportsError] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [reportsError, setReportsError] = useState("");
+  // 코드 설명: [draftsError, setDraftsError] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [draftsError, setDraftsError] = useState("");
+  // 코드 설명: [bugReportsError, setBugReportsError] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [bugReportsError, setBugReportsError] = useState("");
+  // 코드 설명: [bugStatus, setBugStatus] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [bugStatus, setBugStatus] = useState("");
+  // 코드 설명: [bugSeverity, setBugSeverity] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [bugSeverity, setBugSeverity] = useState("");
+  // 코드 설명: [bugKeyword, setBugKeyword] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [bugKeyword, setBugKeyword] = useState("");
+  // 코드 설명: [bugKeywordDraft, setBugKeywordDraft] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [bugKeywordDraft, setBugKeywordDraft] = useState("");
 
+  // 코드 설명: loadMyReports 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadMyReports() {
+    // 코드 설명: setLoadingReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoadingReports(true);
+    // 코드 설명: setReportsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setReportsError("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getMyReports({ page: 1, size: 5 });
+      // 코드 설명: setReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setReports(response.items);
     } catch {
+      // 코드 설명: setReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setReports([]);
+      // 코드 설명: setReportsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setReportsError("내 신고글을 불러오지 못했습니다.");
     } finally {
+      // 코드 설명: setLoadingReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoadingReports(false);
     }
   }
 
+  // 코드 설명: loadDrafts 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadDrafts() {
+    // 코드 설명: setLoadingDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoadingDrafts(true);
+    // 코드 설명: setDraftsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setDraftsError("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getMyReportDrafts({ page: 1, size: 10 });
+      // 코드 설명: setDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setDrafts(response.items);
     } catch {
+      // 코드 설명: setDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setDrafts([]);
+      // 코드 설명: setDraftsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setDraftsError("임시저장 신고글을 불러오지 못했습니다.");
     } finally {
+      // 코드 설명: setLoadingDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoadingDrafts(false);
     }
   }
 
+  // 코드 설명: loadBugReports 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadBugReports(params: { status?: string; severity?: string; keyword?: string } = {}) {
+    // 코드 설명: setLoadingBugReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoadingBugReports(true);
+    // 코드 설명: setBugReportsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setBugReportsError("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getMyBugReports({ page: 1, size: 10, ...params });
+      // 코드 설명: currentUser 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const currentUser = getStoredAuthUser();
+      // 코드 설명: ownItems 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const ownItems = currentUser?.id === undefined
         ? []
         : response.items.filter((item) => String(item.reporter_id ?? item.author_id ?? item.user_id) === String(currentUser.id));
+      // 코드 설명: setBugReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setBugReports(ownItems);
     } catch {
+      // 코드 설명: setBugReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setBugReports([]);
+      // 코드 설명: setBugReportsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setBugReportsError("내 버그 리포트 목록을 불러오지 못했습니다.");
     } finally {
+      // 코드 설명: setLoadingBugReports 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoadingBugReports(false);
     }
   }
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadMyReports();
     loadMyReports();
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadDrafts();
     loadDrafts();
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadBugReports();
     loadBugReports();
   }, []);
 
+  // 코드 설명: handleBugSearch 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleBugSearch() {
+    // 코드 설명: keyword 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const keyword = bugKeywordDraft.trim();
+    // 코드 설명: setBugKeyword 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setBugKeyword(keyword);
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadBugReports({ status: bugStatus, severity: bugSeverity, keyword });
     loadBugReports({ status: bugStatus, severity: bugSeverity, keyword });
   }
 
+  // 코드 설명: handleBugStatusChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleBugStatusChange(value: string) {
+    // 코드 설명: setBugStatus 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setBugStatus(value);
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadBugReports({ status: value, severity: bugSeverity, keyword: bugKeyw…
     loadBugReports({ status: value, severity: bugSeverity, keyword: bugKeyword });
   }
 
+  // 코드 설명: handleBugSeverityChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleBugSeverityChange(value: string) {
+    // 코드 설명: setBugSeverity 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setBugSeverity(value);
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadBugReports({ status: bugStatus, severity: value, keyword: bugKeywor…
     loadBugReports({ status: bugStatus, severity: value, keyword: bugKeyword });
   }
 
+  // 코드 설명: handleOpenDraft 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleOpenDraft(draft: ReportDraft) {
+    // 코드 설명: draftId 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const draftId = getDraftId(draft);
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !draftId
     if (!draftId) return;
 
+    // 코드 설명: setLoadingDraftId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoadingDraftId(String(draftId));
+    // 코드 설명: setDraftsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setDraftsError("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: detail 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const detail = await getReportDraft(draftId);
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.sessionStorage.setItem("staccato:reportDraftToLoad", JSON.string…
       window.sessionStorage.setItem("staccato:reportDraftToLoad", JSON.stringify({ draftId, draft: detail }));
+      // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
       router.push("/reports/create?draftId=" + encodeURIComponent(String(draftId)));
     } catch {
+      // 코드 설명: setDraftsError 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setDraftsError("임시저장 신고를 불러오지 못했습니다.");
     } finally {
+      // 코드 설명: setLoadingDraftId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoadingDraftId(null);
     }
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className="grid gap-5">
       <div className="grid gap-5 xl:grid-cols-2">
@@ -259,7 +375,9 @@ function ReportActivitySection() {
           {!loadingDrafts && !draftsError && drafts.length > 0 ? (
             <ul className="divide-y divide-slate-100">
               {drafts.map((draft) => {
+                // 코드 설명: draftId 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
                 const draftId = getDraftId(draft);
+                // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
                 return (
                   <li key={String(draftId ?? draft.title)}>
                     <button type="button" onClick={() => handleOpenDraft(draft)} disabled={!draftId || loadingDraftId === String(draftId)} className="block w-full py-3 text-left transition hover:bg-slate-50 disabled:opacity-60">
@@ -357,19 +475,28 @@ function ReportActivitySection() {
   );
 }
 
+// 코드 설명: MyPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function MyPage() {
+  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
+  // 코드 설명: [authUser, setAuthUser] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setAuthUser(getStoredAuthUser());
   }, []);
 
+  // 코드 설명: handleLogout 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleLogout() {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: clearStoredAuth();
     clearStoredAuth();
+    // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
     router.replace("/login");
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireAuth>
       <AppLayout title="마이페이지">
