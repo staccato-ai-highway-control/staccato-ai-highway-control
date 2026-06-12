@@ -1,3 +1,7 @@
+/**
+ * 파일 역할: 여러 화면이 공유하는 애플리케이션 구성값과 표시 규칙을 선언합니다.
+ * 유지보수 참고: 메뉴, 권한, 라우트 간의 연결 관계가 포함될 수 있으므로 변경 시 접근 가능한 사용자 역할을 함께 점검합니다.
+ */
 import {
   Bell,
   Cctv,
@@ -10,9 +14,12 @@ import {
   SlidersHorizontal,
   Users,
 } from "lucide-react";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { ComponentType } from "react";
+// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser, UserRole } from "@/features/auth/types";
 
+// 코드 설명: USER_ROLES 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const USER_ROLES: UserRole[] = [
   "SUPER_ADMIN",
   "AUTH_ADMIN",
@@ -22,6 +29,7 @@ export const USER_ROLES: UserRole[] = [
   "VIEWER",
 ];
 
+// 코드 설명: roleLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const roleLabels: Record<string, string> = {
   SUPER_ADMIN: "최고 관리자",
   CONTROL_ADMIN: "관제 관리자",
@@ -33,6 +41,7 @@ export const roleLabels: Record<string, string> = {
   MAINTAINER: "미사용 권한",
 };
 
+// 코드 설명: NavigationItem 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 export type NavigationItem = {
   href: string;
   icon: ComponentType<{ className?: string }>;
@@ -41,13 +50,16 @@ export type NavigationItem = {
   adminOnly?: boolean;
 };
 
+// 코드 설명: NavigationSection 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 export type NavigationSection = {
   title: string;
   items: NavigationItem[];
 };
 
+// 코드 설명: allRoles 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const allRoles = USER_ROLES;
 
+// 코드 설명: navigationSections 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const navigationSections: NavigationSection[] = [
   {
     title: "통합 관제",
@@ -82,23 +94,33 @@ export const navigationSections: NavigationSection[] = [
   },
 ];
 
+// 코드 설명: getRoleLabel 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function getRoleLabel(role?: string) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: role && USER_ROLES.includes(role as UserRole) ? roleLabels[role as User…
   return role && USER_ROLES.includes(role as UserRole)
     ? roleLabels[role as UserRole]
     : "최고 관리자";
 }
 
+// 코드 설명: isActiveAccount 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function isActiveAccount(user: AuthUser | null) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: user?.account_status?.toUpperCase() === "ACTIVE"
   return user?.account_status?.toUpperCase() === "ACTIVE";
 }
 
+// 코드 설명: getUserRole 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function getUserRole(user: AuthUser | null): UserRole | null {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !user?.role || !USER_ROLES.includes(user.role)
   if (!user?.role || !USER_ROLES.includes(user.role)) return null;
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: user.role
   return user.role;
 }
 
+// 코드 설명: getVisibleNavigationSections 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function getVisibleNavigationSections(user: AuthUser | null) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !getUserRole(user) || !isActiveAccount(user)
   if (!getUserRole(user) || !isActiveAccount(user)) {
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: navigationSections .map((section) => ({ ...section, items: section.item…
     return navigationSections
       .map((section) => ({
         ...section,
@@ -107,5 +129,6 @@ export function getVisibleNavigationSections(user: AuthUser | null) {
       .filter((section) => section.items.length > 0);
   }
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: navigationSections
   return navigationSections;
 }

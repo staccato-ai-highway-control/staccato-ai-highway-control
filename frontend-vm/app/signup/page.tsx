@@ -1,22 +1,36 @@
+/**
+ * 파일 역할: signup 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 "use client";
 
+// 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { FormEvent, useEffect, useState } from "react";
+// 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
+// 코드 설명: @/features/auth/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   resendEmailVerification,
   signup,
   startSignupGoogleIdentityVerification,
   verifyEmailCode,
 } from "@/features/auth/api";
+// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { UserRole } from "@/features/auth/types";
 
+// 코드 설명: LOGIN_ID_PATTERN 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const LOGIN_ID_PATTERN = /^[a-z0-9_-]{4,20}$/;
 
+// 코드 설명: isEmailAlreadyExistsError 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function isEmailAlreadyExistsError(error: unknown) {
+  // 코드 설명: message 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const message = error instanceof Error ? error.message : "";
+  // 코드 설명: lowerMessage 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const lowerMessage = message.toLowerCase();
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     lowerMessage.includes("email already exists") ||
     lowerMessage.includes("email_already_in_use") ||
@@ -24,28 +38,49 @@ function isEmailAlreadyExistsError(error: unknown) {
   );
 }
 
+// 코드 설명: SignupPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function SignupPage() {
+  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
 
+  // 코드 설명: [name, setName] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [name, setName] = useState("");
+  // 코드 설명: [loginId, setLoginId] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loginId, setLoginId] = useState("");
+  // 코드 설명: [phone, setPhone] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [phone, setPhone] = useState("");
+  // 코드 설명: [email, setEmail] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [email, setEmail] = useState("");
+  // 코드 설명: [code, setCode] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [code, setCode] = useState("");
+  // 코드 설명: [password, setPassword] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [password, setPassword] = useState("");
+  // 코드 설명: [passwordConfirm, setPasswordConfirm] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  // 코드 설명: [requestedRole, setRequestedRole] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [requestedRole, setRequestedRole] = useState<UserRole>("CONTROL_ADMIN");
+  // 코드 설명: [reason, setReason] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [reason, setReason] = useState("");
+  // 코드 설명: [agreed, setAgreed] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [agreed, setAgreed] = useState(false);
+  // 코드 설명: [isCodeSent, setIsCodeSent] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isCodeSent, setIsCodeSent] = useState(false);
+  // 코드 설명: [isEmailVerified, setIsEmailVerified] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isEmailVerified, setIsEmailVerified] = useState(false);
+  // 코드 설명: [emailVerifyMessage, setEmailVerifyMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [emailVerifyMessage, setEmailVerifyMessage] = useState("");
+  // 코드 설명: [emailResendCooldown, setEmailResendCooldown] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [emailResendCooldown, setEmailResendCooldown] = useState(0);
+  // 코드 설명: [isSendingCode, setIsSendingCode] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isSendingCode, setIsSendingCode] = useState(false);
+  // 코드 설명: [isVerifyingCode, setIsVerifyingCode] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  // 코드 설명: [isStartingGoogleIdentity, setIsStartingGoogleIdentity] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isStartingGoogleIdentity, setIsStartingGoogleIdentity] = useState(false);
+  // 코드 설명: [isSubmitting, setIsSubmitting] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 코드 설명: canSubmit 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const canSubmit =
     Boolean(
       loginId &&
@@ -58,9 +93,11 @@ export default function SignupPage() {
     ) &&
     !isSubmitting;
 
+  // 코드 설명: isEmailSendDisabled 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const isEmailSendDisabled =
     !email || isSendingCode || isEmailVerified || emailResendCooldown > 0;
 
+  // 코드 설명: emailSendButtonLabel 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const emailSendButtonLabel = isSendingCode
     ? "발송 중..."
     : isEmailVerified
@@ -71,69 +108,106 @@ export default function SignupPage() {
           ? "인증번호 재발송"
           : "인증번호 발송";
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: emailResendCooldown <= 0
     if (emailResendCooldown <= 0) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: timer 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const timer = window.setInterval(() => {
+      // 코드 설명: setEmailResendCooldown 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailResendCooldown((prev) => Math.max(prev - 1, 0));
     }, 1000);
 
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: () => window.clearInterval(timer)
     return () => window.clearInterval(timer);
   }, [emailResendCooldown]);
 
+  // 코드 설명: handleEmailChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleEmailChange(nextEmail: string) {
+    // 코드 설명: setEmail 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setEmail(nextEmail);
+    // 코드 설명: setIsEmailVerified 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setIsEmailVerified(false);
+    // 코드 설명: setIsCodeSent 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setIsCodeSent(false);
+    // 코드 설명: setEmailResendCooldown 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setEmailResendCooldown(0);
+    // 코드 설명: setCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setCode("");
+    // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setEmailVerifyMessage("");
   }
 
+  // 코드 설명: getSignupValidationMessage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function getSignupValidationMessage() {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !name || !loginId || !email || !password || !passwordConfirm
     if (!name || !loginId || !email || !password || !passwordConfirm) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "인증번호 발송 전 이름, 아이디, 이메일, 비밀번호를 먼저 입력해주세요."
       return "인증번호 발송 전 이름, 아이디, 이메일, 비밀번호를 먼저 입력해주세요.";
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !LOGIN_ID_PATTERN.test(loginId)
     if (!LOGIN_ID_PATTERN.test(loginId)) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다."
       return "아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.";
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: password !== passwordConfirm
     if (password !== passwordConfirm) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "비밀번호가 일치하지 않습니다."
       return "비밀번호가 일치하지 않습니다.";
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !agreed
     if (!agreed) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "개인정보 수집 및 이용에 동의해주세요."
       return "개인정보 수집 및 이용에 동의해주세요.";
     }
 
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: ""
     return "";
   }
 
+  // 코드 설명: handleSendVerificationCode 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleSendVerificationCode() {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !email
     if (!email) {
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("이메일 주소를 입력해주세요.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: emailResendCooldown > 0
     if (emailResendCooldown > 0) {
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: requestVerification 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const requestVerification = async () => {
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isCodeSent
       if (isCodeSent) {
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: resendEmailVerification({ email })
         return resendEmailVerification({ email });
       }
 
+      // 코드 설명: validationMessage 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const validationMessage = getSignupValidationMessage();
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: validationMessage
       if (validationMessage) {
+        // 코드 설명: 현재 처리를 중단하고 호출부의 오류 처리 흐름으로 예외를 전달합니다: new Error(validationMessage)
         throw new Error(validationMessage);
       }
 
+      // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
       try {
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: await signup({ name, login_id: loginId, phone, email, password, request…
         return await signup({
           name,
           login_id: loginId,
@@ -145,18 +219,25 @@ export default function SignupPage() {
           agreed,
         });
       } catch (error) {
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isEmailAlreadyExistsError(error)
         if (isEmailAlreadyExistsError(error)) {
+          // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: resendEmailVerification({ email })
           return resendEmailVerification({ email });
         }
 
+        // 코드 설명: 현재 처리를 중단하고 호출부의 오류 처리 흐름으로 예외를 전달합니다: error
         throw error;
       }
     };
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: setIsSendingCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsSendingCode(true);
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("");
 
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await requestVerification() as {
         retry_after?: number;
         data?: {
@@ -166,86 +247,130 @@ export default function SignupPage() {
         };
       };
 
+      // 코드 설명: retryAfter 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const retryAfter =
         response.retry_after ??
         response.data?.email_verification?.retry_after ??
         60;
 
+      // 코드 설명: setIsCodeSent 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsCodeSent(true);
+      // 코드 설명: setIsEmailVerified 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsEmailVerified(false);
+      // 코드 설명: setEmailResendCooldown 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailResendCooldown(Math.max(Number(retryAfter) || 60, 1));
+      // 코드 설명: setCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setCode("");
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage(
         isCodeSent
           ? "인증번호를 다시 전송했습니다. 이메일을 확인해주세요."
           : "인증번호를 전송했습니다. 이메일을 확인해주세요."
       );
     } catch (error) {
+      // 코드 설명: message 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const message =
         error instanceof Error
           ? error.message
           : "인증번호 전송 중 오류가 발생했습니다.";
 
+      // 코드 설명: retryAfterMatch 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const retryAfterMatch = message.match(/(\\d+)초/);
+      // 코드 설명: retryAfter 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const retryAfter = retryAfterMatch ? Number(retryAfterMatch[1]) : 60;
 
+      // 코드 설명: setIsEmailVerified 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsEmailVerified(false);
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: message.includes("EMAIL_VERIFICATION_COOLDOWN") || message.includes("후 …
       if (
         message.includes("EMAIL_VERIFICATION_COOLDOWN") ||
         message.includes("후 다시 요청")
       ) {
+        // 코드 설명: setIsCodeSent 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setIsCodeSent(true);
+        // 코드 설명: setEmailResendCooldown 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setEmailResendCooldown(Math.max(retryAfter, 1));
+        // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setEmailVerifyMessage(message);
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
         return;
       }
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isEmailAlreadyExistsError(error)
       if (isEmailAlreadyExistsError(error)) {
+        // 코드 설명: setIsCodeSent 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setIsCodeSent(false);
+        // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setEmailVerifyMessage("이미 사용 중인 이메일입니다.");
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
         return;
       }
 
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage(message);
     } finally {
+      // 코드 설명: setIsSendingCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsSendingCode(false);
     }
   }
 
+  // 코드 설명: handleVerifyEmailCode 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleVerifyEmailCode() {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: code.length !== 6
     if (code.length !== 6) {
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("6자리 인증번호를 입력해주세요.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: setIsVerifyingCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsVerifyingCode(true);
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("");
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await verifyEmailCode(email, code);
       await verifyEmailCode(email, code);
+      // 코드 설명: setIsEmailVerified 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsEmailVerified(true);
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("이메일 인증이 완료되었습니다. 이제 회원가입 신청을 진행할 수 있습니다.");
     } catch {
+      // 코드 설명: setIsEmailVerified 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsEmailVerified(false);
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("인증번호가 올바르지 않습니다.");
     } finally {
+      // 코드 설명: setIsVerifyingCode 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsVerifyingCode(false);
     }
   }
 
+  // 코드 설명: handleStartGoogleIdentity 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleStartGoogleIdentity() {
+    // 코드 설명: validationMessage 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const validationMessage = getSignupValidationMessage();
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: validationMessage
     if (validationMessage) {
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage(validationMessage);
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: setIsStartingGoogleIdentity 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsStartingGoogleIdentity(true);
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("");
 
+      // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
       try {
+        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await signup({ name, login_id: loginId, phone, email, password, request…
         await signup({
           name,
           login_id: loginId,
@@ -258,66 +383,98 @@ export default function SignupPage() {
           identityMethod: "GOOGLE",
         });
       } catch (error) {
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !isEmailAlreadyExistsError(error)
         if (!isEmailAlreadyExistsError(error)) {
+          // 코드 설명: 현재 처리를 중단하고 호출부의 오류 처리 흐름으로 예외를 전달합니다: error
           throw error;
         }
       }
 
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await startSignupGoogleIdentityVerification(email.trim());
+      // 코드 설명: authorizationUrl 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const authorizationUrl = response.data?.authorization_url;
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !authorizationUrl
       if (!authorizationUrl) {
+        // 코드 설명: 현재 처리를 중단하고 호출부의 오류 처리 흐름으로 예외를 전달합니다: new Error("Google 인증 URL을 찾을 수 없습니다.")
         throw new Error("Google 인증 URL을 찾을 수 없습니다.");
       }
 
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.location.href = authorizationUrl;
       window.location.href = authorizationUrl;
     } catch (error) {
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage(
         error instanceof Error
           ? error.message
           : "Google 본인인증 시작 중 오류가 발생했습니다."
       );
     } finally {
+      // 코드 설명: setIsStartingGoogleIdentity 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsStartingGoogleIdentity(false);
     }
   }
 
+  // 코드 설명: handleSubmitSignup 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const handleSubmitSignup = async (event: FormEvent<HTMLFormElement>) => {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
     event.preventDefault();
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !name || !loginId || !email || !password
     if (!name || !loginId || !email || !password) {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: alert("이름, 아이디, 이메일, 비밀번호를 입력해주세요.");
       alert("이름, 아이디, 이메일, 비밀번호를 입력해주세요.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !LOGIN_ID_PATTERN.test(loginId)
     if (!LOGIN_ID_PATTERN.test(loginId)) {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: alert("아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.");
       alert("아이디는 영문 소문자, 숫자, _, -만 사용해 4~20자로 입력해주세요. @는 사용할 수 없습니다.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: password !== passwordConfirm
     if (password !== passwordConfirm) {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: alert("비밀번호가 일치하지 않습니다.");
       alert("비밀번호가 일치하지 않습니다.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !agreed
     if (!agreed) {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: alert("개인정보 수집 및 이용에 동의해주세요.");
       alert("개인정보 수집 및 이용에 동의해주세요.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !isEmailVerified
     if (!isEmailVerified) {
+      // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setEmailVerifyMessage("회원가입 신청 전에 이메일 인증을 완료해주세요.");
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isCodeSent
     if (isCodeSent) {
+      // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
       router.push(`/pending-approval?email=${encodeURIComponent(email.trim())}`);
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: setIsSubmitting 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsSubmitting(true);
 
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await signup({ name, login_id: loginId, phone, email, password, request…
       await signup({
         name,
         login_id: loginId,
@@ -329,23 +486,30 @@ export default function SignupPage() {
         agreed,
       });
 
+      // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
       router.push(`/pending-approval?email=${encodeURIComponent(email.trim())}`);
     } catch (error) {
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isEmailAlreadyExistsError(error)
       if (isEmailAlreadyExistsError(error)) {
+        // 코드 설명: setEmailVerifyMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setEmailVerifyMessage("이미 가입 신청된 이메일입니다. 로그인 또는 승인 상태를 확인해주세요.");
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
         return;
       }
 
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: alert( error instanceof Error ? error.message : "회원가입 신청 중 오류가 발생했습니다."…
       alert(
         error instanceof Error
           ? error.message
           : "회원가입 신청 중 오류가 발생했습니다."
       );
     } finally {
+      // 코드 설명: setIsSubmitting 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsSubmitting(false);
     }
   };
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-slate-950 px-6 py-10 text-white">
       <img
