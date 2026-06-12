@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: 생성된 이벤트 payload를 Flask/API Gateway 서버로 HTTP 전송합니다.
 
 from typing import Any
 
@@ -11,7 +12,9 @@ from .config import (
 )
 
 
+# 외부 Flask 서버로 이벤트를 POST 전송하고 성공/실패 상태를 기록합니다.
 class RelayClient:
+    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         events_url: str = FLASK_RELAY_EVENTS_URL,
@@ -23,6 +26,7 @@ class RelayClient:
         self.failed_events = 0
         self.last_error: str | None = None
 
+    # 이벤트 payload를 외부 서버로 전송합니다.
     def send_event(self, event: dict[str, Any]) -> bool:
         event_id = str(event.get("event_id") or "-")
 
@@ -60,12 +64,14 @@ class RelayClient:
         )
         return True
 
+    # _headers 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _headers(self) -> dict[str, str] | None:
         if not INTERNAL_API_TOKEN:
             return None
 
         return {"X-Internal-API-Token": INTERNAL_API_TOKEN}
 
+    # 모니터링/API 응답에 쓰는 현재 상태 payload를 만듭니다.
     def to_status_payload(self) -> dict[str, Any]:
         return {
             "events_url": self.events_url,

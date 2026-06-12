@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
+# AI VM systemd 서비스를 중지하고 종료 상태를 확인하는 스크립트입니다.
 set -euo pipefail
 
 SERVICE="staccato-ai-server.service"
 
 echo "========== AI-VM STOP =========="
+# 이미 멈춰 있어도 스크립트가 계속 상태를 출력하도록 실패를 허용합니다.
 sudo systemctl stop "$SERVICE" || true
 
+# systemd와 포트 해제가 반영될 시간을 잠시 줍니다.
 sleep 3
 
 echo
@@ -18,6 +21,7 @@ ss -ltnp | grep ':5001' || echo "AI-vm 5001 stopped"
 
 echo
 echo "========== HEALTH =========="
+# 중지 후 health check 실패가 예상되는지 확인합니다.
 curl --max-time 5 -sS http://localhost:5001/health || echo "AI-vm health check failed as expected"
 
 echo

@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: 카메라별 갓길/중앙분리대 ROI 설정을 기본값 또는 JSON 파일에서 읽고 저장합니다.
 
 import json
 from threading import Lock
@@ -13,6 +14,7 @@ ROI_CAMERA_IDS = {"camera-1", "camera-2"}
 _lock = Lock()
 
 
+# get_default_rois 기능을 수행하는 함수입니다.
 def get_default_rois() -> dict[str, list[list[int]]]:
     return {
         roi_id: [list(point) for point in DEFAULT_ROIS[roi_id]]
@@ -20,6 +22,7 @@ def get_default_rois() -> dict[str, list[list[int]]]:
     }
 
 
+# get_camera_rois 기능을 수행하는 함수입니다.
 def get_camera_rois(camera_id: str) -> dict[str, list[list[int]]]:
     settings = _load_settings()
     camera_rois = settings.get(camera_id)
@@ -28,6 +31,7 @@ def get_camera_rois(camera_id: str) -> dict[str, list[list[int]]]:
     return _normalize_rois(camera_rois)
 
 
+# save_camera_rois 기능을 수행하는 함수입니다.
 def save_camera_rois(camera_id: str, rois: dict[str, Any]) -> dict[str, list[list[int]]]:
     if camera_id not in ROI_CAMERA_IDS:
         raise ValueError("ROI settings are only supported for camera-1 and camera-2.")
@@ -43,11 +47,13 @@ def save_camera_rois(camera_id: str, rois: dict[str, Any]) -> dict[str, list[lis
     return normalized_rois
 
 
+# _load_settings 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _load_settings() -> dict[str, Any]:
     with _lock:
         return _load_settings_unlocked()
 
 
+# _load_settings_unlocked 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _load_settings_unlocked() -> dict[str, Any]:
     if not ROI_SETTINGS_PATH.exists():
         return {}
@@ -60,6 +66,7 @@ def _load_settings_unlocked() -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+# _normalize_rois 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _normalize_rois(rois: dict[str, Any]) -> dict[str, list[list[int]]]:
     normalized = get_default_rois()
     for roi_id in ROI_IDS:
@@ -75,6 +82,7 @@ def _normalize_rois(rois: dict[str, Any]) -> dict[str, list[list[int]]]:
     return normalized
 
 
+# _normalize_point 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _normalize_point(point: Any, roi_id: str) -> list[int]:
     if not isinstance(point, list | tuple) or len(point) != 2:
         raise ValueError(f"{roi_id} point must be [x, y].")

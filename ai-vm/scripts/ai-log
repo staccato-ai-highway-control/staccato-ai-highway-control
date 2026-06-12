@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# AI VM systemd 서비스의 최근 로그를 조회하는 스크립트입니다.
 set -euo pipefail
 
+# 최근 10분 또는 최대 150줄의 journal 로그를 출력합니다.
 sudo journalctl -u staccato-ai-server.service --since "10 minutes ago" --no-pager -n 150
