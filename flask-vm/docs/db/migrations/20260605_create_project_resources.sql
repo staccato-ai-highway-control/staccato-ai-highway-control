@@ -1,3 +1,5 @@
+-- 관리자용 프로젝트 자료 메타데이터와 소프트 삭제 상태를 저장합니다.
+-- 작성 사용자가 삭제되어도 자료 이력을 유지하기 위해 author_id는 NULL로 전환합니다.
 CREATE TABLE IF NOT EXISTS project_resources (
     id BIGINT NOT NULL AUTO_INCREMENT,
     title VARCHAR(200) NOT NULL,
@@ -22,6 +24,8 @@ CREATE TABLE IF NOT EXISTS project_resources (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 개발 화면 확인용 메타데이터를 넣되 제목과 카테고리가 같으면 중복 생성하지 않습니다.
+-- 실제 파일은 포함하지 않으므로 file_* 컬럼은 NULL로 시작합니다.
 INSERT INTO project_resources (
     title,
     description,
