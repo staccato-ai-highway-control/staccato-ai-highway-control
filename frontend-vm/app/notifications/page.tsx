@@ -1,19 +1,36 @@
+/**
+ * 파일 역할: 알림 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 "use client";
 
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { LucideIcon } from "lucide-react";
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Bell, CheckCheck, Radio, ShieldAlert, Sparkles, Trash2, UserCheck } from "lucide-react";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useMemo, useState } from "react";
+// 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
+// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
+// 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
+// 코드 설명: @/features/realtime/useRealtimeIncidents 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRealtimeIncidents } from "@/features/realtime/useRealtimeIncidents";
+// 코드 설명: @/features/realtime/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { RealtimeConnectionStatus, RealtimeIncidentEvent } from "@/features/realtime/types";
+// 코드 설명: @/lib/dateTime 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { formatKstDateTime } from "@/lib/dateTime";
+// 코드 설명: @/lib/mediaUrl 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
+// 코드 설명: NotificationType 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type NotificationType = "INCIDENT" | "AI_ANALYSIS" | "REPORT" | "ADMIN" | "SYSTEM";
+// 코드 설명: NotificationFilter 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type NotificationFilter = "ALL" | "UNREAD" | NotificationType;
 
+// 코드 설명: NotificationItem 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type NotificationItem = {
   id: string;
   type: NotificationType;
@@ -24,6 +41,7 @@ type NotificationItem = {
   source?: RealtimeIncidentEvent;
 };
 
+// 코드 설명: NotificationMediaSource 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type NotificationMediaSource = RealtimeIncidentEvent & {
   video_url?: string | null;
   snapshot_url?: string | null;
@@ -31,6 +49,7 @@ type NotificationMediaSource = RealtimeIncidentEvent & {
   preview_type?: "video" | "image" | string | null;
 };
 
+// 코드 설명: filterOptions 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const filterOptions: Array<{ label: string; value: NotificationFilter }> = [
   { label: "전체", value: "ALL" },
   { label: "읽지 않음", value: "UNREAD" },
@@ -41,6 +60,7 @@ const filterOptions: Array<{ label: string; value: NotificationFilter }> = [
   { label: "시스템", value: "SYSTEM" },
 ];
 
+// 코드 설명: typeMeta 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const typeMeta: Record<NotificationType, { label: string; tone: "blue" | "green" | "amber" | "red" | "slate"; icon: LucideIcon }> = {
   INCIDENT: { label: "실시간 이벤트", tone: "red", icon: ShieldAlert },
   AI_ANALYSIS: { label: "AI 분석", tone: "green", icon: Sparkles },
@@ -49,6 +69,7 @@ const typeMeta: Record<NotificationType, { label: string; tone: "blue" | "green"
   SYSTEM: { label: "시스템", tone: "slate", icon: Radio },
 };
 
+// 코드 설명: connectionMeta 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const connectionMeta: Record<RealtimeConnectionStatus, { label: string; tone: "blue" | "green" | "amber" | "red" | "slate" }> = {
   connecting: { label: "연결 중", tone: "amber" },
   connected: { label: "실시간 연결 정상", tone: "green" },
@@ -56,42 +77,63 @@ const connectionMeta: Record<RealtimeConnectionStatus, { label: string; tone: "b
   error: { label: "연결 오류", tone: "red" },
 };
 
+// 코드 설명: READ_NOTIFICATION_IDS_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const READ_NOTIFICATION_IDS_KEY = "staccato:notifications:readIds";
+// 코드 설명: DELETED_NOTIFICATION_IDS_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const DELETED_NOTIFICATION_IDS_KEY = "staccato:notifications:deletedIds";
 
+// 코드 설명: loadStoredIdSet 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function loadStoredIdSet(key: string) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: typeof window === "undefined"
   if (typeof window === "undefined") return new Set<string>();
 
+  // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
   try {
+    // 코드 설명: raw 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const raw = window.localStorage.getItem(key);
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !raw
     if (!raw) return new Set<string>();
 
+    // 코드 설명: parsed 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const parsed = JSON.parse(raw);
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !Array.isArray(parsed)
     if (!Array.isArray(parsed)) return new Set<string>();
 
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Set(parsed.filter((item): item is string => typeof item === "string…
     return new Set(parsed.filter((item): item is string => typeof item === "string"));
   } catch {
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Set<string>()
     return new Set<string>();
   }
 }
 
+// 코드 설명: saveStoredIdSet 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function saveStoredIdSet(key: string, values: Set<string>) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: typeof window === "undefined"
   if (typeof window === "undefined") return;
 
+  // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
   try {
+    // 코드 설명: 브라우저 localStorage의 인증 또는 사용자 설정 값을 읽거나 갱신합니다.
     window.localStorage.setItem(key, JSON.stringify(Array.from(values)));
   } catch {
     // localStorage 저장 실패는 알림 표시 자체를 막지 않습니다.
   }
 }
 
+// 코드 설명: matchesFilter 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function matchesFilter(notification: NotificationItem, filter: NotificationFilter) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: filter === "ALL"
   if (filter === "ALL") return true;
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: filter === "UNREAD"
   if (filter === "UNREAD") return !notification.isRead;
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: notification.type === filter
   return notification.type === filter;
 }
 
+// 코드 설명: getEventKey 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getEventKey(event: RealtimeIncidentEvent) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: String( event.realtime_event_id ?? event.id ?? `${event.incident_id ?? …
   return String(
     event.realtime_event_id ??
       event.id ??
@@ -100,15 +142,22 @@ function getEventKey(event: RealtimeIncidentEvent) {
 }
 
 
+// 코드 설명: buildIncidentTitle 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function buildIncidentTitle(event: RealtimeIncidentEvent) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.incident_code
   if (event.incident_code) return `사고 이벤트 ${event.incident_code}`;
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.event_type
   if (event.event_type) return `실시간 이벤트 ${event.event_type}`;
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "실시간 이벤트 발생"
   return "실시간 이벤트 발생";
 }
 
+// 코드 설명: buildIncidentMessage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function buildIncidentMessage(event: RealtimeIncidentEvent) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.message
   if (event.message) return event.message;
 
+  // 코드 설명: parts 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const parts = [
     event.severity ? `심각도: ${event.severity}` : null,
     event.cctv_id ? `CCTV: ${event.cctv_id}` : null,
@@ -116,14 +165,19 @@ function buildIncidentMessage(event: RealtimeIncidentEvent) {
     event.confidence ? `신뢰도: ${event.confidence}` : null,
   ].filter(Boolean);
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: parts.length > 0 ? parts.join(" · ") : "새로운 실시간 사고 이벤트가 수신되었습니다."
   return parts.length > 0 ? parts.join(" · ") : "새로운 실시간 사고 이벤트가 수신되었습니다.";
 }
 
+// 코드 설명: getNotificationVideoUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getNotificationVideoUrl(source?: RealtimeIncidentEvent) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !source
   if (!source) return null;
 
+  // 코드 설명: mediaSource 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const mediaSource = source as NotificationMediaSource;
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalizeMediaUrl( mediaSource.clip_path ?? mediaSource.video_url ?? (m…
   return normalizeMediaUrl(
     mediaSource.clip_path ??
       mediaSource.video_url ??
@@ -132,11 +186,15 @@ function getNotificationVideoUrl(source?: RealtimeIncidentEvent) {
   );
 }
 
+// 코드 설명: getNotificationSnapshotUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getNotificationSnapshotUrl(source?: RealtimeIncidentEvent) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !source
   if (!source) return null;
 
+  // 코드 설명: mediaSource 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const mediaSource = source as NotificationMediaSource;
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalizeMediaUrl( mediaSource.snapshot_path ?? mediaSource.snapshot_ur…
   return normalizeMediaUrl(
     mediaSource.snapshot_path ??
       mediaSource.snapshot_url ??
@@ -145,11 +203,15 @@ function getNotificationSnapshotUrl(source?: RealtimeIncidentEvent) {
   );
 }
 
+// 코드 설명: toNotificationItem 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function toNotificationItem(event: RealtimeIncidentEvent, readIds: Set<string>, deletedIds: Set<string>): NotificationItem | null {
+  // 코드 설명: id 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const id = getEventKey(event);
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: deletedIds.has(id)
   if (deletedIds.has(id)) return null;
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: { id, type: "INCIDENT", title: buildIncidentTitle(event), message: buil…
   return {
     id,
     type: "INCIDENT",
@@ -163,13 +225,20 @@ function toNotificationItem(event: RealtimeIncidentEvent, readIds: Set<string>, 
 
 
 
+// 코드 설명: NotificationsPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function NotificationsPage() {
+  // 코드 설명: { events, status, errorMessage, socketBaseUrl } 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const { events, status, errorMessage, socketBaseUrl } = useRealtimeIncidents(30);
+  // 코드 설명: [filter, setFilter] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [filter, setFilter] = useState<NotificationFilter>("ALL");
+  // 코드 설명: [readIds, setReadIds] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [readIds, setReadIds] = useState<Set<string>>(() => loadStoredIdSet(READ_NOTIFICATION_IDS_KEY));
+  // 코드 설명: [deletedIds, setDeletedIds] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => loadStoredIdSet(DELETED_NOTIFICATION_IDS_KEY));
+  // 코드 설명: [expandedIds, setExpandedIds] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
+  // 코드 설명: notifications 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const notifications = useMemo(
     () =>
       events
@@ -178,37 +247,54 @@ export default function NotificationsPage() {
     [events, readIds, deletedIds]
   );
 
+  // 코드 설명: filteredNotifications 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const filteredNotifications = useMemo(
     () => notifications.filter((notification) => matchesFilter(notification, filter)),
     [filter, notifications]
   );
 
+  // 코드 설명: unreadCount 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+  // 코드 설명: connection 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const connection = connectionMeta[status];
 
+  // 코드 설명: markAsRead 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function markAsRead(notificationId: string) {
+    // 코드 설명: setReadIds 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setReadIds((current) => {
+      // 코드 설명: next 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const next = new Set([...current, notificationId]);
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
       saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: next
       return next;
     });
   }
 
+  // 코드 설명: openNotification 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function openNotification(notification: NotificationItem) {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: markAsRead(notification.id);
     markAsRead(notification.id);
+    // 코드 설명: setExpandedIds 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setExpandedIds((current) => {
+      // 코드 설명: next 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const next = new Set(current);
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: next.has(notification.id)
       if (next.has(notification.id)) {
+        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: next.delete(notification.id);
         next.delete(notification.id);
       } else {
+        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: next.add(notification.id);
         next.add(notification.id);
       }
 
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: next
       return next;
     });
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireAuth>
       <AppLayout title="알림">
@@ -227,8 +313,11 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={() => {
+              // 코드 설명: next 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
               const next = new Set(notifications.map((item) => item.id));
+              // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
               saveStoredIdSet(READ_NOTIFICATION_IDS_KEY, next);
+              // 코드 설명: setReadIds 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
               setReadIds(next);
             }}
             disabled={unreadCount === 0}
@@ -271,11 +360,16 @@ export default function NotificationsPage() {
 
         <section className="grid gap-3">
           {filteredNotifications.map((notification) => {
+            // 코드 설명: meta 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const meta = typeMeta[notification.type];
+            // 코드 설명: Icon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const Icon = meta.icon;
+            // 코드 설명: videoUrl 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const videoUrl = getNotificationVideoUrl(notification.source);
+            // 코드 설명: snapshotUrl 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const snapshotUrl = getNotificationSnapshotUrl(notification.source);
 
+            // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
             return (
               <article
                 key={notification.id}
@@ -283,8 +377,11 @@ export default function NotificationsPage() {
                 tabIndex={0}
                 onClick={() => openNotification(notification)}
                 onKeyDown={(event) => {
+                  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.key === "Enter" || event.key === " "
                   if (event.key === "Enter" || event.key === " ") {
+                    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
                     event.preventDefault();
+                    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: openNotification(notification);
                     openNotification(notification);
                   }
                 }}
@@ -375,10 +472,15 @@ export default function NotificationsPage() {
                   <button
                     type="button"
                     onClick={(event) => {
+                      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.stopPropagation();
                       event.stopPropagation();
+                      // 코드 설명: setDeletedIds 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
                       setDeletedIds((current) => {
+                        // 코드 설명: next 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
                         const next = new Set([...current, notification.id]);
+                        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: saveStoredIdSet(DELETED_NOTIFICATION_IDS_KEY, next);
                         saveStoredIdSet(DELETED_NOTIFICATION_IDS_KEY, next);
+                        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: next
                         return next;
                       });
                     }}

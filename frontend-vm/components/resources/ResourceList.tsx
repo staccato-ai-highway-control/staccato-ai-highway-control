@@ -1,80 +1,135 @@
+/**
+ * 파일 역할: 자료실 영역에서 사용하는 ResourceList UI 컴포넌트입니다.
+ * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
+ */
 "use client";
 
+// 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AlertCircle, FileDown, FilePlus2, RefreshCw, Search } from "lucide-react";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { FormEvent, useCallback, useEffect, useState } from "react";
+// 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
+// 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
+// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
+// 코드 설명: @/features/resources/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { downloadResourceFile, getResources } from "@/features/resources/api";
+// 코드 설명: @/features/resources/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { ResourceCategory, ResourceItem } from "@/features/resources/types";
+// 코드 설명: @/lib/authStorage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getStoredAuthUser } from "@/lib/authStorage";
+// 코드 설명: ./resourceData 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { formatResourceDate, formatResourceFileSize, resourceCategoryLabels, resourceCategoryOptions, resourceCategoryTone } from "./resourceData";
+// 코드 설명: ./resourcePermissions 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { isResourceAdmin } from "./resourcePermissions";
 
+// 코드 설명: PAGE_SIZE 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const PAGE_SIZE = 10;
+// 코드 설명: categoryTabs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const categoryTabs: Array<ResourceCategory | "ALL"> = ["ALL", ...resourceCategoryOptions];
 
+// 코드 설명: ResourceList 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function ResourceList() {
+  // 코드 설명: [authUser, setAuthUser] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  // 코드 설명: [resources, setResources] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [resources, setResources] = useState<ResourceItem[]>([]);
+  // 코드 설명: [category, setCategory] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [category, setCategory] = useState<ResourceCategory | "ALL">("ALL");
+  // 코드 설명: [keyword, setKeyword] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [keyword, setKeyword] = useState("");
+  // 코드 설명: [submittedKeyword, setSubmittedKeyword] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [submittedKeyword, setSubmittedKeyword] = useState("");
+  // 코드 설명: [page, setPage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [page, setPage] = useState(1);
+  // 코드 설명: [total, setTotal] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [total, setTotal] = useState(0);
+  // 코드 설명: [pages, setPages] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [pages, setPages] = useState(1);
+  // 코드 설명: [loading, setLoading] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loading, setLoading] = useState(true);
+  // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
 
+  // 코드 설명: loadResources 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const loadResources = useCallback(async () => {
+    // 코드 설명: setLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoading(true);
+    // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setErrorMessage("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getResources({
         category: category === "ALL" ? undefined : category,
         keyword: submittedKeyword || undefined,
         page,
         size: PAGE_SIZE,
       });
+      // 코드 설명: setResources 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setResources(response.items);
+      // 코드 설명: setTotal 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setTotal(response.total);
+      // 코드 설명: setPages 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setPages(response.pages || 1);
     } catch (error) {
+      // 코드 설명: setResources 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setResources([]);
+      // 코드 설명: setTotal 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setTotal(0);
+      // 코드 설명: setPages 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setPages(1);
+      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(error instanceof Error ? error.message : "자료 목록을 불러오지 못했습니다.");
     } finally {
+      // 코드 설명: setLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoading(false);
     }
   }, [category, page, submittedKeyword]);
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setAuthUser(getStoredAuthUser());
   }, []);
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadResources();
     loadResources();
   }, [loadResources]);
 
+  // 코드 설명: handleSearch 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleSearch(event: FormEvent<HTMLFormElement>) {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
     event.preventDefault();
+    // 코드 설명: setSubmittedKeyword 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setSubmittedKeyword(keyword.trim());
+    // 코드 설명: setPage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setPage(1);
   }
 
+  // 코드 설명: handleDownload 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleDownload(resource: ResourceItem) {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !resource.file_name
     if (!resource.file_name) return;
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await downloadResourceFile(resource.id, resource.file_name);
       await downloadResourceFile(resource.id, resource.file_name);
     } catch (error) {
+      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(error instanceof Error ? error.message : "파일 다운로드에 실패했습니다.");
     }
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
       <section className="mx-auto max-w-6xl">
@@ -100,7 +155,9 @@ export function ResourceList() {
         <Card className="mb-5 p-5">
           <div className="mb-4 flex flex-wrap gap-2">
             {categoryTabs.map((tab) => {
+              // 코드 설명: active 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
               const active = category === tab;
+              // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
               return (
                 <button key={tab} type="button" onClick={() => { setCategory(tab); setPage(1); }} className={`min-h-10 rounded-lg border px-4 text-sm font-black transition ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
                   {tab === "ALL" ? "전체" : resourceCategoryLabels[tab]}

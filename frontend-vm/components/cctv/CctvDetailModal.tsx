@@ -1,14 +1,25 @@
+/**
+ * 파일 역할: CCTV 영역에서 사용하는 CctvDetailModal UI 컴포넌트입니다.
+ * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
+ */
 "use client";
 
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { X } from "lucide-react";
+// 코드 설명: @/types/cctv 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Cctv } from "@/types/cctv";
+// 코드 설명: @/components/cctv/CctvCard 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { CctvFrame, statusLabels } from "@/components/cctv/CctvCard";
 
+// 코드 설명: formatConfidence 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatConfidence(confidence?: number) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: typeof confidence !== "number"
   if (typeof confidence !== "number") return "-";
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${Math.round(confidence * 100)}%`
   return `${Math.round(confidence * 100)}%`;
 }
 
+// 코드 설명: CctvDetailModal 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function CctvDetailModal({
   cctv,
   cctvIndex,
@@ -18,6 +29,7 @@ export function CctvDetailModal({
   cctvIndex: number;
   onClose: () => void;
 }) {
+  // 코드 설명: detailRows 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const detailRows = [
     ["CCTV 코드", cctv.cctvCode],
     ["도로명", cctv.roadName],
@@ -30,6 +42,7 @@ export function CctvDetailModal({
     ["신뢰도", formatConfidence(cctv.confidence)],
   ];
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 px-4 py-6">
       <section className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-xl bg-white shadow-2xl">
