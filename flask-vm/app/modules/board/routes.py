@@ -1,3 +1,7 @@
+"""board 도메인의 HTTP API 엔드포인트를 정의한다.
+
+요청 인증과 입력 변환을 수행한 뒤 서비스 결과를 안정적인 JSON 응답으로 전달한다."""
+
 # =========================================
 # 게시판 API 라우터 파일
 #
@@ -10,6 +14,7 @@
 # flask 기능 import
 from flask import Blueprint, request, jsonify
 
+# 설명: app.utils.security에서 require_auth 이름을 가져와 아래 로직에서 재사용한다.
 from app.utils.security import require_auth
 
 # 게시글 생성 서비스 import
@@ -61,6 +66,7 @@ board_bp = Blueprint(
 def create_post():
 
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # request 전체 전달
@@ -78,6 +84,7 @@ def create_post():
         # 서버 로그 출력
         print(f"[게시글 생성 API 오류] {e}")
 
+        # 설명: 호출자에게 (jsonify({'success': False, 'message': '서버 오류 발생'}), 500) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "message": "서버 오류 발생"
@@ -93,6 +100,7 @@ def create_post():
 @board_bp.route("/posts", methods=["GET"])
 def get_posts_list():
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # =====================================
@@ -165,6 +173,7 @@ def get_posts_list():
         # 서버 로그 출력
         print(f"[게시글 목록 조회 API 오류] {e}")
 
+        # 설명: 호출자에게 (jsonify({'success': False, 'message': '서버 오류 발생'}), 500) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "message": "서버 오류 발생"
@@ -178,6 +187,7 @@ def get_posts_list():
 @board_bp.route("/posts/<int:post_id>", methods=["GET"])
 def get_post_detail(post_id):
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # 게시글 상세 조회 서비스 실행
@@ -191,6 +201,7 @@ def get_post_detail(post_id):
         # 서버 로그 출력
         print(f"[게시글 상세 조회 API 오류] {e}")
 
+        # 설명: 호출자에게 (jsonify({'success': False, 'message': '서버 오류 발생'}), 500) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "message": "서버 오류 발생"
@@ -205,6 +216,7 @@ def get_post_detail(post_id):
 @require_auth
 def update_post_api(post_id):
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # 프론트에서 수정 데이터 받기
@@ -225,6 +237,7 @@ def update_post_api(post_id):
         # 서버 로그 출력
         print(f"[게시글 수정 API 오류] {e}")
 
+        # 설명: 호출자에게 (jsonify({'success': False, 'message': '서버 오류 발생'}), 500) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "message": "서버 오류 발생"
@@ -239,6 +252,7 @@ def update_post_api(post_id):
 @require_auth
 def delete_post_api(post_id):
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # 게시글 삭제 서비스 실행
@@ -255,6 +269,7 @@ def delete_post_api(post_id):
         # 서버 로그 출력
         print(f"[게시글 삭제 API 오류] {e}")
 
+        # 설명: 호출자에게 (jsonify({'success': False, 'message': '서버 오류 발생'}), 500) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "message": "서버 오류 발생"
