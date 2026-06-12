@@ -72,10 +72,21 @@ class AIGatewayService:
 
                 timeout_seconds = max(1, timeout_seconds)
 
+                internal_api_token = (
+                    current_app.config.get("INTERNAL_API_TOKEN")
+                    or os.getenv("INTERNAL_API_TOKEN")
+                    or ""
+                ).strip()
+
+                headers = {}
+                if internal_api_token:
+                    headers["Authorization"] = f"Bearer {internal_api_token}"
+
                 response = requests.post(
                     detect_url,
                     files=files,
                     data=data,
+                    headers=headers,
                     timeout=timeout_seconds,
                 )
 

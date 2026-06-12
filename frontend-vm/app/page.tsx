@@ -133,7 +133,7 @@ export default function Home() {
       </button>
 
       {isBoardMenuOpen ? (
-        <div role="menu" className="absolute right-0 top-12 z-30 w-48 overflow-hidden rounded-xl border border-white/15 bg-slate-950/95 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-xl">
+        <div role="menu" className="absolute right-0 top-10 z-30 w-48 overflow-hidden rounded-xl border border-white/15 bg-slate-950/95 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-xl">
           <p className="px-3 pb-1.5 pt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">게시판</p>
           {boardMenuLinks.map((item) => {
             const Icon = item.icon;
@@ -252,7 +252,7 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="relative z-10 flex min-h-[calc(100vh-88px)] items-center px-6 md:px-12 lg:px-20 xl:px-28">
+          <div className="relative z-10 mx-auto flex min-h-[calc(100vh-88px)] max-w-[1480px] items-center px-4 sm:px-5">
             <div
               className="max-w-3xl border-l-4 border-orange-600 bg-slate-950/40 px-8 py-10 backdrop-blur-sm transition-all duration-500"
               style={{

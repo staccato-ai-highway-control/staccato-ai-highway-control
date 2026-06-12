@@ -114,6 +114,17 @@ FLASK_RELAY_EVENTS_URL = os.environ.get(
 ).strip()
 FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS", "1.5"))
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
+REPORT_DETECT_MAX_UPLOAD_BYTES = int(os.environ.get("REPORT_DETECT_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+
+def require_non_empty_secret(name: str, value: str) -> None:
+    if not value:
+        raise RuntimeError(f"{name} is required. Set it in ai-vm/.env or environment variables.")
+
+
+require_non_empty_secret("DEV_PASSWORD", DEV_PASSWORD)
+require_non_empty_secret("DEV_ACCESS_TOKEN", DEV_ACCESS_TOKEN)
+require_non_empty_secret("INTERNAL_API_TOKEN", INTERNAL_API_TOKEN)
+
 EVENT_CLIP_PRE_SECONDS = float(os.environ.get("EVENT_CLIP_PRE_SECONDS", "5.0"))
 EVENT_CLIP_POST_SECONDS = float(os.environ.get("EVENT_CLIP_POST_SECONDS", "5.0"))
 MANUAL_EVENT_CLIP_PRE_SECONDS = float(os.environ.get("MANUAL_EVENT_CLIP_PRE_SECONDS", "5.0"))

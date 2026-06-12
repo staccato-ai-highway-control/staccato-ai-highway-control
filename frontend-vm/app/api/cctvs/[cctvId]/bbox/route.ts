@@ -22,9 +22,17 @@ export async function GET(
   });
 
   try {
+    const internalApiToken = process.env.INTERNAL_API_TOKEN || "";
+
+    const headers: Record<string, string> = {};
+    if (internalApiToken) {
+      headers.Authorization = `Bearer ${internalApiToken}`;
+    }
+
     const response = await fetch(upstreamUrl, {
       method: "GET",
       cache: "no-store",
+      headers,
     });
 
     const data = await response.json().catch(() => null);
