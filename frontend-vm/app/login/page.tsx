@@ -92,7 +92,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/");
     } catch (error) {
       setErrorMessage(getFriendlyLoginError(error));
     } finally {

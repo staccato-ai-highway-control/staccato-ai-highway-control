@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 
 import requests
-from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi import File, Form, UploadFile
@@ -28,6 +28,9 @@ from .config import (
     ITS_CCTV_DEFAULT_TYPE,
     MANUAL_EVENT_CLIP_POST_SECONDS,
     MANUAL_EVENT_CLIP_PRE_SECONDS,
+
+    INTERNAL_API_TOKEN,
+    REPORT_DETECT_MAX_UPLOAD_BYTES,
 )
 from .dev_auth import (
     expected_authorization_header,
@@ -234,6 +237,13 @@ def traffic_cctv_api(
         )
 
 
+
+def require_internal_token(authorization: str = Header(default="")) -> None:
+    expected = f"Bearer {INTERNAL_API_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+
 @app.post("/auth/login")
 def auth_login(payload: LoginPayload):
     login_id = payload.login_id.strip()
@@ -260,7 +270,7 @@ def auth_me(authorization: str = Header(default="")):
 
 
 @app.get("/internal/cameras")
-def internal_cameras():
+def internal_cameras(_auth: None = Depends(require_internal_token)):
     return {
         "success": True,
         "data": camera_registry.list_statuses(),
@@ -268,7 +278,11 @@ def internal_cameras():
 
 
 @app.post("/internal/cameras/{camera_id}/start")
-def internal_camera_start(camera_id: str, payload: CameraStartPayload):
+def internal_camera_start(
+    camera_id: str,
+    payload: CameraStartPayload,
+    _auth: None = Depends(require_internal_token),
+):
     source_url = payload.source_url.strip()
     if not source_url:
         raise HTTPException(status_code=400, detail="source_url is required.")
@@ -292,7 +306,10 @@ def internal_camera_start(camera_id: str, payload: CameraStartPayload):
 
 
 @app.post("/internal/cameras/{camera_id}/stop")
-def internal_camera_stop(camera_id: str):
+def internal_camera_stop(
+    camera_id: str,
+    _auth: None = Depends(require_internal_token),
+):
     worker = camera_registry.stop_camera(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Camera worker not found.")
@@ -304,7 +321,10 @@ def internal_camera_stop(camera_id: str):
 
 
 @app.get("/internal/cameras/{camera_id}/rois")
-def internal_camera_rois(camera_id: str):
+def internal_camera_rois(
+    camera_id: str,
+    _auth: None = Depends(require_internal_token),
+):
     return {
         "success": True,
         "data": {
@@ -315,7 +335,11 @@ def internal_camera_rois(camera_id: str):
 
 
 @app.put("/internal/cameras/{camera_id}/rois")
-def internal_camera_rois_update(camera_id: str, payload: RoiSettingsPayload):
+def internal_camera_rois_update(
+    camera_id: str,
+    payload: RoiSettingsPayload,
+    _auth: None = Depends(require_internal_token),
+):
     try:
         rois = save_camera_rois(camera_id, payload.rois)
     except ValueError as error:
@@ -331,7 +355,11 @@ def internal_camera_rois_update(camera_id: str, payload: RoiSettingsPayload):
 
 
 @app.post("/internal/cameras/{camera_id}/manual-event")
-def internal_camera_manual_event(camera_id: str, payload: ManualEventPayload):
+def internal_camera_manual_event(
+    camera_id: str,
+    payload: ManualEventPayload,
+    _auth: None = Depends(require_internal_token),
+):
     worker = camera_registry.get_camera(camera_id)
     if worker is None:
         if not payload.source_url:
@@ -863,6 +891,7 @@ async def detect_legacy_report_file(
     report_id: str = Form(default=""),
     cctv_id: str = Form(default=""),
     camera_id: str = Form(default=""),
+    _auth: None = Depends(require_internal_token),
 ):
     """Legacy Flask report-analysis compatibility endpoint.
 
@@ -890,6 +919,9 @@ async def detect_legacy_report_file(
     payload = await file.read()
     if not payload:
         raise HTTPException(status_code=400, detail="Empty file.")
+
+    if len(payload) > REPORT_DETECT_MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Uploaded file is too large.")
 
     video_extensions = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
     is_video = content_type.startswith("video/") or suffix in video_extensions

@@ -215,6 +215,11 @@ function AnalysisComparisonsContent() {
   const searchParams = useSearchParams();
   const reportId = searchParams.get("report_id") ?? undefined;
   const selectedJobId = searchParams.get("selectedJobId") ?? undefined;
+  const selectedJobIdsParam = searchParams.get("selectedJobIds") ?? "";
+  const preselectedJobIds = useMemo(
+    () => selectedJobIdsParam.split(",").map((id) => id.trim()).filter(Boolean).slice(0, 5),
+    [selectedJobIdsParam]
+  );
   const [candidates, setCandidates] = useState<ReportAnalysisComparisonCandidate[]>([]);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,12 +239,15 @@ function AnalysisComparisonsContent() {
         const nextCandidates = await getAnalysisComparisonCandidates({ report_id: reportId, selectedJobId });
         if (disposed) return;
         setCandidates(nextCandidates);
-        if (selectedJobId) {
-          const selectedCandidate = nextCandidates.find((candidate) => String(getJobId(candidate)) === selectedJobId);
-          if (selectedCandidate && isCompletedJob(selectedCandidate)) {
-            setSelectedJobIds((current) => (current.includes(selectedJobId) ? current : [selectedJobId, ...current].slice(0, 5)));
-          }
-        }
+        const requestedJobIds = preselectedJobIds.length > 0
+          ? preselectedJobIds
+          : selectedJobId
+            ? [selectedJobId]
+            : [];
+        const availableJobIds = requestedJobIds.filter((jobId) => nextCandidates.some((candidate) => (
+          String(getJobId(candidate)) === jobId && isCompletedJob(candidate)
+        )));
+        setSelectedJobIds(availableJobIds);
       } catch {
         if (!disposed) {
           setCandidates([]);
@@ -254,7 +262,7 @@ function AnalysisComparisonsContent() {
     return () => {
       disposed = true;
     };
-  }, [reportId, selectedJobId]);
+  }, [preselectedJobIds, reportId, selectedJobId]);
 
   const selectedCandidates = useMemo(() => {
     return candidates.filter((candidate) => {
