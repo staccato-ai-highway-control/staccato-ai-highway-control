@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: MJPEG 스트림 응답과 동시 접속 제한을 관리합니다.
 
 from collections import Counter
 from threading import Lock
@@ -21,11 +22,14 @@ _stream_total_clients = 0
 _stream_clients_by_camera: Counter[str] = Counter()
 
 
+# MJPEG 클라이언트 접속 수를 정확히 반납하기 위한 슬롯 객체입니다.
 class StreamSlot:
+    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(self, camera_id: str) -> None:
         self.camera_id = camera_id
         self._released = False
 
+    # 점유한 스트림 슬롯을 반납합니다.
     def release(self) -> None:
         global _stream_total_clients
 
@@ -41,6 +45,7 @@ class StreamSlot:
                 _stream_clients_by_camera.pop(self.camera_id, None)
 
 
+# claim_stream_slot 기능을 수행하는 함수입니다.
 def claim_stream_slot(camera_id: str) -> StreamSlot | None:
     global _stream_total_clients
 
@@ -58,6 +63,7 @@ def claim_stream_slot(camera_id: str) -> StreamSlot | None:
         return StreamSlot(camera_id)
 
 
+# active_stream_counts 기능을 수행하는 함수입니다.
 def active_stream_counts() -> dict[str, object]:
     with _stream_lock:
         return {
@@ -69,6 +75,7 @@ def active_stream_counts() -> dict[str, object]:
         }
 
 
+# mjpeg_generator 기능을 수행하는 함수입니다.
 def mjpeg_generator(
     worker: CameraWorker,
     quality: int = 80,
@@ -108,6 +115,7 @@ def mjpeg_generator(
             slot.release()
 
 
+# create_placeholder_jpeg 기능을 수행하는 함수입니다.
 def create_placeholder_jpeg(message: str, quality: int = 80) -> bytes:
     frame = np.zeros((360, 640, 3), dtype=np.uint8)
     cv2.putText(

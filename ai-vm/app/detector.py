@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: YOLO 모델을 지연 로드하고 프레임에서 차량 탐지 결과를 표준 형식으로 변환합니다.
 
 from dataclasses import dataclass
 from threading import Lock
@@ -26,6 +27,7 @@ from .config import (
 )
 
 
+# YOLO 탐지 결과 하나를 API에서 쓰는 공통 형식으로 표현합니다.
 @dataclass(frozen=True)
 class Detection:
     bbox: list[float]
@@ -35,6 +37,7 @@ class Detection:
     track_id: int | None = None
     source: str = "full_frame"
 
+    # 객체 상태를 JSON 응답에 맞는 dict로 변환합니다.
     def to_dict(self) -> dict[str, Any]:
         return {
             "bbox": self.bbox,
@@ -47,7 +50,9 @@ class Detection:
         }
 
 
+# YOLO 모델 로드, 추론, 결과 파싱, 원거리 crop 보강 탐지를 담당합니다.
 class YoloDetector:
+    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         model_paths: list[str] | None = None,
@@ -70,19 +75,23 @@ class YoloDetector:
         self._lock = Lock()
         self._predict_lock = Lock()
 
+    # model_name 기능을 수행하는 함수입니다.
     @property
     def model_name(self) -> str | None:
         self._ensure_model_loaded()
         return self._model_name
 
+    # current_model_name 기능을 수행하는 함수입니다.
     @property
     def current_model_name(self) -> str | None:
         return self._model_name
 
+    # load_error 기능을 수행하는 함수입니다.
     @property
     def load_error(self) -> str | None:
         return self._load_error
 
+    # 프레임에 대해 YOLO 추론을 실행하고 Detection 목록을 반환합니다.
     def detect(
         self,
         frame: np.ndarray,
@@ -116,15 +125,18 @@ class YoloDetector:
                 frame_id=frame_id,
             )
 
+    # acquire_predict_slot 기능을 수행하는 함수입니다.
     def acquire_predict_slot(self, timeout: float | None = None) -> bool:
         if timeout is None:
             self._predict_lock.acquire()
             return True
         return self._predict_lock.acquire(timeout=timeout)
 
+    # release_predict_slot 기능을 수행하는 함수입니다.
     def release_predict_slot(self) -> None:
         self._predict_lock.release()
 
+    # _detect_locked 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _detect_locked(
         self,
         *,
@@ -156,6 +168,7 @@ class YoloDetector:
 
         return detections
 
+    # _ensure_model_loaded 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _ensure_model_loaded(self) -> Any:
         if self._model is not None:
             return self._model
@@ -186,6 +199,7 @@ class YoloDetector:
             self._load_error = "Failed to load YOLO model. " + " | ".join(errors)
             raise RuntimeError(self._load_error)
 
+    # _parse_result 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _parse_result(
         self,
         result: Any,
@@ -256,6 +270,7 @@ class YoloDetector:
 
         return detections
 
+    # _detect_far_crop 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _detect_far_crop(
         self,
         *,
@@ -304,6 +319,7 @@ class YoloDetector:
             max_height=YOLO_FAR_MAX_BOX_HEIGHT,
         )
 
+    # _should_run_far_crop 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _should_run_far_crop(frame_id: int | None) -> bool:
         if YOLO_FAR_DETECT_INTERVAL <= 1:
@@ -312,6 +328,7 @@ class YoloDetector:
             return True
         return frame_id % YOLO_FAR_DETECT_INTERVAL == 0
 
+    # _device_kwargs 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _device_kwargs(self) -> dict[str, str]:
         return {"device": self.device} if self.device else {}
 

@@ -1,9 +1,11 @@
+# 부팅 후 최초 5분 뒤 시작하고 마지막 실행 시점부터 3시간마다 서비스를 호출합니다.
 [Unit]
 Description=Run STACCATO resource access/status report every 3 hours
 
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=3h
+# 서버가 꺼져 실행 시각을 놓쳤다면 다음 부팅 시 한 번 보충 실행합니다.
 Persistent=true
 Unit=staccato-resource-status-report.service
 

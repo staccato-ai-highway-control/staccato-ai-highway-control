@@ -1,3 +1,5 @@
+# 서버 상태 보고서를 한 번 생성하는 oneshot 서비스입니다.
+# timer unit이 이 서비스를 주기적으로 호출하므로 자체 재시작 정책은 두지 않습니다.
 [Unit]
 Description=STACCATO resource access/status report generator
 After=network-online.target staccato-flask.service
@@ -7,6 +9,7 @@ Wants=network-online.target
 Type=oneshot
 User=staccato
 Group=staccato
+# 상대 경로와 Flask import가 배포 디렉터리를 기준으로 해석되도록 고정합니다.
 WorkingDirectory=/home/staccato/staccato/flask-vm
 Environment=PYTHONPATH=/home/staccato/staccato/flask-vm
 ExecStart=/home/staccato/staccato/flask-vm/.venv/bin/python /home/staccato/staccato/flask-vm/scripts/create_resource_status_report.py

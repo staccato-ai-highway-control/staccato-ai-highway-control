@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: 이벤트 스냅샷/영상 위에 bbox, 라벨, ROI 보조 시각화를 그립니다.
 
 from typing import Any
 
@@ -15,12 +16,14 @@ EVENT_COLORS = {
 }
 
 
+# render_event_overlay 기능을 수행하는 함수입니다.
 def render_event_overlay(frame: np.ndarray, event: dict[str, Any]) -> np.ndarray:
     rendered = frame.copy()
     _draw_event_box(rendered, event)
     return rendered
 
 
+# _draw_rois 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _draw_rois(frame: np.ndarray, camera_id: str | None = None) -> None:
     height, width = frame.shape[:2]
     x_scale = width / ROI_BASE_WIDTH
@@ -46,6 +49,7 @@ def _draw_rois(frame: np.ndarray, camera_id: str | None = None) -> None:
     cv2.addWeighted(overlay, 0.18, frame, 0.82, 0, dst=frame)
 
 
+# _draw_event_box 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _draw_event_box(frame: np.ndarray, event: dict[str, Any]) -> None:
     bbox = event.get("bbox")
     if not bbox or len(bbox) != 4:
@@ -91,6 +95,7 @@ def _draw_event_box(frame: np.ndarray, event: dict[str, Any]) -> None:
         )
 
 
+# _draw_detections 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _draw_detections(frame: np.ndarray, event: dict[str, Any]) -> None:
     detections = event.get("detections")
     if not isinstance(detections, list):

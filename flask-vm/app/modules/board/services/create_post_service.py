@@ -1,3 +1,7 @@
+"""board 도메인의 핵심 비즈니스 규칙과 데이터 처리를 구현한다.
+
+권한 검증, 트랜잭션 경계, 외부 연동 및 응답 직렬화를 라우트와 분리해 관리한다."""
+
 # =========================================
 # UUID
 #
@@ -12,6 +16,7 @@ import uuid
 # =========================================
 import os
 
+# 설명: flask에서 current_app 이름을 가져와 아래 로직에서 재사용한다.
 from flask import current_app
 
 # =========================================
@@ -61,6 +66,7 @@ ALLOWED_EXTENSIONS = {
 # =========================================
 def allowed_file(filename):
 
+    # 설명: 호출자에게 '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS 값을 함수 결과로 반환한다.
     return (
 
         # 파일명에 . 존재 여부 확인
@@ -85,6 +91,7 @@ def allowed_file(filename):
 # =========================================
 def create_board_post(request):
 
+    # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
 
         # =====================================
@@ -153,6 +160,7 @@ def create_board_post(request):
         # =====================================
         if not title or not content:
 
+            # 설명: 호출자에게 ({'success': False, 'message': '제목과 내용을 입력해주세요.'}, 400) 값을 함수 결과로 반환한다.
             return {
 
                 "success": False,
@@ -171,6 +179,7 @@ def create_board_post(request):
             # 최고 관리자가 아닌 경우
             if current_user_role != "SUPER_ADMIN":
 
+                # 설명: 호출자에게 ({'success': False, 'message': '상단 고정 권한이 없습니다.'}, 403) 값을 함수 결과로 반환한다.
                 return {
 
                     "success": False,
@@ -231,6 +240,7 @@ def create_board_post(request):
             # =================================
             if file.filename == "":
 
+                # 설명: 호출자에게 ({'success': False, 'message': '파일명이 없습니다.'}, 400) 값을 함수 결과로 반환한다.
                 return {
 
                     "success": False,
@@ -244,6 +254,7 @@ def create_board_post(request):
             # =================================
             if not allowed_file(file.filename):
 
+                # 설명: 호출자에게 ({'success': False, 'message': '허용되지 않은 파일 형식입니다.'}, 400) 값을 함수 결과로 반환한다.
                 return {
 
                     "success": False,
@@ -283,6 +294,7 @@ def create_board_post(request):
                 "storage/uploads/board"
             )
 
+            # 설명: `os.makedirs`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
             os.makedirs(upload_folder, exist_ok=True)
 
             # =================================

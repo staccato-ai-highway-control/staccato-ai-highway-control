@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
+# AI VM 서비스 상태, 포트, health endpoint를 한 번에 점검하는 스크립트입니다.
 set -euo pipefail
 
 SERVICE="staccato-ai-server.service"
 
 echo "========== AI-VM STATUS =========="
+# systemd 서비스 최근 상태를 짧게 보여줍니다.
 sudo systemctl status "$SERVICE" --no-pager -l | head -50 || true
 
 echo
 echo "========== PORT 5001 =========="
+# FastAPI 기본 포트가 listen 중인지 확인합니다.
 ss -ltnp | grep ':5001' || echo "AI-vm 5001 is not listening"
 
 echo
 echo "========== HEALTH =========="
+# 서버 내부 health endpoint 응답을 확인합니다.
 curl --max-time 10 -sS http://localhost:5001/health || echo "AI-vm health check failed"
