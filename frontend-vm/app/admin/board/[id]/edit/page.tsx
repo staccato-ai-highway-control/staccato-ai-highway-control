@@ -25,6 +25,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getBoardPost, updateBoardPost } from "@/features/board/api";
@@ -228,13 +229,7 @@ export default function AdminBoardEditPage({ params }: { params: Promise<{ id: s
   return (
     <RequireAuth>
       <AppLayout title="게시글 수정">
-        <section className="mb-6">
-          <Link href={`/admin/board/${id}`} className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-slate-950">
-            <ArrowLeft className="h-4 w-4" />
-            게시글 상세
-          </Link>
-          <h2 className="mt-3 text-2xl font-black text-slate-950">게시글 수정</h2>
-        </section>
+        <PageHeader title="게시글 수정" description="게시글의 분류와 내용을 수정합니다." actions={<Link href={`/admin/board/${id}`} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" />게시글 상세</Link>} />
 
         <Card className="p-6">
           {!editable ? <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">현재 권한으로 수정할 수 없는 게시글입니다.</div> : null}

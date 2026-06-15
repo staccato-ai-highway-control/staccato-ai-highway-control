@@ -11,6 +11,9 @@ import { AlertCircle, FileDown, FilePlus2, RefreshCw, Search } from "lucide-reac
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { FormEvent, useCallback, useEffect, useState } from "react";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
@@ -64,9 +67,36 @@ export function ResourceList() {
 
     // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      if (category === "ALL") {
+        const responses = await Promise.all(
+          resourceCategoryOptions.map((resourceCategory) =>
+            getResources({
+              category: resourceCategory,
+              keyword: submittedKeyword || undefined,
+              page: 1,
+              size: 1000,
+            })
+          )
+        );
+        const allResources = responses
+          .flatMap((response) => response.items)
+          .sort(
+            (left, right) =>
+              new Date(right.created_at).getTime() -
+              new Date(left.created_at).getTime()
+          );
+        const totalPages = Math.max(1, Math.ceil(allResources.length / PAGE_SIZE));
+        const pageStart = (page - 1) * PAGE_SIZE;
+
+        setResources(allResources.slice(pageStart, pageStart + PAGE_SIZE));
+        setTotal(allResources.length);
+        setPages(totalPages);
+        return;
+      }
+
       // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getResources({
-        category: category === "ALL" ? undefined : category,
+        category,
         keyword: submittedKeyword || undefined,
         page,
         size: PAGE_SIZE,
@@ -131,26 +161,13 @@ export function ResourceList() {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-      <section className="mx-auto max-w-6xl">
-        <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link href="/" className="text-sm font-black text-slate-950 no-underline">STACCATO</Link>
-            <h1 className="mt-3 text-3xl font-black">자료실</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-600">STACCATO 프로젝트의 주요 문서와 회의 기록을 관리합니다.</p>
-          </div>
-          {isResourceAdmin(authUser) ? (
-            <Link
-              href="/resources/new"
-              className="group inline-flex h-11 items-center justify-center gap-2.5 rounded-xl bg-staccato px-5 text-sm font-black text-white no-underline shadow-sm shadow-red-200 transition hover:-translate-y-0.5 hover:bg-staccato-dark hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
-            >
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/15 transition group-hover:bg-white/20">
-                <FilePlus2 className="h-4 w-4" aria-hidden="true" />
-              </span>
-              새 자료 등록
-            </Link>
-          ) : null}
-        </header>
+    <RequireAuth>
+      <AppLayout title="자료실">
+        <PageHeader
+          title="자료실"
+          description="STACCATO 프로젝트의 주요 문서, 발표 자료와 회의 기록을 한곳에서 관리합니다."
+          actions={isResourceAdmin(authUser) ? <Link href="/resources/new" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white no-underline transition hover:bg-blue-700"><FilePlus2 className="h-4 w-4" aria-hidden="true" />새 자료 등록</Link> : null}
+        />
 
         <Card className="mb-5 p-5">
           <div className="mb-4 flex flex-wrap gap-2">
@@ -159,7 +176,7 @@ export function ResourceList() {
               const active = category === tab;
               // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
               return (
-                <button key={tab} type="button" onClick={() => { setCategory(tab); setPage(1); }} className={`min-h-10 rounded-lg border px-4 text-sm font-black transition ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                <button key={tab} type="button" onClick={() => { setCategory(tab); setPage(1); }} className={`min-h-10 rounded-lg border px-4 text-sm font-black transition ${active ? "border-blue-600 bg-blue-600 text-white shadow-sm" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
                   {tab === "ALL" ? "전체" : resourceCategoryLabels[tab]}
                 </button>
               );
@@ -171,7 +188,7 @@ export function ResourceList() {
               <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
               <input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="제목, 작성자, 설명, 파일명 검색" className="min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400" />
             </span>
-            <button type="submit" className="h-11 rounded-lg border border-slate-200 bg-white px-6 text-sm font-black text-slate-700 transition hover:bg-slate-50">검색</button>
+            <button type="submit" className="min-h-11 rounded-xl bg-blue-600 px-6 text-sm font-bold text-white transition hover:bg-blue-700">검색</button>
           </form>
         </Card>
 
@@ -244,7 +261,7 @@ export function ResourceList() {
             <button type="button" disabled={loading || page >= pages} onClick={() => setPage((current) => Math.min(pages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">다음</button>
           </div>
         </Card>
-      </section>
-    </main>
+      </AppLayout>
+    </RequireAuth>
   );
 }

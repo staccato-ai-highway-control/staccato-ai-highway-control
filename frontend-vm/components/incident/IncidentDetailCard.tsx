@@ -2,7 +2,8 @@
  * 파일 역할: 돌발 상황 영역에서 사용하는 IncidentDetailCard UI 컴포넌트입니다.
  * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
  */
-import { Card } from "@/components/common/Card";
+import { DetailCard } from "@/components/ui/DetailCard";
+import { InfoGrid, InfoItem } from "@/components/ui/InfoGrid";
 // 코드 설명: ./RiskLevelBadge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RiskLevelBadge } from "./RiskLevelBadge";
 // 코드 설명: ./IncidentStatusBadge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -28,17 +29,10 @@ export function IncidentDetailCard({ incident }: { incident: Incident }) {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <Card className="p-5">
-      <h2 className="text-lg font-black">{incident.code}</h2>
-      <p className="mt-1 text-sm text-slate-500">{incident.location}</p>
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
-        {rows.map(([label, value]) => (
-          <div key={String(label)} className="rounded-lg bg-slate-50 p-3">
-            <span className="text-xs font-bold text-slate-500">{label}</span>
-            <div className="mt-1 font-bold text-slate-950">{value}</div>
-          </div>
-        ))}
-      </div>
-    </Card>
+    <DetailCard title="이벤트 요약" description={incident.location}>
+      <InfoGrid>
+        {rows.map(([label, value]) => <InfoItem key={String(label)} label={String(label)} value={value} />)}
+      </InfoGrid>
+    </DetailCard>
   );
 }

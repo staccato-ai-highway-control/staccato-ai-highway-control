@@ -20,6 +20,8 @@ import {
 // 코드 설명: @/features/resources/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { ResourceItem } from "@/features/resources/types";
 
+const PAGE_SIZE = 10;
+
 // 코드 설명: formatDate 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatDate(value?: string | null) {
   // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !value
@@ -60,6 +62,7 @@ export default function SecurityLogsPage() {
   const [loading, setLoading] = useState(true);
   // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
+  const [page, setPage] = useState(1);
 
   // 코드 설명: loadLogs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const loadLogs = useCallback(async () => {
@@ -73,11 +76,12 @@ export default function SecurityLogsPage() {
       // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getSecurityLogResources({
         page: 1,
-        size: 20,
+        size: 1000,
       });
 
       // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLogs(response.items ?? []);
+      setPage(1);
     } catch (error) {
       // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLogs([]);
@@ -98,6 +102,9 @@ export default function SecurityLogsPage() {
     // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadLogs();
     loadLogs();
   }, [loadLogs]);
+
+  const totalPages = Math.max(1, Math.ceil(logs.length / PAGE_SIZE));
+  const visibleLogs = logs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // 코드 설명: handleDownload 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const handleDownload = async (log: ResourceItem) => {
@@ -205,7 +212,7 @@ export default function SecurityLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.map((log) => (
+                    {visibleLogs.map((log) => (
                       <tr
                         key={log.id}
                         className="border-b border-slate-100 text-sm last:border-b-0"
@@ -269,6 +276,13 @@ export default function SecurityLogsPage() {
                 </table>
               </div>
             )}
+            {!loading && !errorMessage && logs.length > 0 ? (
+              <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
+                <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">이전</button>
+                <span className="text-xs font-bold text-slate-500">10개 단위 · {page} / {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">다음</button>
+              </div>
+            ) : null}
           </section>
         </main>
       </AppLayout>

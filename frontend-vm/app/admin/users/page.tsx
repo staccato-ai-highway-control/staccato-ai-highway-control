@@ -21,6 +21,8 @@ import { getAdminUsers } from "@/features/admin/api";
 // 코드 설명: @/features/admin/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AdminUser } from "@/features/admin/types";
 
+const PAGE_SIZE = 10;
+
 // 코드 설명: getStatusLabel 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getStatusLabel(user: AdminUser) {
   // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: user.account_status ?? "-"
@@ -35,6 +37,7 @@ export default function AdminUsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
+  const [page, setPage] = useState(1);
 
   // 코드 설명: loadUsers 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadUsers() {
@@ -45,7 +48,9 @@ export default function AdminUsersPage() {
     // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
       // 코드 설명: setUsers 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
-      setUsers(await getAdminUsers());
+      const nextUsers = await getAdminUsers();
+      setUsers(nextUsers);
+      setPage(1);
     } catch (error) {
       // 코드 설명: setUsers 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setUsers([]);
@@ -63,6 +68,9 @@ export default function AdminUsersPage() {
     loadUsers();
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+  const visibleUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireSuperAdmin title="사용자 관리">
@@ -77,21 +85,30 @@ export default function AdminUsersPage() {
             <button type="button" onClick={loadUsers} className="h-9 rounded-lg border border-red-200 bg-white px-3 font-black text-red-700">다시 시도</button>
           </div>
         ) : null}
-        <Card className="overflow-auto">
-          <table className="w-full min-w-[760px] text-sm">
+        <Card className="overflow-hidden">
+          <div className="overflow-auto">
+            <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs text-slate-500"><tr><th className="p-4">이름</th><th>이메일</th><th>역할</th><th>부서</th><th>상태</th></tr></thead>
             <tbody>
               {isLoading ? <tr><td colSpan={5} className="p-8 text-center font-semibold text-slate-500">사용자 목록을 불러오는 중입니다.</td></tr> : null}
               {!isLoading && errorMessage ? <tr><td colSpan={5} className="p-8 text-center font-semibold text-red-600">API 오류로 사용자 데이터를 표시할 수 없습니다.</td></tr> : null}
               {!isLoading && !errorMessage && users.length === 0 ? <tr><td colSpan={5} className="p-8 text-center font-semibold text-slate-500">등록된 사용자가 없습니다.</td></tr> : null}
-              {!isLoading && !errorMessage ? users.map((user) => (
+              {!isLoading && !errorMessage ? visibleUsers.map((user) => (
                 <tr key={`${user.id ?? user.email ?? user.login_id}-${user.role ?? "NO_ROLE"}`} className="border-t border-slate-100">
                   <td className="p-4 font-bold">{user.name ?? user.login_id ?? "-"}</td><td>{user.email ?? "-"}</td>
                   <td><Badge tone="blue">{user.role ?? "-"}</Badge></td><td>{user.department ?? "-"}</td><td><Badge tone="green">{getStatusLabel(user)}</Badge></td>
                 </tr>
               )) : null}
             </tbody>
-          </table>
+            </table>
+          </div>
+          {!isLoading && !errorMessage && users.length > 0 ? (
+            <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">이전</button>
+            <span className="text-xs font-bold text-slate-500">10개 단위 · {page} / {totalPages}</span>
+            <button type="button" disabled={isLoading || page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">다음</button>
+            </div>
+          ) : null}
         </Card>
       </AppLayout>
     </RequireSuperAdmin>

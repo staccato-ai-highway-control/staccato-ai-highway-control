@@ -19,6 +19,7 @@ import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getBoardPosts, deleteBoardPost } from "@/features/board/api";
@@ -163,20 +164,7 @@ export default function AdminBoardPage() {
   return (
     <RequireAuth>
       <AppLayout title="관리자 게시판">
-        <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">관리자 게시판</h2>
-            <p className="mt-2 text-sm font-semibold text-slate-500">권한에 따라 공지, 자료, 토론 게시글을 조회하고 관리합니다.</p>
-          </div>
-          {canWritePost ? (
-            <Link href="/admin/board/new" className="no-underline">
-              <Button type="button" className="gap-2">
-                <FilePlus className="h-4 w-4" />
-                게시글 작성
-              </Button>
-            </Link>
-          ) : null}
-        </section>
+        <PageHeader title="게시판" description="권한에 따라 공지, 자료와 토론 게시글을 조회하고 관리합니다." actions={canWritePost ? <Link href="/admin/board/new" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-bold text-white no-underline transition hover:bg-blue-700"><FilePlus className="h-4 w-4" />게시글 작성</Link> : null} />
 
         <Card className="mb-5 p-5">
           <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">

@@ -9,11 +9,36 @@ import { FormEvent, useState } from "react";
 // 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import Link from "next/link";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { Button } from "@/components/common/Button";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/bug-reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { createBugReport } from "@/features/bug-reports/api";
 // 코드 설명: @/features/bug-reports/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { BugReportCreateRequest } from "@/features/bug-reports/types";
+
+const categoryOptions = [
+  { value: "GENERAL", label: "일반" },
+  { value: "UI", label: "화면/UI" },
+  { value: "FUNCTION", label: "기능" },
+  { value: "PERFORMANCE", label: "성능" },
+  { value: "SECURITY", label: "보안" },
+  { value: "OTHER", label: "기타" },
+];
+
+const severityOptions = [
+  { value: "MINOR", label: "경미" },
+  { value: "MAJOR", label: "중대" },
+  { value: "CRITICAL", label: "치명적" },
+];
+
+const priorityOptions = [
+  { value: "LOW", label: "낮음" },
+  { value: "MEDIUM", label: "보통" },
+  { value: "HIGH", label: "높음" },
+];
 
 // 코드 설명: BugReportForm 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function BugReportForm() {
@@ -87,46 +112,41 @@ export function BugReportForm() {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-      <section className="mx-auto max-w-4xl">
-        <header className="mb-6">
-          <p className="text-sm font-black text-slate-950">STACCATO</p>
-          <h1 className="mt-3 text-3xl font-black">버그리포트 등록</h1>
-        </header>
+    <AppLayout title="버그리포트 등록">
+      <div className="mx-auto max-w-4xl">
+        <PageHeader title="버그리포트 등록" description="오류가 발생한 상황과 영향도를 남겨 빠르게 확인할 수 있도록 도와주세요." />
 
-        <Card className="p-6">
+        <Card className="p-5 sm:p-6">
           <form onSubmit={handleSubmit} className="grid gap-4">
             {errorMessage ? <p className="rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{errorMessage}</p> : null}
 
-            <label className="grid gap-2 text-sm font-bold text-slate-700">
+            <label className="ui-label">
               제목
-              <input value={form.title} onChange={(event) => updateField("title", event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
+              <input value={form.title} onChange={(event) => updateField("title", event.target.value)} className="ui-field" />
             </label>
 
             <label className="grid gap-2 text-sm font-bold text-slate-700">
               내용
-              <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} className="min-h-36 rounded-lg border border-slate-200 p-3" />
+              <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} className="ui-field" />
             </label>
 
             <div className="grid gap-4 md:grid-cols-3">
               <label className="grid gap-2 text-sm font-bold text-slate-700">
                 카테고리
-                <input value={form.category ?? ""} onChange={(event) => updateField("category", event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
+                <select value={form.category ?? "GENERAL"} onChange={(event) => updateField("category", event.target.value)} className="ui-field">
+                  {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
               </label>
               <label className="grid gap-2 text-sm font-bold text-slate-700">
                 심각도
-                <select value={form.severity ?? "MINOR"} onChange={(event) => updateField("severity", event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3">
-                  <option value="MINOR">MINOR</option>
-                  <option value="MAJOR">MAJOR</option>
-                  <option value="CRITICAL">CRITICAL</option>
+                <select value={form.severity ?? "MINOR"} onChange={(event) => updateField("severity", event.target.value)} className="ui-field">
+                  {severityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-bold text-slate-700">
                 우선순위
-                <select value={form.priority ?? "MEDIUM"} onChange={(event) => updateField("priority", event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3">
-                  <option value="LOW">LOW</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="HIGH">HIGH</option>
+                <select value={form.priority ?? "MEDIUM"} onChange={(event) => updateField("priority", event.target.value)} className="ui-field">
+                  {priorityOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </label>
             </div>
@@ -136,12 +156,13 @@ export function BugReportForm() {
               <input value={form.page_url ?? ""} onChange={(event) => updateField("page_url", event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3" />
             </label>
 
-            <button type="submit" disabled={submitting} className="h-11 rounded-lg bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-50">
-              {submitting ? "등록 중" : "등록"}
-            </button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Link href="/bug-reports" className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">취소</Link>
+              <Button type="submit" disabled={submitting}>{submitting ? "등록 중" : "등록"}</Button>
+            </div>
           </form>
         </Card>
-      </section>
-    </main>
+      </div>
+    </AppLayout>
   );
 }

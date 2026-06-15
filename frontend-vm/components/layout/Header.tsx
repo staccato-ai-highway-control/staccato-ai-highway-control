@@ -8,6 +8,7 @@
 import { Bell, ChevronDown, LogOut, Menu, UserCircle, X } from "lucide-react";
 // 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+import { BrandLogo } from "@/components/common/BrandLogo";
 // 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -87,12 +88,12 @@ export function Header({
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
+    <header className="sticky top-0 z-20 flex min-h-16 items-center gap-3 border-b border-white/10 bg-slate-950/95 px-4 py-3 text-white shadow-lg shadow-slate-950/10 backdrop-blur-xl sm:px-5">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <button
           type="button"
           onClick={onMobileMenuToggle}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-700 transition hover:bg-slate-50 xl:hidden"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-slate-200 transition hover:bg-white/10 xl:hidden"
           aria-label={isMobileMenuOpen ? "메뉴 닫기" : "메뉴 열기"}
           aria-expanded={Boolean(isMobileMenuOpen)}
         >
@@ -103,7 +104,9 @@ export function Header({
           )}
         </button>
 
-        <h1 className="truncate text-lg font-black text-slate-950 md:text-xl">{roleHeader.title}</h1>
+        <BrandLogo className="xl:hidden" imageClassName="h-7 sm:h-8" />
+
+        <h1 className="hidden truncate text-lg font-black text-white sm:block md:text-xl">{roleHeader.title}</h1>
         <div className="hidden min-w-0 items-center gap-2 lg:flex">
           {roleHeader.badges.map((badge) =>
             badge.isRealtimeTrigger ? (
@@ -112,14 +115,14 @@ export function Header({
                 type="button"
                 onClick={onRealtimePreviewClick}
                 disabled={isRealtimePreviewLoading}
-                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60 " + badge.className}
+                className={"shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold transition hover:brightness-95 disabled:cursor-wait disabled:opacity-60 " + badge.className}
               >
                 {isRealtimePreviewLoading ? "불러오는 중" : badge.label}
               </button>
             ) : (
               <span
                 key={badge.label}
-                className={"shrink-0 rounded-full border px-2.5 py-1 text-xs font-bold " + badge.className}
+                className={"shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-bold " + badge.className}
               >
                 {badge.label}
               </span>
@@ -130,7 +133,7 @@ export function Header({
 
       <Link
         href="/notifications"
-        className="relative grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+        className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-white/15 text-slate-200 transition hover:bg-white/10"
         aria-label="알림"
       >
         <Bell className="h-4 w-4" aria-hidden="true" />
@@ -142,11 +145,11 @@ export function Header({
         <button
           type="button"
           onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
-          className="inline-flex h-10 max-w-[220px] items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-800 transition hover:bg-slate-50"
+          className="inline-flex h-10 max-w-[220px] items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-bold text-slate-100 transition hover:bg-white/10"
           aria-label="계정 메뉴"
           aria-expanded={isAccountMenuOpen}
         >
-          <span className="hidden rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-black text-sky-700 md:inline-flex">
+          <span className="hidden shrink-0 whitespace-nowrap rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-black text-sky-700 md:inline-flex">
             {getRoleLabel(authUser?.role)}
           </span>
           <span className="truncate">{displayName}</span>
@@ -166,7 +169,7 @@ export function Header({
             <button
               type="button"
               onClick={handleLogout}
-              className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="flex w-full items-center gap-2 border-t border-slate-100 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-50"
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
               로그아웃

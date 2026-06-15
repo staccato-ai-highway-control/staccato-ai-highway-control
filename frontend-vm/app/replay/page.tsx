@@ -34,6 +34,7 @@ const sourceOptions = ["", "REPORT", "STREAM", "UNKNOWN"];
 const riskOptions = ["", "LOW", "MEDIUM", "HIGH"];
 // 코드 설명: statusOptions 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const statusOptions = ["", "DETECTED", "REVIEWING", "RESOLVED"];
+const PAGE_SIZE = 3;
 
 // 코드 설명: sourceLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const sourceLabels: Record<string, string> = {
@@ -76,7 +77,7 @@ function getReplayMediaUrl(replay?: ReplayItem | null) {
 // 코드 설명: ReplayPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function ReplayPage() {
   // 코드 설명: [result, setResult] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const [result, setResult] = useState<ReplayListResponse>({ items: [], page: 1, size: 20, total_count: 0, total_pages: 0 });
+  const [result, setResult] = useState<ReplayListResponse>({ items: [], page: 1, size: PAGE_SIZE, total_count: 0, total_pages: 0 });
   // 코드 설명: [selectedReplay, setSelectedReplay] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [selectedReplay, setSelectedReplay] = useState<ReplayItem | null>(null);
   // 코드 설명: [selectedId, setSelectedId] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
@@ -110,7 +111,7 @@ export default function ReplayPage() {
       // 코드 설명: nextResult 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const nextResult = await fetchReplays({
         page: nextPage,
-        size: 20,
+        size: PAGE_SIZE,
         source_type: sourceType || undefined,
         risk_level: riskLevel || undefined,
         status: status || undefined,
@@ -220,7 +221,7 @@ export default function ReplayPage() {
         {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
         {loading ? <div className="mb-5 rounded-lg border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-500">리플레이 목록을 불러오는 중입니다.</div> : null}
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="overflow-hidden">
             <div className="border-b border-slate-200 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -234,9 +235,9 @@ export default function ReplayPage() {
                 </div>
               </div>
             </div>
-            <div className="grid min-h-[420px] place-items-center bg-slate-950 p-5 text-white">
+            <div className={mediaUrl && activeReplay?.has_video ? "bg-slate-950" : "grid min-h-[320px] place-items-center bg-slate-950 p-5 text-white"}>
               {mediaUrl && activeReplay?.has_video ? (
-                <video src={mediaUrl} controls className="max-h-[560px] w-full rounded-lg bg-black" />
+                <video src={mediaUrl} controls className="block max-h-[560px] w-full bg-black object-contain" />
               ) : (
                 <div className="text-center">
                   <FileVideo className="mx-auto h-14 w-14 text-white/80" aria-hidden="true" />
@@ -265,7 +266,7 @@ export default function ReplayPage() {
                 <h3 className="font-black text-slate-950">이벤트 목록</h3>
               </div>
               <div className="grid gap-2">
-                {result.items.map((item) => (
+                {result.items.slice(0, PAGE_SIZE).map((item) => (
                   <button key={item.incident_id} type="button" onClick={() => loadReplayDetail(item.incident_id)} disabled={detailLoading} className={`rounded-lg border p-3 text-left transition disabled:opacity-60 ${item.incident_id === activeReplay?.incident_id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
                     <b className="block text-sm">{item.incident_code}</b>
                     <span className="mt-1 block text-xs font-semibold opacity-75">{formatKstDateTime(item.detected_at)} · {sourceLabels[item.source_type] ?? item.source_type}</span>
@@ -277,7 +278,7 @@ export default function ReplayPage() {
               {result.total_pages > 1 ? (
                 <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-4">
                   <button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">이전</button>
-                  <span className="text-xs font-bold text-slate-500">{result.page} / {result.total_pages}</span>
+                  <span className="text-xs font-bold text-slate-500">3개 단위 · {result.page} / {result.total_pages}</span>
                   <button type="button" disabled={loading || page >= result.total_pages} onClick={() => setPage((current) => current + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50">다음</button>
                 </div>
               ) : null}

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 // 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 // 코드 설명: @/components/mypage/PendingApprovalMyPage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { PendingApprovalMyPage } from "@/components/mypage/PendingApprovalMyPage";
 // 코드 설명: @/components/mypage/ProfileSummary 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -501,14 +502,7 @@ export default function MyPage() {
     <RequireAuth>
       <AppLayout title="마이페이지">
         <section className="mx-auto grid w-full max-w-[1200px] gap-5">
-          <div>
-            <p className="text-sm font-bold tracking-[0.18em] text-sky-600">
-              MY PAGE
-            </p>
-            <h2 className="mt-2 text-2xl font-black text-slate-950">
-              마이페이지
-            </h2>
-          </div>
+          <PageHeader title="마이페이지" description="계정 정보와 보안 설정, 내가 등록한 신고 및 버그리포트를 관리합니다." />
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
             <div className="grid content-start gap-5">

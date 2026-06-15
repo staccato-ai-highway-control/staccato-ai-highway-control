@@ -13,6 +13,9 @@ import { useRouter } from "next/navigation";
 // 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ArrowLeft, Download, Pencil, Trash2 } from "lucide-react";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
@@ -146,14 +149,10 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-      <section className="mx-auto max-w-4xl">
-        <div className="mb-5">
-          <Link href="/resources" className="inline-flex items-center gap-2 text-sm font-black text-slate-600 no-underline hover:text-slate-950">
-            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-            자료실로 돌아가기
-          </Link>
-        </div>
+    <RequireAuth>
+      <AppLayout title="자료 상세">
+        <div className="mx-auto max-w-4xl">
+          <PageHeader title="자료 상세" description="등록된 자료의 설명과 첨부파일 정보를 확인합니다." actions={<Link href="/resources" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" aria-hidden="true" />자료실로</Link>} />
 
         {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700"><b>{errorStatus ?? 500}</b> · {errorMessage}</div> : null}
         {loading ? <Card className="p-10 text-center text-sm font-semibold text-slate-500">자료를 불러오는 중입니다.</Card> : null}
@@ -214,7 +213,8 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
             </Card>
           </article>
         ) : null}
-      </section>
-    </main>
+        </div>
+      </AppLayout>
+    </RequireAuth>
   );
 }
