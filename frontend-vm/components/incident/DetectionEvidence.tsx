@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 // 코드 설명: @/features/incidents/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Incident } from "@/features/incidents/types";
+import { MediaPreviewCard } from "@/components/ui/MediaPreviewCard";
 // 코드 설명: @/lib/mediaUrl 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
@@ -62,26 +63,19 @@ export function DetectionEvidence({ incident }: { incident: Incident }) {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="relative min-h-80 bg-slate-100">
-        {canShowImage ? (
-          <img
-            src={snapshotUrl ?? undefined}
-            alt="AI 탐지 증거"
-            className="h-80 w-full object-cover"
-            onError={() => setImageLoadFailed(true)}
-          />
-        ) : (
-          <div className="flex h-80 w-full flex-col items-center justify-center gap-2 text-slate-500">
-            <p className="text-sm font-black">AI 탐지 증거 이미지가 없습니다.</p>
-            <p className="text-xs font-semibold">
-              이벤트 데이터에 스냅샷 URL이 없거나 이미지 파일을 불러오지 못했습니다.
-            </p>
-          </div>
-        )}
-
-
-      </div>
-    </section>
+    <MediaPreviewCard
+      title="탐지 스냅샷"
+      description="AI가 이벤트를 판별한 시점의 원본 프레임입니다."
+      actions={snapshotUrl ? <a href={snapshotUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 no-underline transition hover:bg-slate-50">새 탭 열기</a> : null}
+    >
+      {canShowImage ? (
+        <img src={snapshotUrl ?? undefined} alt="AI 탐지 증거" onError={() => setImageLoadFailed(true)} />
+      ) : (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center text-slate-400">
+          <p className="text-sm font-black text-slate-200">AI 탐지 증거 이미지가 없습니다.</p>
+          <p className="text-xs font-semibold">스냅샷 URL이 없거나 이미지 파일을 불러오지 못했습니다.</p>
+        </div>
+      )}
+    </MediaPreviewCard>
   );
 }

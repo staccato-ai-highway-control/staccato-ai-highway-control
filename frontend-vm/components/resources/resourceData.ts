@@ -30,7 +30,7 @@ export const resourceVisibilityLabels: Record<ResourceVisibility, string> = {
 };
 
 // 코드 설명: resourceCategoryOptions 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-export const resourceCategoryOptions: ResourceCategory[] = ["RESUME", "COVER_LETTER", "PRESENTATION", "MEETING_NOTE", "ACCESS_LOG"];
+export const resourceCategoryOptions: ResourceCategory[] = ["RESUME", "COVER_LETTER", "PRESENTATION", "MEETING_NOTE"];
 // 코드 설명: allowedResourceExtensions 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const allowedResourceExtensions = ["pdf", "ppt", "pptx", "doc", "docx", "hwp", "hwpx", "md", "txt", "jpg", "jpeg", "png", "zip"];
 

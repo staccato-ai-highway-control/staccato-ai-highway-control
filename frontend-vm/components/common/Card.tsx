@@ -9,6 +9,6 @@ import { cn } from "@/lib/utils";
 // 코드 설명: Card 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
-  return <section className={cn("rounded-xl border border-slate-200 bg-white shadow-sm", className)}>{children}</section>;
+  return <section className={cn("rounded-2xl border border-slate-200/90 bg-white shadow-[0_12px_34px_-24px_rgba(15,23,42,0.4)]", className)}>{children}</section>;
 }
 

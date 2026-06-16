@@ -60,8 +60,8 @@ export function IncidentStatusChanger({ incidentId, initialStatus }: IncidentSta
           type="button"
           onClick={() => handleStatusChange(item)}
           disabled={pendingStatus !== null}
-          className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold disabled:opacity-60 ${
-            status === item ? "border-staccato bg-red-50 text-staccato" : "border-slate-200"
+          className={`min-h-10 rounded-xl border px-3 py-2 text-left text-sm font-bold transition disabled:opacity-60 ${
+            status === item ? "border-blue-600 bg-blue-600 text-white" : item === "FALSE_POSITIVE" ? "border-red-200 bg-white text-red-700 hover:bg-red-50" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
           }`}
         >
           {pendingStatus === item ? "변경 중..." : incidentStatusLabels[item]}

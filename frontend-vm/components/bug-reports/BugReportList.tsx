@@ -9,6 +9,9 @@ import Link from "next/link";
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { FormEvent, useCallback, useEffect, useState } from "react";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { RequireAuth } from "@/components/auth/RequireAuth";
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
@@ -131,24 +134,13 @@ export function BugReportList() {
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-      <section className="mx-auto max-w-6xl">
-        <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-black text-slate-950">STACCATO</p>
-            <h1 className="mt-3 text-3xl font-black">버그리포트</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-600">
-              서비스 이용 중 발견한 오류나 개선 요청을 공개로 등록할 수 있습니다.
-            </p>
-          </div>
-
-          <Link
-            href="/bug-reports/new"
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-red-600 px-5 text-sm font-black text-white no-underline shadow-sm transition hover:bg-red-700"
-          >
-            버그리포트 등록하기
-          </Link>
-        </header>
+    <RequireAuth>
+      <AppLayout title="버그리포트">
+        <PageHeader
+          title="버그리포트"
+          description="서비스 이용 중 발견한 오류와 개선 요청을 등록하고 처리 상태를 확인합니다."
+          actions={<Link href="/bug-reports/new" className="inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-5 text-sm font-bold text-white no-underline shadow-sm transition hover:bg-blue-700">버그리포트 등록</Link>}
+        />
 
         <form onSubmit={handleSearch} className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex w-full flex-col gap-2 sm:flex-row">
@@ -156,9 +148,9 @@ export function BugReportList() {
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               placeholder="제목, 설명 검색"
-              className="h-11 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+              className="ui-field min-w-0 flex-1"
             />
-            <button type="submit" className="h-11 rounded-lg border border-slate-200 bg-white px-6 text-sm font-black text-slate-700 transition hover:bg-slate-50">
+            <button type="submit" className="min-h-11 rounded-xl bg-blue-600 px-6 text-sm font-bold text-white transition hover:bg-blue-700">
               검색
             </button>
           </div>
@@ -215,7 +207,7 @@ export function BugReportList() {
             </div>
           ) : null}
         </Card>
-      </section>
-    </main>
+      </AppLayout>
+    </RequireAuth>
   );
 }

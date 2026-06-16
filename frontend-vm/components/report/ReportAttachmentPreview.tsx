@@ -188,7 +188,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
   if (!hasAttachment) {
     // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
-      <div className="grid min-h-80 place-items-center rounded-lg bg-slate-100 text-slate-500">
+      <div className="grid aspect-video max-h-[520px] place-items-center rounded-2xl bg-slate-950 text-slate-400">
         <div className="text-center">
           <FileVideo className="mx-auto h-12 w-12" aria-hidden="true" />
           <p className="mt-3 text-sm font-black">첨부파일 없음</p>
@@ -200,7 +200,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className="grid gap-3">
-      <div className="grid min-h-80 place-items-center overflow-hidden rounded-lg bg-slate-950 text-white">
+      <div className="grid aspect-video max-h-[520px] place-items-center overflow-hidden rounded-2xl bg-slate-950 text-white">
         {objectUrl && isImageType(attachmentType) ? (
           <img src={objectUrl} alt={getAttachmentName(firstAttachment, report)} className="h-full max-h-[520px] w-full object-contain" />
         ) : objectUrl ? (
@@ -213,7 +213,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
           </div>
         )}
       </div>
-      {attachmentId || downloadUrl || previewUrl ? <button type="button" onClick={handleDownload} className="h-10 rounded-lg border border-slate-200 px-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">다운로드</button> : null}
+      {attachmentId || downloadUrl || previewUrl ? <button type="button" onClick={handleDownload} className="min-h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">다운로드</button> : null}
       {errorMessage && objectUrl ? <p className="text-xs font-semibold text-red-700">{errorMessage}</p> : null}
     </div>
   );

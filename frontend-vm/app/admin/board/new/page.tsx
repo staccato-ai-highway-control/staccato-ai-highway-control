@@ -19,6 +19,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { createBoardPost } from "@/features/board/api";
@@ -174,13 +175,7 @@ export default function AdminBoardNewPage() {
   return (
     <RequireAuth>
       <AppLayout title="게시글 작성">
-        <section className="mb-6">
-          <Link href="/admin/board" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-slate-950">
-            <ArrowLeft className="h-4 w-4" />
-            게시글 목록
-          </Link>
-          <h2 className="mt-3 text-2xl font-black text-slate-950">게시글 작성</h2>
-        </section>
+        <PageHeader title="게시글 작성" description="공지, 참고 자료 또는 토론 내용을 등록합니다." actions={<Link href="/admin/board" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" />게시글 목록</Link>} />
 
         <Card className="p-6">
           {writableCategories.length === 0 ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">현재 권한은 게시글 조회만 가능합니다.</div> : null}
@@ -188,7 +183,7 @@ export default function AdminBoardNewPage() {
           <form onSubmit={handleSubmit} className="grid gap-5">
             <label className="grid gap-2">
               <span className="text-xs font-black text-slate-500">카테고리</span>
-              <select value={category} onChange={(event) => setCategory(event.target.value as BoardCategory)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100">
+              <select value={category} onChange={(event) => setCategory(event.target.value as BoardCategory)} className="ui-field">
                 {writableCategories.map((value) => (
                   <option key={value} value={value}>{categoryLabels[value]}</option>
                 ))}
@@ -197,11 +192,11 @@ export default function AdminBoardNewPage() {
             </label>
             <label className="grid gap-2">
               <span className="text-xs font-black text-slate-500">제목</span>
-              <input value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+              <input value={title} onChange={(event) => setTitle(event.target.value)} className="ui-field" />
             </label>
             <label className="grid gap-2">
               <span className="text-xs font-black text-slate-500">내용</span>
-              <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={12} className="resize-none rounded-lg border border-slate-200 p-3 text-sm font-semibold leading-7 text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+              <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={12} className="ui-field min-h-72" />
             </label>
 
             {canPin ? (

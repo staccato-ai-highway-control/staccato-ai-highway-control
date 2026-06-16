@@ -6,6 +6,7 @@
 
 // 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+import { BrandLogo } from "@/components/common/BrandLogo";
 // 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { usePathname } from "next/navigation";
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -69,22 +70,12 @@ export function Sidebar({
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] bg-slate-900 text-slate-200 shadow-2xl transition-transform duration-200 xl:w-60 xl:translate-x-0 xl:shadow-none",
+          "fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] border-r border-white/10 bg-slate-950 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.13),transparent_28%)] text-slate-200 shadow-2xl transition-transform duration-200 xl:w-60 xl:translate-x-0 xl:shadow-none",
           isMobileOpen ? "translate-x-0" : "-translate-x-full xl:translate-x-0"
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
-          <Link
-            href="/"
-            onClick={onMobileClose}
-            className="block no-underline"
-          >
-            <img
-              src="/images/logo.png"
-              alt="STACCATO"
-              className="h-9 w-auto object-contain"
-            />
-          </Link>
+          <BrandLogo onClick={onMobileClose} className="block no-underline" imageClassName="h-9" />
 
           <button
             type="button"

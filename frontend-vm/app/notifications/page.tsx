@@ -9,7 +9,7 @@ import type { LucideIcon } from "lucide-react";
 // 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Bell, CheckCheck, Radio, ShieldAlert, Sparkles, Trash2, UserCheck } from "lucide-react";
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 // 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
 // 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -81,6 +81,7 @@ const connectionMeta: Record<RealtimeConnectionStatus, { label: string; tone: "b
 const READ_NOTIFICATION_IDS_KEY = "staccato:notifications:readIds";
 // 코드 설명: DELETED_NOTIFICATION_IDS_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const DELETED_NOTIFICATION_IDS_KEY = "staccato:notifications:deletedIds";
+const PAGE_SIZE = 10;
 
 // 코드 설명: loadStoredIdSet 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function loadStoredIdSet(key: string) {
@@ -237,6 +238,7 @@ export default function NotificationsPage() {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => loadStoredIdSet(DELETED_NOTIFICATION_IDS_KEY));
   // 코드 설명: [expandedIds, setExpandedIds] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [page, setPage] = useState(1);
 
   // 코드 설명: notifications 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const notifications = useMemo(
@@ -252,6 +254,17 @@ export default function NotificationsPage() {
     () => notifications.filter((notification) => matchesFilter(notification, filter)),
     [filter, notifications]
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredNotifications.length / PAGE_SIZE));
+  const visibleNotifications = filteredNotifications.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
 
   // 코드 설명: unreadCount 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
@@ -359,7 +372,7 @@ export default function NotificationsPage() {
         </section>
 
         <section className="grid gap-3">
-          {filteredNotifications.map((notification) => {
+          {visibleNotifications.map((notification) => {
             // 코드 설명: meta 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const meta = typeMeta[notification.type];
             // 코드 설명: Icon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
@@ -498,6 +511,14 @@ export default function NotificationsPage() {
             <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500">
               조건에 맞는 알림이 없습니다.
             </p>
+          ) : null}
+
+          {filteredNotifications.length > 0 ? (
+            <div className="mt-2 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4">
+              <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">이전</button>
+              <span className="text-xs font-bold text-slate-500">10개 단위 · {page} / {totalPages}</span>
+              <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">다음</button>
+            </div>
           ) : null}
         </section>
       </AppLayout>

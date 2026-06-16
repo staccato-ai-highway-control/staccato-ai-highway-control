@@ -21,6 +21,7 @@ import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { deleteBoardPost, getBoardPost } from "@/features/board/api";
@@ -321,27 +322,15 @@ export default function AdminBoardDetailPage({ params }: { params: Promise<{ id:
   return (
     <RequireAuth>
       <AppLayout title="관리자 게시판">
-        <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <Link href="/admin/board" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-slate-950">
-              <ArrowLeft className="h-4 w-4" />
-              게시글 목록
-            </Link>
-            <h2 className="mt-3 text-2xl font-black text-slate-950">게시글 상세</h2>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {editable ? (
-              <Link href={`/admin/board/${post.id}/edit`} className="no-underline">
-                <Button type="button" className="gap-2"><Pencil className="h-4 w-4" />수정</Button>
-              </Link>
-            ) : null}
-            {deletable ? (
-              <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 px-4 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
-                <Trash2 className="h-4 w-4" />삭제
-              </button>
-            ) : null}
-          </div>
-        </section>
+        <PageHeader
+          title="게시글 상세"
+          description="게시글 내용과 첨부파일, 댓글을 확인합니다."
+          actions={<>
+            <Link href="/admin/board" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" />게시글 목록</Link>
+            {editable ? <Link href={`/admin/board/${post.id}/edit`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white no-underline transition hover:bg-blue-700"><Pencil className="h-4 w-4" />수정</Link> : null}
+            {deletable ? <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300/40 bg-red-500/15 px-4 text-sm font-bold text-red-100 transition hover:bg-red-500/25 disabled:opacity-50"><Trash2 className="h-4 w-4" />삭제</button> : null}
+          </>}
+        />
 
         {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
 

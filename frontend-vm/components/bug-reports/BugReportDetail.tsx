@@ -13,6 +13,8 @@ import { Download, Pencil, Save, Upload, X, XCircle } from "lucide-react";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/bug-reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
@@ -348,33 +350,17 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-      <section className="mx-auto max-w-5xl">
-        <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-black text-slate-950">STACCATO</p>
-            <h1 className="mt-3 text-3xl font-black">버그리포트 상세</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-600">등록된 오류나 개선 요청 내용을 확인합니다.</p>
-          </div>
-
-          <div className="flex flex-wrap gap-2 md:justify-end">
-            {report && (canUpdate || canClose) ? (
-              <>
-                {canUpdate ? <button type="button" onClick={beginEdit} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                  수정
-                </button> : null}
-                {canClose ? <button type="button" onClick={handleCloseReport} disabled={closing || report.status === "CLOSED"} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-red-200 bg-white px-4 text-sm font-black text-red-700 transition hover:bg-red-50 disabled:opacity-50">
-                  <XCircle className="h-4 w-4" aria-hidden="true" />
-                  {closing ? "닫는 중" : "버그리포트 닫기"}
-                </button> : null}
-              </>
-            ) : null}
-            <Link href="/bug-reports" className="inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 no-underline transition hover:bg-slate-50">
-              목록으로
-            </Link>
-          </div>
-        </header>
+    <AppLayout title="버그리포트 상세">
+      <div className="mx-auto max-w-5xl">
+        <PageHeader
+          title="버그리포트 상세"
+          description="등록된 오류나 개선 요청의 내용과 처리 상태, 첨부파일을 확인합니다."
+          actions={<>
+            {report && canUpdate ? <button type="button" onClick={beginEdit} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white transition hover:bg-white/15"><Pencil className="h-4 w-4" aria-hidden="true" />수정</button> : null}
+            {report && canClose ? <button type="button" onClick={handleCloseReport} disabled={closing || report.status === "CLOSED"} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300/40 bg-red-500/15 px-4 text-sm font-bold text-red-100 transition hover:bg-red-500/25 disabled:opacity-50"><XCircle className="h-4 w-4" aria-hidden="true" />{closing ? "닫는 중" : "닫기"}</button> : null}
+            <Link href="/bug-reports" className="inline-flex min-h-11 items-center rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15">목록으로</Link>
+          </>}
+        />
 
         {loading ? (
           <Card className="p-10 text-center text-sm font-bold text-slate-500">버그리포트 상세를 불러오는 중입니다.</Card>
@@ -401,7 +387,7 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                     <p className="mt-1 text-sm font-semibold text-slate-500">수정 가능한 항목만 저장합니다.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={handleUpdate} disabled={saving} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:opacity-50">
+                    <button type="button" onClick={handleUpdate} disabled={saving} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-50">
                       <Save className="h-4 w-4" aria-hidden="true" />
                       {saving ? "저장 중" : "저장"}
                     </button>
@@ -413,14 +399,14 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                 </div>
 
                 <div className="grid gap-4">
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
+                  <label className="ui-label">
                     제목
-                    <input value={editDraft.title ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, title: event.target.value }))} className="h-11 rounded-lg border border-slate-200 px-3 text-sm font-semibold outline-none focus:border-slate-400" />
+                    <input value={editDraft.title ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, title: event.target.value }))} className="ui-field" />
                   </label>
 
                   <label className="grid gap-2 text-sm font-bold text-slate-700">
                     내용
-                    <textarea value={editDraft.description ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="min-h-36 rounded-lg border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-slate-400" />
+                    <textarea value={editDraft.description ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="ui-field" />
                   </label>
 
                   <div className="grid gap-4 md:grid-cols-3">
@@ -484,7 +470,7 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                   <p className="mt-1 text-sm font-semibold text-slate-500">스크린샷이나 참고 파일을 추가하고 다운로드합니다.</p>
                 </div>
                 {canUploadAttachment ? (
-                  <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-black text-white transition hover:bg-slate-800">
+                  <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white transition hover:bg-blue-700">
                     <Upload className="h-4 w-4" aria-hidden="true" />
                     {uploading ? "업로드 중" : "파일 추가"}
                     <input
@@ -535,7 +521,7 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
             </Card>
           </div>
         ) : null}
-      </section>
-    </main>
+      </div>
+    </AppLayout>
   );
 }

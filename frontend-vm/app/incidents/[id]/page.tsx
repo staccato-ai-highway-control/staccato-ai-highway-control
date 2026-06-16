@@ -8,6 +8,14 @@
 import { useEffect, useState } from "react";
 // 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useParams } from "next/navigation";
+import { DetailPageHeader } from "@/components/layout/DetailPageHeader";
+import { DetailCard } from "@/components/ui/DetailCard";
+import { InfoGrid, InfoItem } from "@/components/ui/InfoGrid";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { IncidentStatusBadge } from "@/components/incident/IncidentStatusBadge";
+import { RiskLevelBadge } from "@/components/incident/RiskLevelBadge";
+import { incidentTypeLabels } from "@/features/incidents/types";
+import { formatConfidence } from "@/lib/format";
 // 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
 // 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -95,51 +103,61 @@ export default function IncidentDetailPage() {
     <RequireAuth>
       <AppLayout title="이벤트 상세">
         {isLoading ? (
-          <Card className="p-5">
-            <p className="text-sm font-semibold text-slate-500">이벤트 상세 정보를 불러오는 중입니다.</p>
-          </Card>
+          <Card className="p-8 text-center text-sm font-semibold text-slate-500">이벤트 상세 정보를 불러오는 중입니다.</Card>
         ) : errorMessage ? (
-          <Card className="p-5">
-            <h2 className="mb-2 font-black text-red-600">이벤트 상세 조회 실패</h2>
-            <p className="text-sm font-semibold text-slate-500">{errorMessage}</p>
-          </Card>
+          <Card className="p-8 text-center"><h2 className="font-black text-red-600">이벤트 상세 조회 실패</h2><p className="mt-2 text-sm font-semibold text-slate-500">{errorMessage}</p></Card>
         ) : incident ? (
-          <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
-            <div className="grid gap-5">
-              <DetectionEvidence incident={incident} />
-              <IncidentDetailCard incident={incident} />
-            </div>
-
-            <div className="grid content-start gap-5">
-              <Card className="p-5">
-                <h2 className="mb-3 font-black">ITS 정보</h2>
-                <p>날씨: {incident.its?.weather ?? "-"}</p>
-                <p>교통량: {incident.its?.trafficVolume ?? "-"}</p>
-                <p>순찰 예상: {incident.its?.nearestPatrolEta ?? "-"}</p>
-              </Card>
-
-              <Card className="p-5">
-                <h2 className="mb-3 font-black">상태 변경</h2>
-                <IncidentStatusChanger incidentId={incident.id} initialStatus={incident.status} />
-              </Card>
-
-              <Card className="p-5">
-                <h2 className="mb-3 font-black">관리자 메모</h2>
-                <IncidentMemoBox memo={incident.memo} />
-              </Card>
-
-              <Card className="p-5">
-                <h2 className="mb-3 font-black">AI 탐지 결과</h2>
-                <p className="text-sm font-semibold leading-6 text-slate-500">
-                  Snapshot, 탐지 신뢰도, ITS 정보와 관리자 메모를 기준으로 이벤트 상태를 변경합니다.
-                </p>
-              </Card>
-            </div>
-          </div>
+          <>
+            <DetailPageHeader
+              title="이벤트 상세"
+              code={incident.code || incident.id}
+              backHref="/incidents"
+              badges={<><IncidentStatusBadge status={incident.status} /><RiskLevelBadge level={incident.riskLevel} /><StatusBadge value="REALTIME">실시간 이벤트</StatusBadge></>}
+            />
+            <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <main className="grid min-w-0 content-start gap-6">
+                <DetectionEvidence incident={incident} />
+                <IncidentDetailCard incident={incident} />
+                <DetailCard title="AI 탐지 상세" description="모델이 이벤트로 판단할 때 사용한 핵심 수치입니다.">
+                  <InfoGrid>
+                    <InfoItem label="CCTV" value={incident.cctvId} />
+                    <InfoItem label="이벤트 유형" value={incidentTypeLabels[incident.eventType]} />
+                    <InfoItem label="AI 신뢰도" value={formatConfidence(incident.confidence)} />
+                    <InfoItem label="ROI 유형" value={incident.roiType} />
+                    <InfoItem label="움직임 변화량" value={incident.movementDeltaPx + "px"} />
+                    <InfoItem label="정차 지속 시간" value={incident.stoppedDurationSec + "초"} />
+                  </InfoGrid>
+                </DetailCard>
+                <DetailCard title="탐지 로그 및 판단 근거">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold leading-7 text-slate-600">
+                    <p>탐지 시각: <strong className="text-slate-900">{incident.detectedAt || "-"}</strong></p>
+                    <p>판단 근거: ROI 내 차량 움직임 변화량 {incident.movementDeltaPx}px, 정차 지속 {incident.stoppedDurationSec}초, 신뢰도 {formatConfidence(incident.confidence)}</p>
+                  </div>
+                </DetailCard>
+              </main>
+              <aside className="grid content-start gap-5 xl:sticky xl:top-24 xl:self-start">
+                <DetailCard title="상태 변경"><IncidentStatusChanger incidentId={incident.id} initialStatus={incident.status} /></DetailCard>
+                <DetailCard title="ITS 정보">
+                  <InfoGrid className="sm:grid-cols-1">
+                    <InfoItem label="날씨" value={incident.its?.weather} />
+                    <InfoItem label="교통량" value={incident.its?.trafficVolume} />
+                    <InfoItem label="순찰 예상" value={incident.its?.nearestPatrolEta} />
+                  </InfoGrid>
+                </DetailCard>
+                <DetailCard title="관리자 메모"><IncidentMemoBox memo={incident.memo} /></DetailCard>
+                <DetailCard title="AI 탐지 결과 요약">
+                  <InfoGrid className="sm:grid-cols-1">
+                    <InfoItem label="위험도" value={<RiskLevelBadge level={incident.riskLevel} />} />
+                    <InfoItem label="위험 점수" value={incident.riskScore} />
+                    <InfoItem label="AI 신뢰도" value={formatConfidence(incident.confidence)} />
+                    <InfoItem label="분석 Job" value={incident.analysis_job_id ?? incident.job_id} />
+                  </InfoGrid>
+                </DetailCard>
+              </aside>
+            </section>
+          </>
         ) : (
-          <Card className="p-5">
-            <p className="text-sm font-semibold text-slate-500">이벤트 상세 정보가 없습니다.</p>
-          </Card>
+          <Card className="p-8 text-center text-sm font-semibold text-slate-500">이벤트 상세 정보가 없습니다.</Card>
         )}
       </AppLayout>
     </RequireAuth>

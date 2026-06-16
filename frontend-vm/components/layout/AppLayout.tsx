@@ -20,7 +20,7 @@ import { RealtimePreviewToast } from "@/components/notifications/RealtimePreview
 import { Sidebar } from "./Sidebar";
 
 // 코드 설명: AppLayout 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-export function AppLayout({ title, children }: { title: string; children: ReactNode }) {
+export function AppLayout({ title, children, wide = false }: { title: string; children: ReactNode; wide?: boolean }) {
   // 코드 설명: [isMobileMenuOpen, setIsMobileMenuOpen] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   // 코드 설명: [previewEvent, setPreviewEvent] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
@@ -77,7 +77,7 @@ export function AppLayout({ title, children }: { title: string; children: ReactN
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#eef6ff_0,#f8fafc_280px,#f8fafc_100%)]">
       <Sidebar
         isMobileOpen={isMobileMenuOpen}
         onMobileClose={() => setIsMobileMenuOpen(false)}
@@ -90,7 +90,7 @@ export function AppLayout({ title, children }: { title: string; children: ReactN
           onRealtimePreviewClick={openRealtimePreview}
           isRealtimePreviewLoading={isPreviewLoading}
         />
-        <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-5">{children}</div>
+        <div className={`mx-auto w-full p-4 sm:p-6 ${wide ? "max-w-[1440px]" : "max-w-[1200px]"}`}>{children}</div>
       </main>
       {previewMessage ? (
         <div className="fixed right-4 top-20 z-[80] flex w-[min(420px,calc(100vw-2rem))] items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800 shadow-xl">

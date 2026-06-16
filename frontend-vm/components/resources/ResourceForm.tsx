@@ -17,6 +17,8 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
+import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
 // 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
@@ -221,19 +223,13 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireAuth>
-      <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 md:px-8">
-        <section className="mx-auto max-w-4xl">
-          <div className="mb-5">
-            <Link href={resourceId ? `/resources/${resourceId}` : "/resources"} className="inline-flex items-center gap-2 text-sm font-black text-slate-600 no-underline hover:text-slate-950">
-              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-              {resourceId ? "자료 상세로 돌아가기" : "자료실로 돌아가기"}
-            </Link>
-          </div>
-
-          <header className="mb-6">
-            <h1 className="text-2xl font-black text-slate-950">자료 {isEditMode ? "수정" : "등록"}</h1>
-            <p className="mt-2 text-sm font-semibold text-slate-500">프로젝트 문서, 발표자료, 회의록과 개인정보 포함 자료를 분류해 관리합니다.</p>
-          </header>
+      <AppLayout title={`자료 ${isEditMode ? "수정" : "등록"}`}>
+        <div className="mx-auto max-w-4xl">
+          <PageHeader
+            title={`자료 ${isEditMode ? "수정" : "등록"}`}
+            description="프로젝트 문서, 발표 자료, 회의록과 제한 자료를 분류해 관리합니다."
+            actions={<Link href={resourceId ? `/resources/${resourceId}` : "/resources"} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" aria-hidden="true" />돌아가기</Link>}
+          />
 
           {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
           {loading ? <Card className="p-10 text-center text-sm font-semibold text-slate-500">자료를 불러오는 중입니다.</Card> : null}
@@ -244,7 +240,7 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="grid gap-2">
                     <span className="text-xs font-black text-slate-500">카테고리</span>
-                    <select value={category} onChange={(event) => setCategory(event.target.value as ResourceCategory)} className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100">
+                    <select value={category} onChange={(event) => setCategory(event.target.value as ResourceCategory)} className="ui-field">
                       {resourceCategoryOptions.map((option) => <option key={option} value={option}>{resourceCategoryLabels[option]}</option>)}
                     </select>
                   </label>
@@ -263,13 +259,13 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
                   </label>
                   <label className="grid gap-2">
                     <span className="text-xs font-black text-slate-500">작성자</span>
-                    <input value={authorName} onChange={(event) => setAuthorName(event.target.value)} disabled={isEditMode} placeholder="미입력 시 서버 기본값 사용" className="h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 disabled:bg-slate-100" />
+                    <input value={authorName} onChange={(event) => setAuthorName(event.target.value)} disabled={isEditMode} placeholder="미입력 시 서버 기본값 사용" className="ui-field" />
                   </label>
                 </div>
 
                 <label className="grid gap-2">
                   <span className="text-xs font-black text-slate-500">설명</span>
-                  <textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} className="resize-none rounded-lg border border-slate-200 bg-white p-3 text-sm font-semibold leading-6 text-slate-700 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-100" />
+                  <textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} className="ui-field" />
                 </label>
 
                 <label className="grid gap-2">
@@ -283,14 +279,14 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
                 </label>
 
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                  <Link href={resourceId ? `/resources/${resourceId}` : "/resources"} className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-200 px-4 text-sm font-semibold text-slate-700 no-underline transition hover:bg-slate-50">취소</Link>
+                  <Link href={resourceId ? `/resources/${resourceId}` : "/resources"} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">취소</Link>
                   <Button type="submit" disabled={submitting}>{submitting ? `${isEditMode ? "수정" : "등록"} 중` : isEditMode ? "수정" : "등록"}</Button>
                 </div>
               </form>
             </Card>
           ) : null}
-        </section>
-      </main>
+        </div>
+      </AppLayout>
     </RequireAuth>
   );
 }
