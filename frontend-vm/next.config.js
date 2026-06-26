@@ -1,18 +1,9 @@
-/**
- * 파일 역할: Next.js 빌드 및 런타임 동작을 제어하는 프로젝트 설정입니다.
- * 유지보수 참고: 라우팅, 이미지, 빌드 옵션 변경은 전체 애플리케이션 배포 결과에 영향을 줄 수 있습니다.
- *
- * 브라우저의 동일 출처 요청을 Flask 또는 AI VM으로 전달하는 서버 내부 프록시입니다.
- * redirect가 아니므로 주소창은 바뀌지 않고 실제 사설 IP를 프론트에 직접 노출하지 않습니다.
- */
 const path = require("path");
 
-// 코드 설명: FLASK_API_BASE_URL 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const FLASK_API_BASE_URL =
   process.env.FLASK_API_BASE_URL ||
   "http://192.168.0.187:5000";
 
-// 코드 설명: AI_VM_BASE_URL 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const AI_VM_BASE_URL =
   process.env.AI_VM_BASE_URL ||
   "http://192.168.0.186:5001";
@@ -27,10 +18,8 @@ const nextConfig = {
   skipTrailingSlashRedirect: true,
 
   async rewrites() {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: [ { // 일반 인증, 게시판, 보고서, 돌발 상황 API를 Flask 백엔드로 전달합니다. source: "/backend-…
     return [
       {
-        // 일반 인증, 게시판, 보고서, 돌발 상황 API를 Flask 백엔드로 전달합니다.
         source: "/backend-api/:path*",
         destination: `${FLASK_API_BASE_URL.replace(/\/$/, "")}/:path*`,
       },
@@ -43,7 +32,6 @@ const nextConfig = {
         destination: `${FLASK_API_BASE_URL.replace(/\/$/, "")}/socket.io/:path*`,
       },
       {
-        // AI 추론 서버의 일반 HTTP API를 전달합니다.
         source: "/ai-vm/:path*",
         destination: `${AI_VM_BASE_URL.replace(/\/$/, "")}/:path*`,
       },
@@ -63,5 +51,4 @@ const nextConfig = {
   },
 };
 
-// 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: module.exports = nextConfig;
 module.exports = nextConfig;

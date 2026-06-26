@@ -1,15 +1,12 @@
-# 역할: FastAPI 요청 body를 검증하는 Pydantic 모델을 정의합니다.
 from pydantic import BaseModel
 from pydantic import Field
 
 
-# 로그인 요청의 ID와 비밀번호를 검증합니다.
 class LoginPayload(BaseModel):
     login_id: str = ""
     password: str = ""
 
 
-# 카메라 시작 요청의 스트림 URL과 FPS/버퍼 옵션을 검증합니다.
 class CameraStartPayload(BaseModel):
     source_url: str = Field(..., min_length=1)
     name: str | None = None
@@ -21,7 +18,6 @@ class CameraStartPayload(BaseModel):
     reconnect_backoff_seconds: float = Field(default=3.0, gt=0, le=60)
 
 
-# 수동 이벤트 생성 요청의 클립 시간과 이벤트 정보를 검증합니다.
 class ManualEventPayload(BaseModel):
     source_url: str | None = None
     name: str | None = None
@@ -34,6 +30,5 @@ class ManualEventPayload(BaseModel):
     analysis_fps: float = Field(default=0.2, ge=0, le=30)
 
 
-# ROI 좌표 저장 요청의 다각형 좌표를 검증합니다.
 class RoiSettingsPayload(BaseModel):
     rois: dict[str, list[list[float]]] = Field(default_factory=dict)

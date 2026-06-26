@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# AI VM systemd 서비스를 시작하고 상태/포트/health check를 확인하는 스크립트입니다.
 set -euo pipefail
 
 SERVICE="staccato-ai-server.service"
 
 echo "========== AI-VM START =========="
-# 서비스 파일 변경 가능성을 반영하고 이전 실패 상태를 정리한 뒤 서비스를 시작합니다.
 sudo systemctl daemon-reload
 sudo systemctl reset-failed "$SERVICE" 2>/dev/null || true
 sudo systemctl start "$SERVICE"
 
-# 서버가 포트를 열고 health endpoint가 응답할 시간을 잠시 줍니다.
 sleep 5
 
 echo
@@ -23,7 +20,6 @@ ss -ltnp | grep ':5001' || echo "ERROR: AI-vm 5001 is not listening"
 
 echo
 echo "========== HEALTH =========="
-# FastAPI health endpoint로 실제 응답 가능 여부를 확인합니다.
 curl --max-time 10 -sS http://localhost:5001/health || echo "AI-vm health check failed"
 
 echo

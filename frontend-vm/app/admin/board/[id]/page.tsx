@@ -1,37 +1,18 @@
-/**
- * 파일 역할: 관리자 / 게시판 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
- * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
- */
 "use client";
 
-// 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { FormEvent, use, useEffect, useState } from "react";
-// 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
-// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ArrowLeft, FileText, MessageSquare, Paperclip, Pencil, Reply, Trash2 } from "lucide-react";
-// 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
-// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
-// 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
-// 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
-// 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
-import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
-// 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { deleteBoardPost, getBoardPost } from "@/features/board/api";
-// 코드 설명: @/features/board/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { BoardPost } from "@/features/board/types";
-// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
-// 코드 설명: @/lib/authStorage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getStoredAuthUser } from "@/lib/authStorage";
-// 코드 설명: ../data 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   canDeletePost,
   canEditPost,
@@ -47,9 +28,7 @@ import {
   type BoardComment,
 } from "../data";
 
-// 코드 설명: createNowLabel 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function createNowLabel() {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", d…
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -60,7 +39,6 @@ function createNowLabel() {
   }).format(new Date());
 }
 
-// 코드 설명: CommentItem 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function CommentItem({
   comment,
   level = 0,
@@ -78,7 +56,6 @@ function CommentItem({
   onReplySubmit: (commentId: string) => void;
   onDelete: (commentId: string) => void;
 }) {
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className={level > 0 ? "ml-6 border-l-2 border-slate-100 pl-4" : ""}>
       <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
@@ -97,9 +74,7 @@ function CommentItem({
         {canReply && level === 0 ? (
           <form
             onSubmit={(event) => {
-              // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
               event.preventDefault();
-              // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: onReplySubmit(comment.id);
               onReplySubmit(comment.id);
             }}
             className="mt-4 grid gap-2"
@@ -125,139 +100,86 @@ function CommentItem({
   );
 }
 
-// 코드 설명: AdminBoardDetailPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function AdminBoardDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  // 코드 설명: { id } 비동기 라우트 매개변수 또는 React 리소스를 현재 렌더링 값으로 해제합니다.
   const { id } = use(params);
-  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
-  // 코드 설명: [post, setPost] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [post, setPost] = useState<BoardPost | null>(null);
-  // 코드 설명: [authUser, setAuthUser] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  // 코드 설명: [loading, setLoading] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loading, setLoading] = useState(true);
-  // 코드 설명: [errorMessage, setErrorMessage] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // 코드 설명: [comments, setComments] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [comments, setComments] = useState<BoardComment[]>(() => getBoardComments(id));
-  // 코드 설명: [commentText, setCommentText] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [commentText, setCommentText] = useState("");
-  // 코드 설명: [replyDrafts, setReplyDrafts] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
-  // 코드 설명: [deleting, setDeleting] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [deleting, setDeleting] = useState(false);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setAuthUser(getStoredAuthUser());
   }, []);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: disposed 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     let disposed = false;
 
-    // 코드 설명: loadPost 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
     async function loadPost() {
-      // 코드 설명: setLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoading(true);
-      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(null);
 
-      // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
       try {
-        // 코드 설명: nextPost 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
         const nextPost = await getBoardPost(id);
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: disposed
         if (disposed) return;
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: nextPost.post_status === "DELETED"
         if (nextPost.post_status === "DELETED") {
-          // 코드 설명: setPost 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setPost(null);
-          // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setErrorMessage("삭제된 게시글입니다.");
         } else {
-          // 코드 설명: setPost 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setPost(nextPost);
         }
       } catch (error) {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !disposed
         if (!disposed) setErrorMessage(error instanceof Error ? error.message : "게시글을 불러오지 못했습니다.");
       } finally {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !disposed
         if (!disposed) setLoading(false);
       }
     }
 
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadPost();
     loadPost();
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: () => { disposed = true; }
     return () => {
-      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: disposed = true;
       disposed = true;
     };
   }, [id]);
 
-  // 코드 설명: handleDelete 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function handleDelete() {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !post
     if (!post) return;
-    // 코드 설명: confirmed 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const confirmed = window.confirm("게시글을 삭제하시겠습니까?");
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !confirmed
     if (!confirmed) return;
 
-    // 코드 설명: setDeleting 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setDeleting(true);
-    // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setErrorMessage(null);
 
-    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
-      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await deleteBoardPost(post.id);
       await deleteBoardPost(post.id);
-      // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
       router.push("/admin/board");
     } catch (error) {
-      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(error instanceof Error ? error.message : "게시글 삭제에 실패했습니다.");
     } finally {
-      // 코드 설명: setDeleting 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setDeleting(false);
     }
   }
 
-  // 코드 설명: handleAddComment 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleAddComment(event: FormEvent<HTMLFormElement>) {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
     event.preventDefault();
-    // 코드 설명: content 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const content = commentText.trim();
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !content
     if (!content) return;
 
-    // 코드 설명: setComments 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setComments((current) => [...current, { id: `comment-local-${Date.now()}`, author: getBoardDisplayName(authUser), content, createdAt: createNowLabel(), replies: [] }]);
-    // 코드 설명: setCommentText 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setCommentText("");
   }
 
-  // 코드 설명: handleReplyChange 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleReplyChange(commentId: string, value: string) {
-    // 코드 설명: setReplyDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setReplyDrafts((current) => ({ ...current, [commentId]: value }));
   }
 
-  // 코드 설명: handleAddReply 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleAddReply(commentId: string) {
-    // 코드 설명: content 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const content = replyDrafts[commentId]?.trim();
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !content
     if (!content) return;
 
-    // 코드 설명: setComments 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setComments((current) =>
       current.map((comment) =>
         comment.id === commentId
@@ -265,19 +187,14 @@ export default function AdminBoardDetailPage({ params }: { params: Promise<{ id:
           : comment
       )
     );
-    // 코드 설명: setReplyDrafts 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setReplyDrafts((current) => ({ ...current, [commentId]: "" }));
   }
 
-  // 코드 설명: handleDeleteComment 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleDeleteComment(commentId: string) {
-    // 코드 설명: setComments 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setComments((current) => current.filter((comment) => comment.id !== commentId).map((comment) => ({ ...comment, replies: comment.replies.filter((reply) => reply.id !== commentId) })));
   }
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: loading
   if (loading) {
-    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
       <RequireAuth>
         <AppLayout title="관리자 게시판">
@@ -287,9 +204,7 @@ export default function AdminBoardDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !post
   if (!post) {
-    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
       <RequireAuth>
         <AppLayout title="관리자 게시판">
@@ -305,32 +220,37 @@ export default function AdminBoardDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  // 코드 설명: category 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const category = getBoardCategory(post.board_type);
-  // 코드 설명: attachments 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const attachments = getBoardAttachments(post.id);
-  // 코드 설명: editable 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const editable = canEditPost(post, authUser);
-  // 코드 설명: deletable 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const deletable = canDeletePost(post, authUser);
-  // 코드 설명: commentManageable 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const commentManageable = canManageComments(authUser);
-  // 코드 설명: commentWritable 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const commentWritable = canWriteComments(authUser);
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireAuth>
       <AppLayout title="관리자 게시판">
-        <PageHeader
-          title="게시글 상세"
-          description="게시글 내용과 첨부파일, 댓글을 확인합니다."
-          actions={<>
-            <Link href="/admin/board" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 text-sm font-bold text-white no-underline transition hover:bg-white/15"><ArrowLeft className="h-4 w-4" />게시글 목록</Link>
-            {editable ? <Link href={`/admin/board/${post.id}/edit`} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white no-underline transition hover:bg-blue-700"><Pencil className="h-4 w-4" />수정</Link> : null}
-            {deletable ? <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-300/40 bg-red-500/15 px-4 text-sm font-bold text-red-100 transition hover:bg-red-500/25 disabled:opacity-50"><Trash2 className="h-4 w-4" />삭제</button> : null}
-          </>}
-        />
+        <section className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <Link href="/admin/board" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-slate-950">
+              <ArrowLeft className="h-4 w-4" />
+              게시글 목록
+            </Link>
+            <h2 className="mt-3 text-2xl font-black text-slate-950">게시글 상세</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {editable ? (
+              <Link href={`/admin/board/${post.id}/edit`} className="no-underline">
+                <Button type="button" className="gap-2"><Pencil className="h-4 w-4" />수정</Button>
+              </Link>
+            ) : null}
+            {deletable ? (
+              <button type="button" onClick={handleDelete} disabled={deleting} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-200 px-4 text-sm font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">
+                <Trash2 className="h-4 w-4" />삭제
+              </button>
+            ) : null}
+          </div>
+        </section>
 
         {errorMessage ? <div className="mb-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div> : null}
 

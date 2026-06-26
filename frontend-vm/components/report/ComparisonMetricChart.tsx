@@ -1,50 +1,30 @@
-/**
- * 파일 역할: 보고서 영역에서 사용하는 ComparisonMetricChart UI 컴포넌트입니다.
- * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
- */
 "use client";
 
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useMemo, useState } from "react";
-// 코드 설명: recharts 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-// 코드 설명: ./comparisonTypes 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { ComparisonMetricKey, DisplayComparisonMetric } from "./comparisonTypes";
 
-// 코드 설명: ComparisonMetricChartProps 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type ComparisonMetricChartProps = {
   metrics: DisplayComparisonMetric[];
   jobIds: string[];
 };
 
-// 코드 설명: BAR_COLORS 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const BAR_COLORS = ["#dc2626", "#2563eb", "#d97706", "#059669", "#7c3aed"];
 
-// 코드 설명: ComparisonMetricChart 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function ComparisonMetricChart({ metrics, jobIds }: ComparisonMetricChartProps) {
-  // 코드 설명: [selectedMetricKey, setSelectedMetricKey] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [selectedMetricKey, setSelectedMetricKey] = useState<ComparisonMetricKey>(metrics[0]?.key ?? "avg_confidence");
-  // 코드 설명: selectedMetric 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const selectedMetric = metrics.find((metric) => metric.key === selectedMetricKey) ?? metrics[0];
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !metrics.some((metric) => metric.key === selectedMetricKey) && metrics[…
     if (!metrics.some((metric) => metric.key === selectedMetricKey) && metrics[0]) {
-      // 코드 설명: setSelectedMetricKey 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setSelectedMetricKey(metrics[0].key);
     }
   }, [metrics, selectedMetricKey]);
 
-  // 코드 설명: chartData 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const chartData = useMemo(() => {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !selectedMetric
     if (!selectedMetric) return [];
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: jobIds.map((jobId) => { const rawValue = selectedMetric.values[jobId]; …
     return jobIds.map((jobId) => {
-      // 코드 설명: rawValue 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const rawValue = selectedMetric.values[jobId];
-      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: { jobId: `Job ${jobId}`, value: rawValue === null || rawValue === undef…
       return {
         jobId: `Job ${jobId}`,
         value: rawValue === null || rawValue === undefined ? null : selectedMetric.type === "confidence" ? rawValue * 100 : rawValue,
@@ -52,10 +32,8 @@ export function ComparisonMetricChart({ metrics, jobIds }: ComparisonMetricChart
     });
   }, [jobIds, selectedMetric]);
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !selectedMetric
   if (!selectedMetric) return null;
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -65,9 +43,7 @@ export function ComparisonMetricChart({ metrics, jobIds }: ComparisonMetricChart
         </div>
         <div className="flex flex-wrap gap-2" role="group" aria-label="비교 지표 선택">
           {metrics.map((metric) => {
-            // 코드 설명: selected 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const selected = metric.key === selectedMetric.key;
-            // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
             return (
               <button
                 key={metric.key}

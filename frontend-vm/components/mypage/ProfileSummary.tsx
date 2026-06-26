@@ -1,32 +1,18 @@
-/**
- * 파일 역할: 마이페이지 영역에서 사용하는 ProfileSummary UI 컴포넌트입니다.
- * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
- */
 import type { AuthUser } from "@/features/auth/types";
-// 코드 설명: @/config/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getRoleLabel } from "@/config/navigation";
 
-// 코드 설명: getStatusLabel 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getStatusLabel(status?: string) {
-  // 코드 설명: normalizedStatus 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const normalizedStatus = status?.toUpperCase();
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: normalizedStatus === "ACTIVE"
   if (normalizedStatus === "ACTIVE") return "활성";
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: normalizedStatus === "PENDING"
   if (normalizedStatus === "PENDING") return "승인 대기";
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: normalizedStatus === "REJECTED"
   if (normalizedStatus === "REJECTED") return "승인 거절";
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: normalizedStatus === "DELETED"
   if (normalizedStatus === "DELETED") return "탈퇴";
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: status ?? "-"
   return status ?? "-";
 }
 
-// 코드 설명: ProfileSummary 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function ProfileSummary({ user }: { user: AuthUser | null }) {
-  // 코드 설명: rows 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const rows = [
     ["이름", user?.name ?? "-"],
     ["로그인 ID", user?.login_id ?? "-"],
@@ -37,7 +23,6 @@ export function ProfileSummary({ user }: { user: AuthUser | null }) {
     ["이메일 인증 여부", user?.is_email_verified || user?.email_verified_at ? "완료" : "미완료"],
   ];
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start gap-4">

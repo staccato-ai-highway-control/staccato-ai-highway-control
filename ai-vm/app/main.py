@@ -1,4 +1,3 @@
-# 역할: AI VM FastAPI 라우터를 정의하고 CCTV, 스트림, bbox, 이벤트, 리포트 분석 API를 제공합니다.
 import asyncio
 import os
 import uuid
@@ -57,7 +56,6 @@ app.add_middleware(
 )
 
 
-# 서비스 기본 정보와 사용 가능한 엔드포인트 목록을 반환합니다.
 @app.get("/")
 def index():
     return {
@@ -85,7 +83,6 @@ def index():
     }
 
 
-# 서버, 카메라, 스트림 상태를 확인하는 health check 응답을 반환합니다.
 @app.get("/health")
 def health():
     return {
@@ -110,14 +107,12 @@ DEFAULT_CCTV_SOURCE_NAMES = [
 ]
 
 
-# _parse_cctv_source_names 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _parse_cctv_source_names(value: str | None) -> list[str]:
     if not value:
         return []
     return [name.strip() for name in value.split(",") if name.strip()]
 
 
-# _selected_cctv_source_names 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _selected_cctv_source_names(source_names: str | None = None) -> list[str]:
     configured_names = _parse_cctv_source_names(source_names)
     if configured_names:
@@ -130,7 +125,6 @@ def _selected_cctv_source_names(source_names: str | None = None) -> list[str]:
     return DEFAULT_CCTV_SOURCE_NAMES
 
 
-# _filter_cctv_sources 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _filter_cctv_sources(
     cctv_list: list[dict],
     source_names: list[str],
@@ -172,7 +166,6 @@ def _filter_cctv_sources(
 
 
 
-# ITS CCTV 목록을 조회한 뒤 설정된 소스명 목록으로 필터링해 반환합니다.
 @app.get("/traffic/api/cctv")
 def traffic_cctv_api(
     min_x: str = Query(ITS_CCTV_DEFAULT_MIN_X, alias="minX"),
@@ -245,14 +238,12 @@ def traffic_cctv_api(
 
 
 
-# 내부 API 호출에 필요한 Bearer 토큰을 검증합니다.
 def require_internal_token(authorization: str = Header(default="")) -> None:
     expected = f"Bearer {INTERNAL_API_TOKEN}"
     if authorization != expected:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
-# 개발용 로그인 요청을 검증하고 액세스 토큰을 반환합니다.
 @app.post("/auth/login")
 def auth_login(payload: LoginPayload):
     login_id = payload.login_id.strip()
@@ -267,7 +258,6 @@ def auth_login(payload: LoginPayload):
     return get_dev_auth_response()
 
 
-# 현재 Bearer 토큰이 유효한지 확인하고 사용자 정보를 반환합니다.
 @app.get("/auth/me")
 def auth_me(authorization: str = Header(default="")):
     if authorization != expected_authorization_header():
@@ -279,7 +269,6 @@ def auth_me(authorization: str = Header(default="")):
     return get_dev_auth_response()
 
 
-# 실행 중인 카메라 워커 상태 목록을 반환합니다.
 @app.get("/internal/cameras")
 def internal_cameras(_auth: None = Depends(require_internal_token)):
     return {
@@ -288,7 +277,6 @@ def internal_cameras(_auth: None = Depends(require_internal_token)):
     }
 
 
-# 내부 API로 카메라 워커를 시작하거나 재사용합니다.
 @app.post("/internal/cameras/{camera_id}/start")
 def internal_camera_start(
     camera_id: str,
@@ -317,7 +305,6 @@ def internal_camera_start(
     }
 
 
-# 내부 API로 카메라 워커를 중지합니다.
 @app.post("/internal/cameras/{camera_id}/stop")
 def internal_camera_stop(
     camera_id: str,
@@ -333,7 +320,6 @@ def internal_camera_stop(
     }
 
 
-# 카메라별 현재 ROI 설정을 반환합니다.
 @app.get("/internal/cameras/{camera_id}/rois")
 def internal_camera_rois(
     camera_id: str,
@@ -348,7 +334,6 @@ def internal_camera_rois(
     }
 
 
-# 카메라별 ROI 설정을 검증 후 저장합니다.
 @app.put("/internal/cameras/{camera_id}/rois")
 def internal_camera_rois_update(
     camera_id: str,
@@ -369,7 +354,6 @@ def internal_camera_rois_update(
     }
 
 
-# 현재 프레임 기준으로 수동 이벤트 클립 생성을 요청합니다.
 @app.post("/internal/cameras/{camera_id}/manual-event")
 def internal_camera_manual_event(
     camera_id: str,
@@ -414,7 +398,6 @@ def internal_camera_manual_event(
     }
 
 
-# 최신 프레임 또는 캐시된 결과로 탐지 결과를 반환합니다.
 @app.get("/internal/cameras/{camera_id}/detections")
 def internal_camera_detections(
     camera_id: str,
@@ -467,7 +450,6 @@ def internal_camera_detections(
     }
 
 
-# 프론트엔드에 최신 bbox 메타데이터를 주기적으로 전송합니다.
 @app.websocket("/ws/cameras/{camera_id}/bbox")
 async def camera_bbox_websocket(camera_id: str, websocket: WebSocket):
     if not is_analyzed_camera(camera_id):
@@ -492,7 +474,6 @@ async def camera_bbox_websocket(camera_id: str, websocket: WebSocket):
         return
 
 
-# 카메라를 필요 시 시작하고 MJPEG 스트림 응답을 반환합니다.
 @app.get("/streams/{camera_id}.mjpeg")
 def camera_mjpeg_stream(
     camera_id: str,
@@ -548,7 +529,6 @@ def camera_mjpeg_stream(
     )
 
 
-# 카메라의 최신 프레임을 JPEG 스냅샷으로 반환합니다.
 @app.get("/snapshots/{camera_id}/latest.jpg")
 def camera_latest_snapshot(
     camera_id: str,
@@ -569,7 +549,6 @@ def camera_latest_snapshot(
     )
 
 
-# 저장된 이벤트 스냅샷 이미지를 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.jpg")
 def event_snapshot(event_id: str):
     path = EVENT_MEDIA_DIR / "snapshots" / f"{_safe_event_id(event_id)}.jpg"
@@ -582,7 +561,6 @@ def event_snapshot(event_id: str):
     )
 
 
-# 저장된 이벤트 재생 영상을 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.mp4")
 def event_video(event_id: str):
     path = EVENT_MEDIA_DIR / "videos" / f"{_safe_event_id(event_id)}.mp4"
@@ -602,7 +580,6 @@ REPORT_ANALYSIS_MEDIA_DIR = Path(
 AI_PUBLIC_BASE_URL = os.getenv("AI_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
 
 
-# _safe_report_analysis_filename 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _safe_report_analysis_filename(filename: str) -> str:
     safe_filename = "".join(
         char for char in filename if char.isalnum() or char in {"_", "-", "."}
@@ -612,7 +589,6 @@ def _safe_report_analysis_filename(filename: str) -> str:
     return safe_filename
 
 
-# 리포트 분석용으로 생성된 이미지/영상을 파일 응답으로 제공합니다.
 @app.get("/report-analysis/{filename}")
 def report_analysis_media(filename: str):
     safe_filename = _safe_report_analysis_filename(filename)
@@ -634,7 +610,6 @@ def report_analysis_media(filename: str):
     )
 
 
-# _report_analysis_box_color 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _report_analysis_box_color(detection: dict) -> tuple[int, int, int]:
     box_color = str(detection.get("box_color") or "").lower()
     risk_level = str(detection.get("risk_level") or "").upper()
@@ -649,7 +624,6 @@ def _report_analysis_box_color(detection: dict) -> tuple[int, int, int]:
     return (0, 255, 0)  # OpenCV BGR green
 
 
-# _save_report_analysis_annotated_image 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _save_report_analysis_annotated_image(
     report_id: str,
     frame,
@@ -709,7 +683,6 @@ def _save_report_analysis_annotated_image(
     return f"{AI_PUBLIC_BASE_URL}/report-analysis/{filename}"
 
 
-# _draw_report_analysis_detections 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
     import cv2
 
@@ -748,7 +721,6 @@ def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
         )
 
 
-# _transcode_report_analysis_video_to_h264 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _transcode_report_analysis_video_to_h264(input_path: Path, output_path: Path) -> bool:
     import subprocess
 
@@ -781,7 +753,6 @@ def _transcode_report_analysis_video_to_h264(input_path: Path, output_path: Path
         return False
 
 
-# _save_report_analysis_annotated_video 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _save_report_analysis_annotated_video(
     source_path: Path,
     report_id: str,
@@ -888,13 +859,11 @@ def _save_report_analysis_annotated_video(
     return f"{AI_PUBLIC_BASE_URL}/report-analysis/{raw_filename}"
 
 
-# FastAPI 종료 시 모든 카메라 워커를 정리합니다.
 @app.on_event("shutdown")
 def shutdown_camera_workers():
     camera_registry.stop_all()
 
 
-# _safe_event_id 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _safe_event_id(event_id: str) -> str:
     safe_id = "".join(char for char in event_id if char.isalnum() or char in {"_", "-"})
     if not safe_id:
@@ -902,14 +871,12 @@ def _safe_event_id(event_id: str) -> str:
     return safe_id
 
 
-# _effective_analysis_fps 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _effective_analysis_fps(camera_id: str, requested_analysis_fps: float) -> float:
     if not is_analyzed_camera(camera_id):
         return 0.0
     return requested_analysis_fps
 
 
-# _latest_empty_bbox_metadata 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
     worker = camera_registry.get_camera(camera_id)
     if worker is None:
@@ -918,7 +885,6 @@ def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
     return worker.get_latest_empty_bbox_metadata()
 
 
-# Flask 리포트 분석 연동을 위해 업로드 이미지/영상에서 YOLO 탐지를 수행합니다.
 @app.post("/detect")
 async def detect_legacy_report_file(
     file: UploadFile = File(...),

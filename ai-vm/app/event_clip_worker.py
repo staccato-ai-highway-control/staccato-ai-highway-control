@@ -1,5 +1,4 @@
 from __future__ import annotations
-# 역할: 이벤트 발생 전후 프레임을 모아 스냅샷과 재생 영상을 생성하고 외부 서버로 전송합니다.
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,7 +28,6 @@ from .ring_buffer import FrameSnapshot, RingBuffer
 VIDEO_CODEC_FALLBACKS = ("avc1", "H264", "mp4v")
 
 
-# 이벤트 발생 후 아직 post 프레임을 모으는 중인 클립 상태입니다.
 @dataclass
 class _ActiveClip:
     event: dict[str, Any]
@@ -39,7 +37,6 @@ class _ActiveClip:
     post_frames: list[FrameSnapshot] = field(default_factory=list)
 
 
-# 백그라운드 writer 스레드가 파일로 저장할 클립 작업입니다.
 @dataclass
 class _ClipWriteJob:
     event: dict[str, Any]
@@ -47,9 +44,7 @@ class _ClipWriteJob:
     frames: list[FrameSnapshot]
 
 
-# 이벤트 스냅샷/영상 파일을 만들고 완성된 이벤트를 릴레이합니다.
 class EventClipWorker:
-    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         camera_id: str,
@@ -86,7 +81,6 @@ class EventClipWorker:
         self.snapshot_dir.mkdir(parents=True, exist_ok=True)
         self.video_dir.mkdir(parents=True, exist_ok=True)
 
-    # 백그라운드 작업 스레드를 시작합니다.
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -99,14 +93,12 @@ class EventClipWorker:
         )
         self._thread.start()
 
-    # 백그라운드 작업을 멈추고 관련 리소스를 정리합니다.
     def stop(self, join_timeout: float = 3.0) -> None:
         self._stop_event.set()
         self._finalize_all_active()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=join_timeout)
 
-    # enqueue_event 기능을 수행하는 함수입니다.
     def enqueue_event(
         self,
         event: dict[str, Any],
@@ -143,7 +135,6 @@ class EventClipWorker:
         ):
             self._finalize_ready_clips(latest_buffered_timestamp)
 
-    # on_frame 기능을 수행하는 함수입니다.
     def on_frame(self, frame: np.ndarray, timestamp: datetime) -> None:
         ready: list[_ActiveClip] = []
         snapshot = FrameSnapshot(timestamp=timestamp, frame=frame.copy())
@@ -165,7 +156,6 @@ class EventClipWorker:
         for clip in ready:
             self._enqueue_write_job(clip)
 
-    # 모니터링/API 응답에 쓰는 현재 상태 payload를 만듭니다.
     def to_status_payload(self) -> dict[str, Any]:
         with self._active_lock:
             active_count = len(self._active_clips)
@@ -182,7 +172,6 @@ class EventClipWorker:
             "relay": self.relay_client.to_status_payload(),
         }
 
-    # _write_loop 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _write_loop(self) -> None:
         while not self._stop_event.is_set() or not self._write_queue.empty():
             try:
@@ -199,7 +188,6 @@ class EventClipWorker:
                 self.last_error = str(error)
                 self.relay_client.send_event(job.event)
 
-    # _write_clip 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _write_clip(self, job: _ClipWriteJob) -> dict[str, Any]:
         frames = self._dedupe_frames(job.frames)
         if not frames:
@@ -229,7 +217,6 @@ class EventClipWorker:
         self.last_error = None
         return event
 
-    # _write_video 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _write_video(
         self,
         video_path: Path,
@@ -270,7 +257,6 @@ class EventClipWorker:
         h264_tmp_path.replace(video_path)
         raw_video_path.unlink(missing_ok=True)
 
-    # _transcode_to_browser_mp4 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _transcode_to_browser_mp4(self, input_path: Path, output_path: Path) -> None:
         command = [
             "ffmpeg",
@@ -305,7 +291,6 @@ class EventClipWorker:
             error_message = (completed.stderr or completed.stdout or "unknown ffmpeg error").strip()
             raise RuntimeError(f"Failed to transcode event clip to H.264: {error_message}")
 
-    # _open_video_writer 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _open_video_writer(self, video_path: Path, width: int, height: int) -> cv2.VideoWriter:
         for codec in VIDEO_CODEC_FALLBACKS:
             writer = cv2.VideoWriter(
@@ -321,7 +306,6 @@ class EventClipWorker:
 
         raise RuntimeError(f"Failed to open VideoWriter for {video_path}")
 
-    # _select_clip_frames 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _select_clip_frames(
         self,
         frames: list[FrameSnapshot],
@@ -339,7 +323,6 @@ class EventClipWorker:
             <= effective_post_seconds
         ]
 
-    # _finalize_ready_clips 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _finalize_ready_clips(self, timestamp: datetime) -> None:
         ready: list[_ActiveClip] = []
         with self._active_lock:
@@ -355,7 +338,6 @@ class EventClipWorker:
         for clip in ready:
             self._enqueue_write_job(clip)
 
-    # _finalize_all_active 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _finalize_all_active(self) -> None:
         with self._active_lock:
             clips = self._active_clips
@@ -364,7 +346,6 @@ class EventClipWorker:
         for clip in clips:
             self._enqueue_write_job(clip)
 
-    # _enqueue_write_job 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _enqueue_write_job(self, clip: _ActiveClip) -> None:
         frames = clip.pre_frames + clip.post_frames
         try:
@@ -379,7 +360,6 @@ class EventClipWorker:
             self.failed_clips += 1
             self.last_error = "Event clip write queue is full; dropped clip job."
 
-    # _dedupe_frames 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _dedupe_frames(frames: list[FrameSnapshot]) -> list[FrameSnapshot]:
         deduped: list[FrameSnapshot] = []
@@ -392,7 +372,6 @@ class EventClipWorker:
             seen.add(key)
         return deduped
 
-    # _nearest_frame 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _nearest_frame(
         frames: list[FrameSnapshot],
@@ -403,7 +382,6 @@ class EventClipWorker:
             key=lambda item: abs((item.timestamp - timestamp).total_seconds()),
         )
 
-    # _safe_event_id 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _safe_event_id(event_id: str) -> str:
         return "".join(

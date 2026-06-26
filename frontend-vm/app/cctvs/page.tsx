@@ -1,35 +1,18 @@
-/**
- * 파일 역할: CCTV 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
- * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
- */
 "use client";
 
-// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RefreshCw } from "lucide-react";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useMemo, useState } from "react";
-// 코드 설명: @/components/auth/RequireAuth 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireAuth } from "@/components/auth/RequireAuth";
-// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
-// 코드 설명: @/components/cctv/BboxDetectionOverlay 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { BboxDetectionOverlay } from "@/components/cctv/BboxDetectionOverlay";
-// 코드 설명: @/components/cctv/CctvCard 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { CctvFrame, statusLabels } from "@/components/cctv/CctvCard";
-// 코드 설명: @/components/cctv/CctvDetailModal 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { CctvDetailModal } from "@/components/cctv/CctvDetailModal";
-// 코드 설명: @/components/cctv/RoiSettingsModal 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RoiSettingsModal } from "@/components/cctv/RoiSettingsModal";
-// 코드 설명: @/features/cctvs/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getCameras, type CameraSlotConfig } from "@/features/cctvs/api";
-// 코드 설명: @/types/cctv 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Cctv } from "@/types/cctv";
 
-// 코드 설명: getCameraLabel 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getCameraLabel(cctv: Cctv, index: number) {
-  // 코드 설명: raw 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const raw = cctv as Cctv & Record<string, unknown>;
-  // 코드 설명: primary 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const primary =
     cctv.name ||
     String(raw.location_name ?? "") ||
@@ -37,35 +20,23 @@ function getCameraLabel(cctv: Cctv, index: number) {
     String(raw.road_name ?? "") ||
     cctv.roadName ||
     cctv.id;
-  // 코드 설명: roadName 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const roadName = cctv.roadName && cctv.roadName !== "-" ? cctv.roadName : String(raw.road_name ?? "");
-  // 코드 설명: direction 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const direction = cctv.direction && cctv.direction !== "-" ? cctv.direction : "";
-  // 코드 설명: detail 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const detail = [roadName, direction].filter(Boolean).join(" ");
-  // 코드 설명: label 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const label = detail && !String(primary).includes(detail) ? `${primary} - ${detail}` : primary;
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `카메라 ${index + 1} - ${label}`
   return `카메라 ${index + 1} - ${label}`;
 }
 
-// 코드 설명: getStatusBadgeClass 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getStatusBadgeClass(status: Cctv["status"]) {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: status === "OFFLINE"
   if (status === "OFFLINE") return "border-red-300 text-red-600";
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: status === "MAINTENANCE"
   if (status === "MAINTENANCE") return "border-yellow-300 text-yellow-600";
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-emerald-300 text-emerald-600"
   return "border-emerald-300 text-emerald-600";
 }
 
-// 코드 설명: createSingleSlotConfig 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function createSingleSlotConfig(cctv: Cctv | null): CameraSlotConfig[] {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !cctv
   if (!cctv) return [];
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: [ { slotNumber: 1, cctvId: cctv.id, cctvName: cctv.cctvCode || cctv.nam…
   return [
     {
       slotNumber: 1,
@@ -76,83 +47,52 @@ function createSingleSlotConfig(cctv: Cctv | null): CameraSlotConfig[] {
   ];
 }
 
-// 코드 설명: CctvsPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function CctvsPage() {
-  // 코드 설명: [selectedCctvId, setSelectedCctvId] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [selectedCctvId, setSelectedCctvId] = useState<string>("");
-  // 코드 설명: [selectedDetailCctv, setSelectedDetailCctv] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [selectedDetailCctv, setSelectedDetailCctv] = useState<Cctv | null>(null);
-  // 코드 설명: [cctvs, setCctvs] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [cctvs, setCctvs] = useState<Cctv[]>([]);
-  // 코드 설명: [isLoading, setIsLoading] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isLoading, setIsLoading] = useState(true);
-  // 코드 설명: [errorMessage, setErrorMessage] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  // 코드 설명: [isRoiSettingsOpen, setIsRoiSettingsOpen] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isRoiSettingsOpen, setIsRoiSettingsOpen] = useState(false);
-  // 코드 설명: [isStreamReady, setIsStreamReady] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isStreamReady, setIsStreamReady] = useState(false);
 
-  // 코드 설명: loadCctvData 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadCctvData() {
-    // 코드 설명: setIsLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setIsLoading(true);
-    // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setErrorMessage(null);
 
-    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
-      // 코드 설명: nextCctvs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const nextCctvs = await getCameras({ limit: 8 });
-      // 코드 설명: setCctvs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setCctvs(nextCctvs);
-      // 코드 설명: setSelectedCctvId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setSelectedCctvId((currentId) => {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: nextCctvs.length === 0
         if (nextCctvs.length === 0) return "";
-        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: nextCctvs.some((cctv) => cctv.id === currentId) ? currentId : nextCctvs…
         return nextCctvs.some((cctv) => cctv.id === currentId) ? currentId : nextCctvs[0].id;
       });
     } catch (error) {
-      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(error instanceof Error ? error.message : "CCTV 정보를 불러오지 못했습니다.");
-      // 코드 설명: setCctvs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setCctvs([]);
-      // 코드 설명: setSelectedCctvId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setSelectedCctvId("");
     } finally {
-      // 코드 설명: setIsLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsLoading(false);
     }
   }
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadCctvData();
     loadCctvData();
   }, []);
 
-  // 코드 설명: selectedCctv 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const selectedCctv = useMemo(() => {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: cctvs.find((cctv) => cctv.id === selectedCctvId) ?? cctvs[0] ?? null
     return cctvs.find((cctv) => cctv.id === selectedCctvId) ?? cctvs[0] ?? null;
   }, [cctvs, selectedCctvId]);
 
-  // 코드 설명: selectedCctvIndex 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const selectedCctvIndex = selectedCctv ? cctvs.findIndex((cctv) => cctv.id === selectedCctv.id) : -1;
-  // 코드 설명: roiSlotConfig 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const roiSlotConfig = useMemo(() => createSingleSlotConfig(selectedCctv), [selectedCctv]);
-  // 코드 설명: isMainStreamVisible 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const isMainStreamVisible = Boolean(selectedCctv && !isRoiSettingsOpen);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: setIsStreamReady 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setIsStreamReady(false);
   }, [selectedCctv?.streamUrl, isMainStreamVisible]);
 
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireAuth>
       <AppLayout title="CCTV 관제">
@@ -274,10 +214,8 @@ export default function CctvsPage() {
               </div>
               <div className="grid max-h-[520px] gap-2 overflow-y-auto pr-1">
                 {cctvs.map((cctv, index) => {
-                  // 코드 설명: isSelected 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
                   const isSelected = cctv.id === selectedCctv.id;
 
-                  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
                   return (
                     <button
                       key={cctv.id}

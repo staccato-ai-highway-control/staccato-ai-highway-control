@@ -1,34 +1,18 @@
-/**
- * 파일 역할: 관리자 / signup-requests 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
- * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
- */
 "use client";
 
-// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Eye, UserCheck, UserX, X } from "lucide-react";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useMemo, useState } from "react";
-// 코드 설명: @/components/auth/RequireSuperAdmin 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
-// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
-// 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
-// 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Button } from "@/components/common/Button";
-// 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
-// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser, UserRole } from "@/features/auth/types";
-// 코드 설명: @/features/admin/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { approveSignupRequest, getSignupRequests, rejectSignupRequest } from "@/features/admin/api";
-// 코드 설명: @/lib/authStorage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getStoredAuthUser } from "@/lib/authStorage";
 
-// 코드 설명: SignupRequestStatus 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type SignupRequestStatus = "REQUESTED" | "APPROVED" | "REJECTED" | "CANCELLED";
 
-// 코드 설명: SignupRequestApiItem 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type SignupRequestApiItem = {
   id: number;
   request_status: SignupRequestStatus;
@@ -42,12 +26,10 @@ type SignupRequestApiItem = {
   } | null;
 };
 
-// 코드 설명: SignupRequestsApiResponse 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type SignupRequestsApiResponse = {
   data: SignupRequestApiItem[];
 };
 
-// 코드 설명: AdminSignupRequest 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type AdminSignupRequest = {
   id: number;
   name: string;
@@ -59,7 +41,6 @@ type AdminSignupRequest = {
   requestedAt: string;
 };
 
-// 코드 설명: statusLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const statusLabels: Record<SignupRequestStatus, string> = {
   REQUESTED: "승인 대기",
   APPROVED: "승인 완료",
@@ -67,7 +48,6 @@ const statusLabels: Record<SignupRequestStatus, string> = {
   CANCELLED: "취소",
 };
 
-// 코드 설명: statusTone 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const statusTone: Record<SignupRequestStatus, "amber" | "green" | "red" | "slate"> = {
   REQUESTED: "amber",
   APPROVED: "green",
@@ -75,7 +55,6 @@ const statusTone: Record<SignupRequestStatus, "amber" | "green" | "red" | "slate
   CANCELLED: "slate",
 };
 
-// 코드 설명: roleLabels 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const roleLabels: Record<UserRole, string> = {
   SUPER_ADMIN: "최고 관리자",
   AUTH_ADMIN: "인증 관리자",
@@ -85,118 +64,79 @@ const roleLabels: Record<UserRole, string> = {
   VIEWER: "일반 조회 계정",
 };
 
-// 코드 설명: SignupRequestsPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function SignupRequestsPage() {
-  // 코드 설명: [authUser, setAuthUser] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  // 코드 설명: [requests, setRequests] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [requests, setRequests] = useState<AdminSignupRequest[]>([]);
-  // 코드 설명: [selectedRequestId, setSelectedRequestId] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
-  // 코드 설명: [isLoading, setIsLoading] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isLoading, setIsLoading] = useState(true);
-  // 코드 설명: [actionRequestId, setActionRequestId] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [actionRequestId, setActionRequestId] = useState<number | null>(null);
-  // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
 
-  // 코드 설명: selectedRequest 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const selectedRequest = useMemo(() => {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !selectedRequestId
     if (!selectedRequestId) return null;
 
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: requests.find((request) => request.id === selectedRequestId) ?? null
     return requests.find((request) => request.id === selectedRequestId) ?? null;
   }, [requests, selectedRequestId]);
 
-  // 코드 설명: loadSignupRequests 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function loadSignupRequests() {
-    // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setErrorMessage("");
-    // 코드 설명: setIsLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setIsLoading(true);
 
-    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
-      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getSignupRequests("REQUESTED");
-      // 코드 설명: nextRequests 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const nextRequests = response.map(mapSignupRequest);
 
-      // 코드 설명: setRequests 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setRequests(nextRequests);
-      // 코드 설명: setSelectedRequestId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setSelectedRequestId((currentId) => {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: currentId && nextRequests.some((request) => request.id === currentId)
         if (currentId && nextRequests.some((request) => request.id === currentId)) {
-          // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: currentId
           return currentId;
         }
 
-        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: null
         return null;
       });
     } catch (error) {
-      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "회원가입 신청 목록을 불러오지 못했습니다."
       );
     } finally {
-      // 코드 설명: setIsLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setIsLoading(false);
     }
   }
 
-  // 코드 설명: updateRequestStatus 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   async function updateRequestStatus(id: number, status: Extract<SignupRequestStatus, "APPROVED" | "REJECTED">) {
-    // 코드 설명: setActionRequestId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setActionRequestId(id);
 
-    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
-      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: status === "APPROVED"
       if (status === "APPROVED") {
-        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await approveSignupRequest(id);
         await approveSignupRequest(id);
       } else {
-        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await rejectSignupRequest(id, "관리자 거절");
         await rejectSignupRequest(id, "관리자 거절");
       }
 
-      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await loadSignupRequests();
       await loadSignupRequests();
     } catch (error) {
-      // 코드 설명: message 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const message = error instanceof Error ? error.message : "신청 상태 변경에 실패했습니다.";
-      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(
         message === "Target user not found."
           ? "신청 정보와 연결된 사용자 계정을 찾을 수 없습니다. 운영 DB의 사용자 연결 상태를 확인해 주세요."
           : message
       );
     } finally {
-      // 코드 설명: setActionRequestId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setActionRequestId(null);
     }
   }
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setAuthUser(getStoredAuthUser());
   }, []);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: authUser?.role !== "SUPER_ADMIN"
     if (authUser?.role !== "SUPER_ADMIN") return;
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadSignupRequests();
     loadSignupRequests();
   }, [authUser?.role]);
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireSuperAdmin title="사용자 승인 관리">
       <AppLayout title="사용자 승인 관리">
@@ -358,9 +298,7 @@ export default function SignupRequestsPage() {
   );
 }
 
-// 코드 설명: mapSignupRequest 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function mapSignupRequest(item: SignupRequestApiItem): AdminSignupRequest {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: { id: item.id, name: item.user?.name ?? "-", email: item.user?.email ??…
   return {
     id: item.id,
     name: item.user?.name ?? "-",
@@ -373,27 +311,19 @@ function mapSignupRequest(item: SignupRequestApiItem): AdminSignupRequest {
   };
 }
 
-// 코드 설명: isVisibleRequestReason 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function isVisibleRequestReason(reason: string) {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: reason !== "-" && !reason.toLowerCase().includes("pytest")
   return reason !== "-" && !reason.toLowerCase().includes("pytest");
 }
 
-// 코드 설명: formatDate 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatDate(value?: string | null) {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !value
   if (!value) return "-";
 
-  // 코드 설명: date 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const date = new Date(value);
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: Number.isNaN(date.getTime())
   if (Number.isNaN(date.getTime())) {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: value
     return value;
   }
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Intl.DateTimeFormat("ko-KR", { year: "numeric", month: "2-digit", d…
   return new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
     month: "2-digit",

@@ -1,93 +1,61 @@
-/**
- * 파일 역할: 보고서 영역에서 사용하는 ReportFilePreview UI 컴포넌트입니다.
- * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
- */
 "use client";
 
-// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { File as FileIcon, RefreshCw, Trash2, Upload } from "lucide-react";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { KeyboardEvent, MouseEvent } from "react";
-// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useState } from "react";
 
-// 코드 설명: PreviewItem 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type PreviewItem = {
   file: File;
   url: string;
   kind: "image" | "video" | "file";
 };
 
-// 코드 설명: ReportFilePreviewProps 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type ReportFilePreviewProps = {
   files?: File[];
   onSelectFiles: () => void;
   onRemoveFile?: (index: number) => void;
 };
 
-// 코드 설명: getFileKind 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getFileKind(file: File): PreviewItem["kind"] {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: file.type.startsWith("image/")
   if (file.type.startsWith("image/")) return "image";
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: file.type.startsWith("video/")
   if (file.type.startsWith("video/")) return "video";
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "file"
   return "file";
 }
 
-// 코드 설명: formatFileSize 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatFileSize(size: number) {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: size < 1024
   if (size < 1024) return `${size} B`;
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: size < 1024 * 1024
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${(size / 1024 / 1024).toFixed(1)} MB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// 코드 설명: ReportFilePreview 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function ReportFilePreview({ files = [], onSelectFiles, onRemoveFile }: ReportFilePreviewProps) {
-  // 코드 설명: [previews, setPreviews] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [previews, setPreviews] = useState<PreviewItem[]>([]);
 
-  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: nextPreviews 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const nextPreviews = files.map((file) => ({
       file,
       url: URL.createObjectURL(file),
       kind: getFileKind(file),
     }));
 
-    // 코드 설명: setPreviews 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setPreviews(nextPreviews);
 
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: () => { nextPreviews.forEach((item) => URL.revokeObjectURL(item.url)); }
     return () => {
-      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: nextPreviews.forEach((item) => URL.revokeObjectURL(item.url));
       nextPreviews.forEach((item) => URL.revokeObjectURL(item.url));
     };
   }, [files]);
 
-  // 코드 설명: handlePreviewKeyDown 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handlePreviewKeyDown(event: KeyboardEvent<HTMLElement>) {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.key !== "Enter" && event.key !== " "
     if (event.key !== "Enter" && event.key !== " ") return;
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.preventDefault();
     event.preventDefault();
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: onSelectFiles();
     onSelectFiles();
   }
 
-  // 코드 설명: stopPreviewClick 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function stopPreviewClick(event: MouseEvent<HTMLElement>) {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.stopPropagation();
     event.stopPropagation();
   }
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: previews.length === 0
   if (previews.length === 0) {
-    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
       <section
         role="button"
@@ -116,7 +84,6 @@ export function ReportFilePreview({ files = [], onSelectFiles, onRemoveFile }: R
     );
   }
 
-  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -165,9 +132,7 @@ export function ReportFilePreview({ files = [], onSelectFiles, onRemoveFile }: R
                   type="button"
                   aria-label={`${item.file.name} 삭제`}
                   onClick={(event) => {
-                    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: event.stopPropagation();
                     event.stopPropagation();
-                    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: onRemoveFile(index);
                     onRemoveFile(index);
                   }}
                   onKeyDown={(event) => event.stopPropagation()}

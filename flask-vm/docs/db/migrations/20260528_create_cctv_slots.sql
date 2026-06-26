@@ -1,5 +1,3 @@
--- CCTV 대시보드의 고정 슬롯 1~4를 저장하는 테이블을 생성합니다.
--- cctv가 삭제되어도 화면 배치 자체는 유지하도록 외래 키를 NULL로 전환합니다.
 CREATE TABLE IF NOT EXISTS cctv_slots (
     slot_number INT NOT NULL AUTO_INCREMENT,
     cctv_id BIGINT NULL,
@@ -15,7 +13,6 @@ CREATE TABLE IF NOT EXISTS cctv_slots (
         ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 재실행 시 기존 CCTV 배정은 보존하고 기본 표시 이름만 최신값으로 맞춥니다.
 INSERT INTO cctv_slots (slot_number, cctv_id, cctv_code, display_name, layout_json, created_at, updated_at)
 VALUES
     (1, NULL, NULL, 'Slot 1', NULL, NOW(), NULL),

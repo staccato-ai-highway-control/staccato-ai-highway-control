@@ -1,5 +1,4 @@
 from __future__ import annotations
-# 역할: 차량 이동량과 ROI를 기반으로 정차/갓길 정차 이벤트를 판정합니다.
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -33,7 +32,6 @@ from .detector import Detection
 from .roi_config import get_camera_rois
 
 
-# 이전 프레임에서 추적 중인 차량의 위치 상태입니다.
 @dataclass
 class _TrackState:
     track_id: int
@@ -43,7 +41,6 @@ class _TrackState:
     last_frame_id: int
 
 
-# 현재 프레임 탐지와 매칭된 track_id, ROI 정보를 묶습니다.
 @dataclass(frozen=True)
 class _TrackedDetection:
     detection: Detection
@@ -52,9 +49,7 @@ class _TrackedDetection:
     roi_ids: list[str]
 
 
-# 차량별 이동 이력과 ROI를 이용해 정차 이벤트를 생성합니다.
 class EventDetector:
-    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         camera_id: str,
@@ -76,7 +71,6 @@ class EventDetector:
         self.generated_events = 0
         self.last_event_at: datetime | None = None
 
-    # update 기능을 수행하는 함수입니다.
     def update(
         self,
         *,
@@ -159,7 +153,6 @@ class EventDetector:
         self._purge_stale_tracks(frame_id)
         return events
 
-    # 모니터링/API 응답에 쓰는 현재 상태 payload를 만듭니다.
     def to_status_payload(self) -> dict[str, Any]:
         return {
             "active_tracks": len(self._tracks),
@@ -167,7 +160,6 @@ class EventDetector:
             "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
         }
 
-    # _assign_tracks 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _assign_tracks(
         self,
         detections: list[Detection],
@@ -210,7 +202,6 @@ class EventDetector:
 
         return tracked
 
-    # _nearest_track_id 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _nearest_track_id(
         self,
         center: tuple[float, float],
@@ -230,7 +221,6 @@ class EventDetector:
 
         return nearest_track_id
 
-    # _purge_stale_tracks 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _purge_stale_tracks(self, frame_id: int) -> None:
         stale_track_ids = [
             track_id
@@ -242,7 +232,6 @@ class EventDetector:
             self._track_history.pop(track_id, None)
             self._slow_started_at.pop(track_id, None)
 
-    # _roi_ids_for_point 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _roi_ids_for_point(
         self,
         center: tuple[float, float],
@@ -267,7 +256,6 @@ class EventDetector:
 
         return roi_ids
 
-    # _can_emit 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _can_emit(
         self,
         track_id: int,
@@ -292,7 +280,6 @@ class EventDetector:
         self._last_event_at[track_key] = timestamp
         return True
 
-    # _build_event 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _build_event(
         self,
         *,
@@ -332,7 +319,6 @@ class EventDetector:
             "stream_url": f"{base_url}/streams/{self.camera_id}.mjpeg",
         }
 
-    # _is_stopped_candidate_size_ok 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _is_stopped_candidate_size_ok(bbox: list[float]) -> bool:
         try:
@@ -350,20 +336,17 @@ class EventDetector:
             and area >= EVENT_STOPPED_MIN_BBOX_AREA
         )
 
-    # _event_type_for_rois 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _event_type_for_rois(roi_ids: list[str]) -> str:
         if "LEFT_SHOULDER" in roi_ids or "RIGHT_SHOULDER" in roi_ids:
             return "SHOULDER_STOP"
         return "STOPPED_VEHICLE"
 
-    # _bottom_center 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _bottom_center(bbox: list[float]) -> tuple[float, float]:
         x1, _y1, x2, y2 = bbox
         return ((x1 + x2) / 2.0, y2)
 
-    # _average_move 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _average_move(history: deque[tuple[float, float]]) -> float:
         if len(history) < 2:
@@ -375,7 +358,6 @@ class EventDetector:
         ]
         return float(np.mean(distances)) if distances else 0.0
 
-    # _distance 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _distance(
         left: tuple[float, float],
