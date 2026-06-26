@@ -65,6 +65,7 @@ from app.modules.realtime.routes import realtime_bp
 # - 파일 위치: app/modules/report_upload/
 # ============================================================
 from app.modules.report_upload.routes import report_upload_bp
+from app.modules.report_model_comparison.routes import report_model_comparison_bp
 # 설명: app.modules.location_search.routes에서 location_search_bp 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.location_search.routes import location_search_bp
 # 설명: app.modules.cctv.routes에서 cctv_bp 이름을 가져와 아래 로직에서 재사용한다.
@@ -163,6 +164,7 @@ def register_blueprints(app):
     app.register_blueprint(realtime_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     app.register_blueprint(report_upload_bp)
+    app.register_blueprint(report_model_comparison_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     app.register_blueprint(location_search_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
