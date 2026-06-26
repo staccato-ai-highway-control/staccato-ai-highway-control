@@ -37,6 +37,18 @@ class AIGatewayService:
         # 설명: `detect_url`에 f'{ai_server_url.rstrip('/')}/detect' 표현식의 계산 결과를 저장한다.
         detect_url = f"{ai_server_url.rstrip('/')}/detect"
 
+        # AI-vm /detect는 내부 Bearer 인증을 요구한다.
+        internal_api_token = str(
+            current_app.config.get("INTERNAL_API_TOKEN")
+            or os.getenv("INTERNAL_API_TOKEN", "")
+        ).strip()
+
+        if not internal_api_token:
+            return False, {
+                "status": "internal_api_token_missing",
+                "message": "INTERNAL_API_TOKEN is required for AI report analysis.",
+            }
+
         # 설명: `current_app.logger.info`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         current_app.logger.info(
             "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s cctv_id=%s camera_id=%s",
@@ -103,10 +115,15 @@ class AIGatewayService:
                 timeout_seconds = max(1, timeout_seconds)
 
                 # 설명: `response`에 `requests.post` 호출 결과를 저장해 다음 처리에서 사용한다.
+                headers = {
+                    "Authorization": f"Bearer {internal_api_token}",
+                }
+
                 response = requests.post(
                     detect_url,
                     files=files,
                     data=data,
+                    headers=headers,
                     timeout=timeout_seconds,
                 )
 
