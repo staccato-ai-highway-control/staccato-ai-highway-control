@@ -1,0 +1,17 @@
+[Unit]
+Description=STACCATO Report Model Comparison Worker
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/staccato/staccato/flask-vm/app/workers/report_model_comparison_worker.py
+
+[Service]
+Type=oneshot
+User=staccato
+Group=staccato
+WorkingDirectory=/home/staccato/staccato/flask-vm
+EnvironmentFile=/etc/staccato/flask.env
+Environment=PYTHONUNBUFFERED=1
+Environment=REPORT_MODEL_COMPARISON_WORKER_LIMIT=3
+Environment=REPORT_MODEL_COMPARISON_DETECT_TIMEOUT_SECONDS=300
+ExecStart=/home/staccato/staccato/flask-vm/.venv/bin/python -m app.workers.report_model_comparison_worker
+TimeoutStartSec=20min
