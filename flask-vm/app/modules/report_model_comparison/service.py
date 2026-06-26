@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 from app.extensions import db
@@ -338,4 +339,360 @@ class ReportModelComparisonService:
         return {
             "success": True,
             "batch": cls._serialize_batch(batch),
+        }, 200
+
+    @staticmethod
+    def _comparison_int(value):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _comparison_float(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _comparison_detect_timeout_seconds():
+        """비교 분석은 모델 지연 로드와 영상 처리를 고려해 별도 timeout을 사용한다."""
+        default_seconds = 300
+        minimum_seconds = 30
+        maximum_seconds = 900
+
+        try:
+            configured_seconds = int(
+                os.getenv(
+                    "REPORT_MODEL_COMPARISON_DETECT_TIMEOUT_SECONDS",
+                    str(default_seconds),
+                )
+            )
+        except (TypeError, ValueError):
+            configured_seconds = default_seconds
+
+        return max(
+            minimum_seconds,
+            min(configured_seconds, maximum_seconds),
+        )
+
+    @classmethod
+    def _refresh_batch_status(cls, batch_id: int, now=None):
+        """하위 Run 상태를 기준으로 비교 Batch의 대표 상태를 다시 계산한다."""
+        batch = db.session.get(ReportModelComparisonBatch, batch_id)
+
+        if not batch:
+            return None
+
+        runs = (
+            ReportModelComparisonRun.query
+            .filter(ReportModelComparisonRun.batch_id == batch.id)
+            .all()
+        )
+
+        statuses = {
+            str(run.run_status or "").strip().upper()
+            for run in runs
+        }
+
+        if statuses & {"QUEUED", "RUNNING"}:
+            batch.batch_status = "RUNNING"
+        elif statuses and statuses == {"COMPLETED"}:
+            batch.batch_status = "COMPLETED"
+        elif "COMPLETED" in statuses:
+            batch.batch_status = "PARTIAL_FAILED"
+        else:
+            batch.batch_status = "FAILED"
+
+        now = now or cls._now()
+
+        if batch.batch_status in {
+            "COMPLETED",
+            "PARTIAL_FAILED",
+            "FAILED",
+        }:
+            batch.completed_at = now
+
+        batch.updated_at = now
+        return batch
+
+    @classmethod
+    def _complete_comparison_run(
+        cls,
+        run: ReportModelComparisonRun,
+        response: dict,
+        completed_at,
+    ):
+        """AI-vm 성공 응답을 비교 분석 Run 결과 컬럼에 저장한다."""
+        detections = response.get("detections")
+
+        if not isinstance(detections, list):
+            detections = []
+
+        detection_count = cls._comparison_int(response.get("count"))
+
+        if detection_count is None:
+            detection_count = len(detections)
+
+        annotated_media_url = (
+            response.get("annotated_video_url")
+            or response.get("annotated_image_url")
+        )
+
+        run.run_status = "COMPLETED"
+        run.model_name = response.get("model_name") or run.model_name
+        run.model_version = response.get("model_version") or run.model_version
+        run.total_frames = cls._comparison_int(response.get("total_frames"))
+        run.processed_frames = cls._comparison_int(
+            response.get("frames_processed")
+        )
+        run.total_elapsed_ms = cls._comparison_int(
+            response.get("total_elapsed_ms")
+        )
+        run.inference_ms = cls._comparison_int(response.get("inference_ms"))
+        run.processed_fps = cls._comparison_float(
+            response.get("processed_fps")
+        )
+        run.inference_fps = cls._comparison_float(
+            response.get("inference_fps")
+        )
+        run.detection_count = detection_count
+        run.avg_confidence = cls._comparison_float(
+            response.get("avg_confidence")
+        )
+        run.max_confidence = cls._comparison_float(
+            response.get("max_confidence")
+        )
+        run.class_summary = (
+            response.get("class_summary")
+            if isinstance(response.get("class_summary"), dict)
+            else {}
+        )
+        run.result_summary = response
+        run.annotated_media_url = annotated_media_url
+        run.error_code = None
+        run.error_message = None
+        run.completed_at = completed_at
+        run.updated_at = completed_at
+
+    @classmethod
+    def _fail_comparison_run(
+        cls,
+        run: ReportModelComparisonRun,
+        error_code: str,
+        error_message: str,
+        completed_at,
+        result_summary=None,
+    ):
+        """단일 모델 실행 실패를 기록하되 같은 Batch의 다른 모델 실행은 유지한다."""
+        run.run_status = "FAILED"
+        run.error_code = str(error_code or "COMPARISON_RUN_FAILED")[:100]
+        run.error_message = str(error_message or "")[:4000]
+        run.result_summary = (
+            result_summary
+            if isinstance(result_summary, dict)
+            else None
+        )
+        run.completed_at = completed_at
+        run.updated_at = completed_at
+
+    @classmethod
+    def process_comparison_run(cls, run_id: int):
+        """QUEUED 상태의 비교 분석 Run 한 건을 AI-vm에 전달해 결과를 저장한다."""
+        from app.modules.ai_gateway.service import AIGatewayService
+
+        run = db.session.get(ReportModelComparisonRun, run_id)
+
+        if not run:
+            return {
+                "success": False,
+                "error": "비교 분석 Run을 찾을 수 없습니다.",
+            }, 404
+
+        if run.run_status != "QUEUED":
+            return {
+                "success": False,
+                "error": "QUEUED 상태의 비교 분석 Run만 처리할 수 있습니다.",
+                "run": cls._serialize_run(run),
+            }, 409
+
+        batch = db.session.get(ReportModelComparisonBatch, run.batch_id)
+
+        if not batch:
+            completed_at = cls._now()
+            cls._fail_comparison_run(
+                run=run,
+                error_code="MISSING_COMPARISON_BATCH",
+                error_message="Comparison batch not found.",
+                completed_at=completed_at,
+            )
+            db.session.commit()
+
+            return {
+                "success": False,
+                "error": "비교 분석 Batch를 찾을 수 없습니다.",
+            }, 404
+
+        report = db.session.get(IncidentReport, batch.report_id)
+        attachment = db.session.get(ReportAttachment, batch.attachment_id)
+
+        if (
+            not report
+            or not attachment
+            or attachment.report_id != report.id
+            or getattr(attachment, "deleted_at", None)
+        ):
+            completed_at = cls._now()
+            cls._fail_comparison_run(
+                run=run,
+                error_code="MISSING_REPORT_OR_ATTACHMENT",
+                error_message="Report or attachment not found.",
+                completed_at=completed_at,
+            )
+            cls._refresh_batch_status(batch.id, now=completed_at)
+            db.session.commit()
+
+            return {
+                "success": False,
+                "error": "신고 또는 첨부파일을 찾을 수 없습니다.",
+            }, 404
+
+        started_at = cls._now()
+
+        run.run_status = "RUNNING"
+        run.attempt_count = int(run.attempt_count or 0) + 1
+        run.started_at = run.started_at or started_at
+        run.updated_at = started_at
+
+        if batch.batch_status == "QUEUED":
+            batch.batch_status = "RUNNING"
+            batch.started_at = batch.started_at or started_at
+
+        batch.updated_at = started_at
+        db.session.commit()
+
+        camera_id = (
+            f"camera-{report.cctv_id}"
+            if getattr(report, "cctv_id", None)
+            else None
+        )
+
+        try:
+            success, response = AIGatewayService.request_analysis(
+                report_id=report.id,
+                file_path=attachment.file_path,
+                cctv_id=getattr(report, "cctv_id", None),
+                camera_id=camera_id,
+                model_id=run.model_id,
+                comparison_run_id=str(run.id),
+                timeout_seconds=cls._comparison_detect_timeout_seconds(),
+            )
+        except Exception as exc:
+            success = False
+            response = {
+                "status": "comparison_ai_request_exception",
+                "message": str(exc),
+            }
+
+        completed_at = cls._now()
+        result = response if isinstance(response, dict) else {
+            "raw_response": str(response),
+        }
+
+        is_completed = bool(
+            success
+            and (
+                str(result.get("status", "")).upper() == "OK"
+                or "count" in result
+                or "detections" in result
+            )
+        )
+
+        if is_completed:
+            cls._complete_comparison_run(
+                run=run,
+                response=result,
+                completed_at=completed_at,
+            )
+        else:
+            cls._fail_comparison_run(
+                run=run,
+                error_code=result.get(
+                    "status",
+                    "COMPARISON_AI_REQUEST_FAILED",
+                ),
+                error_message=result.get(
+                    "message",
+                    str(result),
+                ),
+                completed_at=completed_at,
+                result_summary=result,
+            )
+
+        cls._refresh_batch_status(batch.id, now=completed_at)
+        db.session.commit()
+
+        refreshed_batch = db.session.get(
+            ReportModelComparisonBatch,
+            batch.id,
+        )
+
+        return {
+            "success": run.run_status == "COMPLETED",
+            "batch_id": batch.id,
+            "batch_status": refreshed_batch.batch_status,
+            "run": cls._serialize_run(run),
+        }, 200
+
+    @classmethod
+    def process_queued_comparison_runs(cls, limit=3):
+        """최대 3개의 비교 분석 Run을 오래된 요청 순서대로 순차 실행한다."""
+        try:
+            limit = max(1, min(int(limit), cls.MAX_MODEL_COUNT))
+        except (TypeError, ValueError):
+            limit = cls.MAX_MODEL_COUNT
+
+        queued_runs = (
+            ReportModelComparisonRun.query
+            .join(
+                ReportModelComparisonBatch,
+                ReportModelComparisonRun.batch_id
+                == ReportModelComparisonBatch.id,
+            )
+            .filter(
+                ReportModelComparisonRun.run_status == "QUEUED",
+                ReportModelComparisonBatch.batch_status.in_(
+                    cls.ACTIVE_BATCH_STATUSES
+                ),
+            )
+            .order_by(
+                ReportModelComparisonBatch.id.asc(),
+                ReportModelComparisonRun.request_order.asc(),
+                ReportModelComparisonRun.id.asc(),
+            )
+            .limit(limit)
+            .all()
+        )
+
+        processed = []
+        completed_count = 0
+        failed_count = 0
+
+        for queued_run in queued_runs:
+            result, _status_code = cls.process_comparison_run(queued_run.id)
+            processed.append(result)
+
+            if result.get("success"):
+                completed_count += 1
+            else:
+                failed_count += 1
+
+        return {
+            "success": failed_count == 0,
+            "requested_limit": limit,
+            "processed_count": len(processed),
+            "completed_count": completed_count,
+            "failed_count": failed_count,
+            "items": processed,
         }, 200

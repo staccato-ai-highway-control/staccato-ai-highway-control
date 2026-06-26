@@ -83,6 +83,7 @@ class ReportModelComparisonRun(db.Model):
     total_elapsed_ms = db.Column(db.Integer, nullable=True)
     inference_ms = db.Column(db.Integer, nullable=True)
     processed_fps = db.Column(db.Numeric(10, 2), nullable=True)
+    inference_fps = db.Column(db.Numeric(10, 2), nullable=True)
 
     detection_count = db.Column(db.Integer, nullable=True)
     avg_confidence = db.Column(db.Numeric(6, 5), nullable=True)

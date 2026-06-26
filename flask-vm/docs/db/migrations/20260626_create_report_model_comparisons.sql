@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS report_model_comparison_runs (
     total_elapsed_ms INT NULL,
     inference_ms INT NULL,
     processed_fps DECIMAL(10,2) NULL,
+    inference_fps DECIMAL(10,2) NULL,
 
     detection_count INT NULL,
     avg_confidence DECIMAL(6,5) NULL,
