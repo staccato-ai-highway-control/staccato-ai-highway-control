@@ -1,4 +1,5 @@
 import {
+  BarChart2,
   Bell,
   Cctv,
   ClipboardList,
@@ -62,6 +63,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { href: "/reports/create", icon: ClipboardList, label: "신고 등록", allowedRoles: allRoles },
       { href: "/reports", icon: ClipboardList, label: "신고 목록", allowedRoles: allRoles },
+      { href: "/reports/model-comparisons", icon: BarChart2, label: "모델 비교 이력", allowedRoles: allRoles },
     ],
   },
   {

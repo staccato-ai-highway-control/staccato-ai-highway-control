@@ -25,6 +25,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ErrorPage } from "@/components/common/ErrorPage";
 // 코드 설명: @/components/report/ReportAttachmentPreview 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ReportAttachmentPreview } from "@/components/report/ReportAttachmentPreview";
+import { ModelComparisonSection } from "@/components/report/ModelComparisonSection";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Button 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -1053,13 +1054,19 @@ export default function ReportDetailPage({ params }: { params: Promise<{ id: str
             <DetailCard title="AI 분석 요약" description={formatReportDisplayValue(analysisSummary, "분석 결과가 아직 없습니다.")} actions={<><StatusBadge value={analysisStatus}>{analysisStatus}</StatusBadge>{canRequestAnalysis ? <Button type="button" onClick={handleRequestAnalysis} disabled={requestingAnalysis || isAnalysisRunning(analysisStatus)} className="gap-2"><Sparkles className="h-4 w-4" />{requestingAnalysis ? "요청 중" : "분석 요청"}</Button> : null}</>}>
               {pollingAnalysis ? <p className="mb-3 text-xs font-bold text-amber-600">3초 간격으로 분석 상태를 확인 중입니다.</p> : null}
               <InfoGrid><InfoItem label="분석 상태" value={<StatusBadge value={analysisStatus}>{analysisStatus}</StatusBadge>} /><InfoItem label="감지 개수" value={detectedCount} /><InfoItem label="처리 프레임 수" value={processedFrames} /><InfoItem label="위험도" value={riskLevel} /><InfoItem label="위험점수" value={riskScore} /></InfoGrid>
-              <Link href={`/reports/analysis-comparisons?report_id=${getReportId(report)}`} className="mt-4 inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 no-underline transition hover:bg-slate-50">비교분석</Link>
             </DetailCard>
 
             {annotatedMediaUrl ? <MediaPreviewCard title={`AI 객체 탐지 결과${annotatedMediaType === "video" ? " 영상" : " 이미지"}`} actions={<><a href={annotatedMediaUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 no-underline hover:bg-slate-50">새 탭 열기</a><a href={annotatedMediaUrl} download className="inline-flex min-h-9 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 no-underline hover:bg-slate-50">다운로드</a></>}>{annotatedVideoUrl ? <video src={annotatedVideoUrl} controls playsInline /> : <img src={annotatedImageUrl ?? ""} alt="AI 객체 탐지 결과" />}</MediaPreviewCard> : null}
 
             <DetailCard title="분석 작업 목록" description="분석 요청별 상태와 재시도 이력을 확인합니다.">
               {analysisJobs.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm font-semibold text-slate-500">분석 작업 내역이 없습니다.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead className="bg-slate-50 text-left text-xs font-black text-slate-500"><tr><th className="px-3 py-3">Job ID</th><th className="px-3 py-3">상태</th><th className="px-3 py-3">재시도</th><th className="px-3 py-3">생성일시</th><th className="px-3 py-3">액션</th></tr></thead><tbody>{analysisJobs.map((job,index)=>{const jobId=getJobId(job);const jobStatus=getJobStatus(job);const canRetry=canRetryAnalysis&&jobStatus==="FAILED"&&Boolean(jobId);return <tr key={jobId??index} className="border-t border-slate-100"><td className="px-3 py-3 font-mono font-bold">{jobId??"-"}</td><td className="px-3 py-3"><StatusBadge value={jobStatus}>{jobStatus}</StatusBadge></td><td className="px-3 py-3 font-semibold text-slate-600">{job.retry_count??0}회</td><td className="px-3 py-3 font-semibold text-slate-500">{formatDateTime(job.created_at??job.updated_at)}</td><td className="px-3 py-3">{canRetry?<Button type="button" variant="danger" disabled={retryingJobId===String(jobId)} onClick={()=>handleRetryAnalysisJob(job)} className="min-h-8 px-3 text-xs"><RotateCcw className="h-3.5 w-3.5" />{retryingJobId===String(jobId)?"재시도 중":"재시도"}</Button>:"-"}</td></tr>})}</tbody></table></div>}
+            </DetailCard>
+
+            <DetailCard title="모델 비교 분석" description="분석 모델을 선택하고 동일 영상에 대한 탐지 결과를 비교합니다.">
+              <ModelComparisonSection
+                reportId={getReportId(report)}
+                attachmentId={report.attachments?.[0]?.attachment_id ?? report.attachments?.[0]?.id ?? report.attachment_id}
+              />
             </DetailCard>
           </main>
 

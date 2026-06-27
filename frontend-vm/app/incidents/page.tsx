@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ErrorPage } from "@/components/common/ErrorPage";
@@ -71,7 +70,6 @@ function matchesSearch(incident: Incident, keyword: string) {
 }
 
 export default function IncidentsPage() {
-  const router = useRouter();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [typeFilter, setTypeFilter] = useState<IncidentTypeFilter>("ALL");
   const [riskFilter, setRiskFilter] = useState<RiskLevelFilter>("ALL");
@@ -172,14 +170,6 @@ export default function IncidentsPage() {
     () => paginatedIncidents.filter((incident) => selectedIncidentIds.has(incident.id)),
     [paginatedIncidents, selectedIncidentIds]
   );
-  const selectedAnalysisJobIds = useMemo(
-    () => selectedIncidents
-      .map(getIncidentAnalysisJobId)
-      .filter((jobId): jobId is string | number => jobId !== null && jobId !== undefined)
-      .map(String),
-    [selectedIncidents]
-  );
-  const canCompareSelected = selectedAnalysisJobIds.length >= 2 && selectedAnalysisJobIds.length <= 5;
 
   async function handleBulkStatusChange() {
     if (selectedIncidents.length === 0) return;
@@ -205,15 +195,6 @@ export default function IncidentsPage() {
     if (failedCount > 0) {
       setErrorMessage(`${failedCount}건의 이벤트 상태를 변경하지 못했습니다.`);
     }
-  }
-
-  function handleCompareSelected() {
-    if (!canCompareSelected) return;
-    const query = new URLSearchParams({
-      selectedJobIds: selectedAnalysisJobIds.join(","),
-      selectedJobId: selectedAnalysisJobIds[0],
-    });
-    router.push(`/reports/analysis-comparisons?${query.toString()}`);
   }
 
   useEffect(() => {
@@ -287,9 +268,6 @@ export default function IncidentsPage() {
                 <button type="button" onClick={handleBulkStatusChange} disabled={bulkUpdating} className="h-9 rounded-lg bg-sky-700 px-3 text-xs font-black text-white transition hover:bg-sky-800 disabled:opacity-50">
                   {bulkUpdating ? "변경 중" : "선택 상태 변경"}
                 </button>
-                <button type="button" onClick={handleCompareSelected} disabled={!canCompareSelected || bulkUpdating} title={canCompareSelected ? undefined : "분석 Job이 있는 이벤트를 2~5개 선택해 주세요."} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
-                  선택 비교분석 ({selectedAnalysisJobIds.length})
-                </button>
               </div>
             </div>
           ) : null}
@@ -351,11 +329,6 @@ export default function IncidentsPage() {
                               <option key={option.value} value={option.value}>{option.label}</option>
                             ))}
                           </select>
-                          {getIncidentAnalysisJobId(incident) ? (
-                            <Link href={"/reports/analysis-comparisons?selectedJobId=" + encodeURIComponent(String(getIncidentAnalysisJobId(incident)))} className="whitespace-nowrap rounded-lg border border-sky-200 px-2 py-1.5 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50">비교분석</Link>
-                          ) : (
-                            <button type="button" disabled title="비교 가능한 분석 결과 정보가 없습니다." className="whitespace-nowrap rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-slate-400 disabled:opacity-60">비교분석</button>
-                          )}
                         </div>
                       </td>
                     </tr>

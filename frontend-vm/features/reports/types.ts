@@ -265,3 +265,74 @@ export type ReportUploadResponse = {
     report_code?: string;
   };
 };
+
+// ─── 모델 비교 분석 타입 ────────────────────────────────────────────────────
+
+export interface ModelComparisonModel {
+  model_id: string;
+  model_name?: string | null;
+  description?: string | null;
+}
+
+export type ModelComparisonBatchStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "COMPLETED"
+  | "PARTIAL_FAILED"
+  | "FAILED"
+  | string;
+
+export type ModelComparisonRunStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | string;
+
+export interface ModelComparisonItem {
+  model_name: string;
+  run_status: ModelComparisonRunStatus;
+  detection_count?: number | null;
+  avg_confidence?: number | null;
+  inference_ms?: number | null;
+  inference_fps?: number | null;
+  total_elapsed_ms?: number | null;
+  annotated_media_url?: string | null;
+  error_message?: string | null;
+}
+
+export interface ModelComparisonBatchListItem {
+  id: number | string;
+  report_id?: number | string;
+  report_code?: string | null;
+  report_title?: string | null;
+  batch_status?: ModelComparisonBatchStatus;
+  status?: ModelComparisonBatchStatus;
+  selected_model_count?: number | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  runs?: ModelComparisonItem[];
+  run_summary?: { total?: number; by_status?: Record<string, number> };
+}
+
+export interface PaginatedModelComparisonBatches {
+  batches: ModelComparisonBatchListItem[];
+  page: number;
+  size: number;
+  total_count: number;
+  total_pages: number;
+}
+
+export interface ModelComparisonBatchResult {
+  batch?: {
+    id?: string | number;
+    status?: ModelComparisonBatchStatus;
+    batch_status?: ModelComparisonBatchStatus;
+    runs?: ModelComparisonItem[];
+    results?: ModelComparisonItem[];
+  };
+  status?: ModelComparisonBatchStatus;
+  runs?: ModelComparisonItem[];
+  results?: ModelComparisonItem[];
+}
