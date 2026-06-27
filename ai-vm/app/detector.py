@@ -61,6 +61,7 @@ class YoloDetector:
         default_iou: float = YOLO_IOU,
         default_imgsz: int = YOLO_IMGSZ,
         device: str | None = YOLO_DEVICE,
+        enable_far_crop: bool = True,
     ) -> None:
         self.model_paths = model_paths or YOLO_MODEL_PATHS
         self.target_classes = target_classes or YOLO_TARGET_CLASSES
@@ -68,6 +69,7 @@ class YoloDetector:
         self.default_iou = default_iou
         self.default_imgsz = default_imgsz
         self.device = device
+        self.enable_far_crop = enable_far_crop
 
         self._model: Any | None = None
         self._model_name: str | None = None
@@ -157,7 +159,7 @@ class YoloDetector:
         )
         detections = self._parse_result(results[0], source="full_frame") if results else []
 
-        if self._should_run_far_crop(frame_id):
+        if self.enable_far_crop and self._should_run_far_crop(frame_id):
             detections.extend(
                 self._detect_far_crop(
                     model=model,

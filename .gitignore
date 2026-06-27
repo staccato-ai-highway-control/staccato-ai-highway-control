@@ -116,3 +116,6 @@ node_modules/
 .env.bak*
 .env.broken*
 .env.broken_literal_n_*
+
+# Local comparison-model weights
+ai-vm/models/candidates/
