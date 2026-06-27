@@ -1,3 +1,4 @@
+# 역할: AI VM FastAPI 라우터를 정의하고 CCTV, 스트림, bbox, 이벤트, 리포트 분석 API를 제공합니다.
 import asyncio
 import os
 import uuid
@@ -56,6 +57,7 @@ app.add_middleware(
 )
 
 
+# 서비스 기본 정보와 사용 가능한 엔드포인트 목록을 반환합니다.
 @app.get("/")
 def index():
     return {
@@ -83,6 +85,7 @@ def index():
     }
 
 
+# 서버, 카메라, 스트림 상태를 확인하는 health check 응답을 반환합니다.
 @app.get("/health")
 def health():
     return {
@@ -107,12 +110,14 @@ DEFAULT_CCTV_SOURCE_NAMES = [
 ]
 
 
+# _parse_cctv_source_names 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _parse_cctv_source_names(value: str | None) -> list[str]:
     if not value:
         return []
     return [name.strip() for name in value.split(",") if name.strip()]
 
 
+# _selected_cctv_source_names 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _selected_cctv_source_names(source_names: str | None = None) -> list[str]:
     configured_names = _parse_cctv_source_names(source_names)
     if configured_names:
@@ -125,6 +130,7 @@ def _selected_cctv_source_names(source_names: str | None = None) -> list[str]:
     return DEFAULT_CCTV_SOURCE_NAMES
 
 
+# _filter_cctv_sources 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _filter_cctv_sources(
     cctv_list: list[dict],
     source_names: list[str],
@@ -166,6 +172,7 @@ def _filter_cctv_sources(
 
 
 
+# ITS CCTV 목록을 조회한 뒤 설정된 소스명 목록으로 필터링해 반환합니다.
 @app.get("/traffic/api/cctv")
 def traffic_cctv_api(
     min_x: str = Query(ITS_CCTV_DEFAULT_MIN_X, alias="minX"),
@@ -238,12 +245,14 @@ def traffic_cctv_api(
 
 
 
+# 내부 API 호출에 필요한 Bearer 토큰을 검증합니다.
 def require_internal_token(authorization: str = Header(default="")) -> None:
     expected = f"Bearer {INTERNAL_API_TOKEN}"
     if authorization != expected:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 
+# 개발용 로그인 요청을 검증하고 액세스 토큰을 반환합니다.
 @app.post("/auth/login")
 def auth_login(payload: LoginPayload):
     login_id = payload.login_id.strip()
@@ -258,6 +267,7 @@ def auth_login(payload: LoginPayload):
     return get_dev_auth_response()
 
 
+# 현재 Bearer 토큰이 유효한지 확인하고 사용자 정보를 반환합니다.
 @app.get("/auth/me")
 def auth_me(authorization: str = Header(default="")):
     if authorization != expected_authorization_header():
@@ -269,6 +279,7 @@ def auth_me(authorization: str = Header(default="")):
     return get_dev_auth_response()
 
 
+# 실행 중인 카메라 워커 상태 목록을 반환합니다.
 @app.get("/internal/cameras")
 def internal_cameras(_auth: None = Depends(require_internal_token)):
     return {
@@ -277,6 +288,7 @@ def internal_cameras(_auth: None = Depends(require_internal_token)):
     }
 
 
+# 내부 API로 카메라 워커를 시작하거나 재사용합니다.
 @app.post("/internal/cameras/{camera_id}/start")
 def internal_camera_start(
     camera_id: str,
@@ -305,6 +317,7 @@ def internal_camera_start(
     }
 
 
+# 내부 API로 카메라 워커를 중지합니다.
 @app.post("/internal/cameras/{camera_id}/stop")
 def internal_camera_stop(
     camera_id: str,
@@ -320,6 +333,7 @@ def internal_camera_stop(
     }
 
 
+# 카메라별 현재 ROI 설정을 반환합니다.
 @app.get("/internal/cameras/{camera_id}/rois")
 def internal_camera_rois(
     camera_id: str,
@@ -334,6 +348,7 @@ def internal_camera_rois(
     }
 
 
+# 카메라별 ROI 설정을 검증 후 저장합니다.
 @app.put("/internal/cameras/{camera_id}/rois")
 def internal_camera_rois_update(
     camera_id: str,
@@ -354,6 +369,7 @@ def internal_camera_rois_update(
     }
 
 
+# 현재 프레임 기준으로 수동 이벤트 클립 생성을 요청합니다.
 @app.post("/internal/cameras/{camera_id}/manual-event")
 def internal_camera_manual_event(
     camera_id: str,
@@ -398,6 +414,7 @@ def internal_camera_manual_event(
     }
 
 
+# 최신 프레임 또는 캐시된 결과로 탐지 결과를 반환합니다.
 @app.get("/internal/cameras/{camera_id}/detections")
 def internal_camera_detections(
     camera_id: str,
@@ -450,6 +467,7 @@ def internal_camera_detections(
     }
 
 
+# 프론트엔드에 최신 bbox 메타데이터를 주기적으로 전송합니다.
 @app.websocket("/ws/cameras/{camera_id}/bbox")
 async def camera_bbox_websocket(camera_id: str, websocket: WebSocket):
     if not is_analyzed_camera(camera_id):
@@ -474,6 +492,7 @@ async def camera_bbox_websocket(camera_id: str, websocket: WebSocket):
         return
 
 
+# 카메라를 필요 시 시작하고 MJPEG 스트림 응답을 반환합니다.
 @app.get("/streams/{camera_id}.mjpeg")
 def camera_mjpeg_stream(
     camera_id: str,
@@ -529,6 +548,7 @@ def camera_mjpeg_stream(
     )
 
 
+# 카메라의 최신 프레임을 JPEG 스냅샷으로 반환합니다.
 @app.get("/snapshots/{camera_id}/latest.jpg")
 def camera_latest_snapshot(
     camera_id: str,
@@ -549,6 +569,7 @@ def camera_latest_snapshot(
     )
 
 
+# 저장된 이벤트 스냅샷 이미지를 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.jpg")
 def event_snapshot(event_id: str):
     path = EVENT_MEDIA_DIR / "snapshots" / f"{_safe_event_id(event_id)}.jpg"
@@ -561,6 +582,7 @@ def event_snapshot(event_id: str):
     )
 
 
+# 저장된 이벤트 재생 영상을 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.mp4")
 def event_video(event_id: str):
     path = EVENT_MEDIA_DIR / "videos" / f"{_safe_event_id(event_id)}.mp4"
@@ -580,6 +602,7 @@ REPORT_ANALYSIS_MEDIA_DIR = Path(
 AI_PUBLIC_BASE_URL = os.getenv("AI_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
 
 
+# _safe_report_analysis_filename 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _safe_report_analysis_filename(filename: str) -> str:
     safe_filename = "".join(
         char for char in filename if char.isalnum() or char in {"_", "-", "."}
@@ -589,6 +612,7 @@ def _safe_report_analysis_filename(filename: str) -> str:
     return safe_filename
 
 
+# 리포트 분석용으로 생성된 이미지/영상을 파일 응답으로 제공합니다.
 @app.get("/report-analysis/{filename}")
 def report_analysis_media(filename: str):
     safe_filename = _safe_report_analysis_filename(filename)
@@ -610,6 +634,7 @@ def report_analysis_media(filename: str):
     )
 
 
+# _report_analysis_box_color 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _report_analysis_box_color(detection: dict) -> tuple[int, int, int]:
     box_color = str(detection.get("box_color") or "").lower()
     risk_level = str(detection.get("risk_level") or "").upper()
@@ -624,6 +649,7 @@ def _report_analysis_box_color(detection: dict) -> tuple[int, int, int]:
     return (0, 255, 0)  # OpenCV BGR green
 
 
+# _save_report_analysis_annotated_image 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _save_report_analysis_annotated_image(
     report_id: str,
     frame,
@@ -683,6 +709,7 @@ def _save_report_analysis_annotated_image(
     return f"{AI_PUBLIC_BASE_URL}/report-analysis/{filename}"
 
 
+# _draw_report_analysis_detections 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
     import cv2
 
@@ -721,6 +748,7 @@ def _draw_report_analysis_detections(frame, detections: list[dict]) -> None:
         )
 
 
+# _transcode_report_analysis_video_to_h264 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _transcode_report_analysis_video_to_h264(input_path: Path, output_path: Path) -> bool:
     import subprocess
 
@@ -753,6 +781,7 @@ def _transcode_report_analysis_video_to_h264(input_path: Path, output_path: Path
         return False
 
 
+# _save_report_analysis_annotated_video 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _save_report_analysis_annotated_video(
     source_path: Path,
     report_id: str,
@@ -859,11 +888,13 @@ def _save_report_analysis_annotated_video(
     return f"{AI_PUBLIC_BASE_URL}/report-analysis/{raw_filename}"
 
 
+# FastAPI 종료 시 모든 카메라 워커를 정리합니다.
 @app.on_event("shutdown")
 def shutdown_camera_workers():
     camera_registry.stop_all()
 
 
+# _safe_event_id 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _safe_event_id(event_id: str) -> str:
     safe_id = "".join(char for char in event_id if char.isalnum() or char in {"_", "-"})
     if not safe_id:
@@ -871,12 +902,14 @@ def _safe_event_id(event_id: str) -> str:
     return safe_id
 
 
+# _effective_analysis_fps 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _effective_analysis_fps(camera_id: str, requested_analysis_fps: float) -> float:
     if not is_analyzed_camera(camera_id):
         return 0.0
     return requested_analysis_fps
 
 
+# _latest_empty_bbox_metadata 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
     worker = camera_registry.get_camera(camera_id)
     if worker is None:
@@ -885,12 +918,15 @@ def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
     return worker.get_latest_empty_bbox_metadata()
 
 
+# Flask 리포트 분석 연동을 위해 업로드 이미지/영상에서 YOLO 탐지를 수행합니다.
 @app.post("/detect")
 async def detect_legacy_report_file(
     file: UploadFile = File(...),
     report_id: str = Form(default=""),
     cctv_id: str = Form(default=""),
     camera_id: str = Form(default=""),
+    model_id: str = Form(default=""),
+    comparison_run_id: str = Form(default=""),
     _auth: None = Depends(require_internal_token),
 ):
     """Legacy Flask report-analysis compatibility endpoint.
@@ -906,6 +942,7 @@ async def detect_legacy_report_file(
     """
     import os
     import tempfile
+    import time
     import uuid
     from pathlib import Path
 
@@ -935,7 +972,61 @@ async def detect_legacy_report_file(
     best_frame = None
     best_detections = []
     frames_processed = 0
+    total_frames = 1
     source_type = "video" if is_video else "image"
+
+    selected_model_id = str(model_id or "").strip().lower() or None
+    comparison_run_id = str(comparison_run_id or "").strip() or None
+
+    selected_detector = detector
+    selected_model_name = None
+    selected_model_version = None
+
+    if selected_model_id:
+        from .model_registry import (
+            ReportModelUnavailableError,
+            UnknownReportModelError,
+            report_model_registry,
+        )
+
+        try:
+            selected_spec, selected_detector = report_model_registry.get(
+                selected_model_id
+            )
+        except UnknownReportModelError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ReportModelUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        selected_model_name = selected_spec.model_name
+        selected_model_version = selected_spec.model_version
+
+    artifact_parts = [str(report_id or "unknown")]
+    if selected_model_id:
+        artifact_parts.append(selected_model_id)
+    if comparison_run_id:
+        artifact_parts.append(comparison_run_id)
+
+    artifact_report_id = "_".join(artifact_parts)
+
+    analysis_started_at = time.perf_counter()
+    inference_seconds = 0.0
+
+    def detect_with_metrics(frame):
+        nonlocal inference_seconds
+
+        inference_started_at = time.perf_counter()
+
+        try:
+            detections = selected_detector.detect(frame)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"YOLO model inference failed: {exc}",
+            ) from exc
+
+        inference_seconds += time.perf_counter() - inference_started_at
+        return detections
 
     if is_video:
         tmp_path = Path(tempfile.gettempdir()) / f"staccato-detect-{uuid.uuid4().hex}{suffix or '.mp4'}"
@@ -947,6 +1038,7 @@ async def detect_legacy_report_file(
             if not cap.isOpened():
                 raise HTTPException(status_code=400, detail="Failed to open video file.")
 
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
             frame_index = 0
             while frames_processed < max_frames:
                 ok, frame = cap.read()
@@ -954,7 +1046,7 @@ async def detect_legacy_report_file(
                     break
 
                 if frame_index % frame_stride == 0:
-                    frame_detections = detector.detect(frame)
+                    frame_detections = detect_with_metrics(frame)
                     frame_detection_dicts = []
                     for item in frame_detections:
                         detection = item.to_dict()
@@ -980,7 +1072,7 @@ async def detect_legacy_report_file(
         if frame is None:
             raise HTTPException(status_code=400, detail="Failed to decode image file.")
 
-        frame_detections = detector.detect(frame)
+        frame_detections = detect_with_metrics(frame)
         detections_payload = [item.to_dict() for item in frame_detections]
         best_frame = frame.copy()
         best_detections = detections_payload
@@ -1012,6 +1104,36 @@ async def detect_legacy_report_file(
     raw_detections_payload = detections_payload
     raw_count = len(raw_detections_payload)
 
+    confidence_values = []
+    class_summary = {}
+
+    for detection in raw_detections_payload:
+        if not isinstance(detection, dict):
+            continue
+
+        confidence = detection.get("confidence")
+        if isinstance(confidence, (int, float)):
+            confidence_values.append(float(confidence))
+
+        class_name = str(
+            detection.get("class_name")
+            or detection.get("raw_class_name")
+            or detection.get("class_id")
+            or "unknown"
+        )
+        class_summary[class_name] = class_summary.get(class_name, 0) + 1
+
+    avg_confidence = (
+        round(sum(confidence_values) / len(confidence_values), 5)
+        if confidence_values
+        else None
+    )
+    max_confidence = (
+        round(max(confidence_values), 5)
+        if confidence_values
+        else None
+    )
+
     detections_payload = postprocess_result["display_detections"]
     best_detections = best_postprocess_result["display_detections"]
 
@@ -1021,19 +1143,19 @@ async def detect_legacy_report_file(
     if is_video:
         annotated_video_url = _save_report_analysis_annotated_video(
             source_path=Path(tmp_path),
-            report_id=report_id,
+            report_id=artifact_report_id,
             detections=detections_payload,
         )
 
         if not annotated_video_url:
             annotated_image_url = _save_report_analysis_annotated_image(
-                report_id=report_id,
+                report_id=artifact_report_id,
                 frame=best_frame,
                 detections=best_detections,
             )
     else:
         annotated_image_url = _save_report_analysis_annotated_image(
-            report_id=report_id,
+            report_id=artifact_report_id,
             frame=best_frame,
             detections=best_detections,
         )
@@ -1046,6 +1168,21 @@ async def detect_legacy_report_file(
         except Exception:
             pass
 
+    total_elapsed_ms = int(
+        round((time.perf_counter() - analysis_started_at) * 1000)
+    )
+    inference_ms = int(round(inference_seconds * 1000))
+    processed_fps = (
+        round(frames_processed / (total_elapsed_ms / 1000), 2)
+        if total_elapsed_ms > 0
+        else None
+    )
+    inference_fps = (
+        round(frames_processed / inference_seconds, 2)
+        if inference_seconds > 0
+        else None
+    )
+
     return {
         "success": True,
         "status": "OK",
@@ -1054,9 +1191,22 @@ async def detect_legacy_report_file(
         "camera_id": camera_id or None,
         "filename": filename,
         "source_type": source_type,
-        "model": detector.model_name,
+        "model": selected_detector.model_name,
+        "model_id": selected_model_id,
+        "model_name": selected_model_name,
+        "model_version": selected_model_version,
+        "comparison_run_id": comparison_run_id,
         "count": len(detections_payload),
         "raw_count": raw_count,
+        "total_frames": max(total_frames, frames_processed),
+        "frames_processed": frames_processed,
+        "total_elapsed_ms": total_elapsed_ms,
+        "inference_ms": inference_ms,
+        "processed_fps": processed_fps,
+        "inference_fps": inference_fps,
+        "avg_confidence": avg_confidence,
+        "max_confidence": max_confidence,
+        "class_summary": class_summary,
         "filtered_count": postprocess_result.get("filtered_count"),
         "incident_candidate_count": postprocess_result.get("incident_candidate_count"),
         "detections": detections_payload,

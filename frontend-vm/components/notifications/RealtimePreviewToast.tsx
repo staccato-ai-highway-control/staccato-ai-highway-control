@@ -1,11 +1,21 @@
+/**
+ * 파일 역할: 알림 영역에서 사용하는 RealtimePreviewToast UI 컴포넌트입니다.
+ * 유지보수 참고: 상위 화면에서 전달받은 데이터와 이벤트를 화면 요소로 변환하며, 사용자 상호작용과 표시 상태를 한곳에서 관리합니다.
+ */
 "use client";
 
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { BellRing, ExternalLink, X } from "lucide-react";
+// 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
+// 코드 설명: @/features/realtime/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { RealtimeEventPreview } from "@/features/realtime/types";
+// 코드 설명: @/lib/dateTime 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { formatKstDateTime } from "@/lib/dateTime";
+// 코드 설명: @/lib/mediaUrl 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { normalizeMediaUrl } from "@/lib/mediaUrl";
 
+// 코드 설명: RealtimePreviewToastProps 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
 type RealtimePreviewToastProps = {
   event: RealtimeEventPreview | null;
   open: boolean;
@@ -13,46 +23,71 @@ type RealtimePreviewToastProps = {
 };
 
 
+// 코드 설명: getSeverityClass 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getSeverityClass(severity?: string) {
+  // 코드 설명: severity?.toUpperCase() 값에 따라 처리할 상태 분기를 선택합니다.
   switch (severity?.toUpperCase()) {
     case "CRITICAL":
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-red-300 bg-red-50 text-red-700 shadow-sm shadow-red-950/10"
       return "border-red-300 bg-red-50 text-red-700 shadow-sm shadow-red-950/10";
     case "HIGH":
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-orange-300 bg-orange-50 text-orange-700 shadow-sm shadow-orange…
       return "border-orange-300 bg-orange-50 text-orange-700 shadow-sm shadow-orange-950/10";
     case "MEDIUM":
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-amber-300 bg-amber-50 text-amber-700"
       return "border-amber-300 bg-amber-50 text-amber-700";
     case "LOW":
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-sky-300 bg-sky-50 text-sky-700"
       return "border-sky-300 bg-sky-50 text-sky-700";
     case "INFO":
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-emerald-300 bg-emerald-50 text-emerald-700"
       return "border-emerald-300 bg-emerald-50 text-emerald-700";
     default:
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: "border-slate-300 bg-slate-100 text-slate-700"
       return "border-slate-300 bg-slate-100 text-slate-700";
   }
 }
 
+// 코드 설명: getPreviewKind 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getPreviewKind(event: RealtimeEventPreview) {
+  // 코드 설명: previewType 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const previewType = event.preview_type?.toLowerCase();
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.video_url || previewType === "video" || (event.preview_url && pre…
   if (event.video_url || previewType === "video" || (event.preview_url && previewType !== "image")) return "video";
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: event.snapshot_url || event.preview_url
   if (event.snapshot_url || event.preview_url) return "image";
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: null
   return null;
 }
 
+// 코드 설명: getPreviewUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getPreviewUrl(event: RealtimeEventPreview) {
+  // 코드 설명: previewKind 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const previewKind = getPreviewKind(event);
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: previewKind === "video"
   if (previewKind === "video") return normalizeMediaUrl(event.preview_url ?? event.video_url ?? null);
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: previewKind === "image"
   if (previewKind === "image") return normalizeMediaUrl(event.preview_url ?? event.snapshot_url ?? null);
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: null
   return null;
 }
 
+// 코드 설명: isExternalUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function isExternalUrl(url: string) {
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: /^https?:\/\//i.test(url)
   return /^https?:\/\//i.test(url);
 }
 
+// 코드 설명: PreviewMedia 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function PreviewMedia({ event }: { event: RealtimeEventPreview }) {
+  // 코드 설명: kind 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const kind = getPreviewKind(event);
+  // 코드 설명: url 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const url = getPreviewUrl(event);
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: kind === "video" && url
   if (kind === "video" && url) {
+    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
       <video
         src={url}
@@ -66,7 +101,9 @@ function PreviewMedia({ event }: { event: RealtimeEventPreview }) {
     );
   }
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: kind === "image" && url
   if (kind === "image" && url) {
+    // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
     return (
       <img
         src={url}
@@ -76,26 +113,38 @@ function PreviewMedia({ event }: { event: RealtimeEventPreview }) {
     );
   }
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: null
   return null;
 }
 
+// 코드 설명: RealtimePreviewToast 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function RealtimePreviewToast({ event, open, onClose }: RealtimePreviewToastProps) {
+  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
 
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !open || !event
   if (!open || !event) return null;
 
+  // 코드 설명: severity 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const severity = event.severity ?? "INFO";
+  // 코드 설명: occurredAt 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const occurredAt = event.occurred_at ?? event.created_at;
 
+  // 코드 설명: openTarget 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function openTarget(targetUrl: string) {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isExternalUrl(targetUrl)
     if (isExternalUrl(targetUrl)) {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.location.href = targetUrl;
       window.location.href = targetUrl;
+      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
       return;
     }
 
+    // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
     router.push(targetUrl);
   }
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <div className="fixed right-4 top-20 z-[80] w-[min(420px,calc(100vw-2rem))]">
       <article className="overflow-hidden rounded-lg border border-slate-700/70 bg-slate-950 text-white shadow-2xl shadow-slate-950/20">

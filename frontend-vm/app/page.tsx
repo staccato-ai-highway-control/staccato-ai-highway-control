@@ -1,13 +1,26 @@
+/**
+ * 파일 역할: 홈 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 "use client";
 
+// 코드 설명: next/link 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import Link from "next/link";
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useEffect, useRef, useState } from "react";
+// 코드 설명: next/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRouter } from "next/navigation";
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { ChevronDown, FileText, Gauge, LogIn, LogOut, MessageSquareText, PanelsTopLeft, UserPlus, UserRound } from "lucide-react";
+// 코드 설명: @/features/auth/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getMe } from "@/features/auth/api";
+// 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
+// 코드 설명: @/config/navigation 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { getRoleLabel } from "@/config/navigation";
+// 코드 설명: @/lib/constants 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { MVP_DESCRIPTION } from "@/lib/constants";
+// 코드 설명: @/lib/authStorage 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   clearStoredAuth,
   getStoredAccessToken,
@@ -16,97 +29,151 @@ import {
   setStoredAuthUser,
 } from "@/lib/authStorage";
 
+// 코드 설명: Home 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function Home() {
+  // 코드 설명: router 라우터를 준비해 처리 결과에 따라 다른 화면으로 이동합니다.
   const router = useRouter();
+  // 코드 설명: sectionRef 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const sectionRef = useRef<HTMLElement | null>(null);
+  // 코드 설명: hasNavigated 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const hasNavigated = useRef(false);
 
+  // 코드 설명: [progress, setProgress] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [progress, setProgress] = useState(0);
+  // 코드 설명: [authUser, setAuthUser] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  // 코드 설명: [isAuthReady, setIsAuthReady] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isAuthReady, setIsAuthReady] = useState(false);
+  // 코드 설명: [isBoardMenuOpen, setIsBoardMenuOpen] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [isBoardMenuOpen, setIsBoardMenuOpen] = useState(false);
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: isMounted 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     let isMounted = true;
 
+    // 코드 설명: syncAuthState 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
     async function syncAuthState() {
+      // 코드 설명: accessToken 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const accessToken = getStoredAccessToken();
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !accessToken
       if (!accessToken) {
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isMounted
         if (isMounted) setIsAuthReady(true);
+        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
         return;
       }
 
+      // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setAuthUser(getStoredAuthUser());
 
+      // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
       try {
+        // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
         const response = await getMe(accessToken);
+        // 코드 설명: user 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
         const user = getUserFromAuthResponse(response);
+        // 코드 설명: setStoredAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setStoredAuthUser(user);
 
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isMounted
         if (isMounted) {
+          // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setAuthUser(user);
+          // 코드 설명: setIsAuthReady 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setIsAuthReady(true);
         }
       } catch {
+        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: clearStoredAuth();
         clearStoredAuth();
 
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isMounted
         if (isMounted) {
+          // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setAuthUser(null);
+          // 코드 설명: setIsAuthReady 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setIsAuthReady(true);
         }
       }
     }
 
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: syncAuthState();
     syncAuthState();
 
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: () => { isMounted = false; }
     return () => {
+      // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: isMounted = false;
       isMounted = false;
     };
   }, []);
 
+  // 코드 설명: handleLogout 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
   function handleLogout() {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: clearStoredAuth();
     clearStoredAuth();
+    // 코드 설명: setAuthUser 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setAuthUser(null);
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: hasNavigated.current = false;
     hasNavigated.current = false;
   }
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: handleScroll 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const handleScroll = () => {
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !isAuthReady
       if (!isAuthReady) return;
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !sectionRef.current
       if (!sectionRef.current) return;
 
+      // 코드 설명: rect 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const rect = sectionRef.current.getBoundingClientRect();
+      // 코드 설명: scrollableHeight 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const scrollableHeight = rect.height - window.innerHeight;
+      // 코드 설명: currentProgress 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const currentProgress = Math.min(
         Math.max(Math.abs(rect.top) / scrollableHeight, 0),
         1
       );
 
+      // 코드 설명: setProgress 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setProgress(currentProgress);
 
+      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: currentProgress > 0.92 && !hasNavigated.current
       if (currentProgress > 0.92 && !hasNavigated.current) {
+        // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: hasNavigated.current = true;
         hasNavigated.current = true;
 
+        // 코드 설명: setTimeout 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
         setTimeout(() => {
+          // 코드 설명: 처리가 끝난 뒤 라우터를 사용해 다음 화면으로 이동하거나 현재 경로를 교체합니다.
           router.push(authUser ? "/dashboard" : "/login");
         }, 900);
       }
     };
 
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.addEventListener("scroll", handleScroll);
     window.addEventListener("scroll", handleScroll);
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: handleScroll();
     handleScroll();
 
+    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: () => window.removeEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll);
   }, [authUser, isAuthReady, router]);
 
+  // 코드 설명: boxOpacity 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const boxOpacity = progress > 0.28 ? 1 : 0;
+  // 코드 설명: scanOpacity 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const scanOpacity = progress > 0.38 ? 1 : 0;
+  // 코드 설명: detectTextOpacity 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const detectTextOpacity = progress > 0.55 ? 1 : 0;
+  // 코드 설명: boardMenuLinks 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const boardMenuLinks = [
     { href: "/bug-reports", label: "버그리포트", icon: MessageSquareText },
     { href: "/resources", label: "자료실", icon: FileText },
   ];
+  // 코드 설명: boardMenu 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const boardMenu = (
     <div
       className="relative"
@@ -114,7 +181,9 @@ export default function Home() {
       onMouseLeave={() => setIsBoardMenuOpen(false)}
       onFocus={() => setIsBoardMenuOpen(true)}
       onBlur={(event) => {
+        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !event.currentTarget.contains(event.relatedTarget)
         if (!event.currentTarget.contains(event.relatedTarget)) {
+          // 코드 설명: setIsBoardMenuOpen 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
           setIsBoardMenuOpen(false);
         }
       }}
@@ -136,8 +205,10 @@ export default function Home() {
         <div role="menu" className="absolute right-0 top-10 z-30 w-48 overflow-hidden rounded-xl border border-white/15 bg-slate-950/95 p-1.5 shadow-2xl shadow-black/30 backdrop-blur-xl">
           <p className="px-3 pb-1.5 pt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">게시판</p>
           {boardMenuLinks.map((item) => {
+            // 코드 설명: Icon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const Icon = item.icon;
 
+            // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
             return (
               <Link key={item.href} href={item.href} role="menuitem" onClick={() => setIsBoardMenuOpen(false)} className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-bold text-slate-200 no-underline transition hover:bg-white/10 hover:text-white">
                 <span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-400/10 text-sky-300">
@@ -152,6 +223,7 @@ export default function Home() {
     </div>
   );
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <main className="bg-slate-950 text-white">
       <section ref={sectionRef} className="relative h-[220vh]">

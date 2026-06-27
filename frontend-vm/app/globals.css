@@ -1,15 +1,25 @@
+/*
+ * 파일 역할: 애플리케이션 전체에 적용되는 Tailwind 설정, 디자인 토큰, 기본 요소 스타일을 정의합니다.
+ * 유지보수 참고: 페이지별 스타일보다 우선 범위가 넓으므로 전역 선택자를 추가할 때 기존 화면에 미치는 영향을 확인해야 합니다.
+ */
 @import "tailwindcss";
 
 @theme {
-  --color-staccato: #dc2626;
-  --color-staccato-dark: #991b1b;
+  --color-staccato: #2563eb;
+  --color-staccato-dark: #1d4ed8;
 }
 
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
   --primary: #2563eb;
-  --primary-dark: #1e3a8a;
+  --navy-950: #020617;
+  --navy-900: #0f172a;
+  --primary-dark: #1d4ed8;
+  --cyan: #22d3ee;
+  --surface: #ffffff;
+  --surface-muted: #f8fafc;
+  --border: #e2e8f0;
   --danger: #dc2626;
   --warning: #f59e0b;
   --success: #16a34a;
@@ -40,6 +50,16 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+@layer components {
+  .ui-field { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 0 14px; color: #334155; font-size: 0.875rem; font-weight: 600; outline: none; transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease; }
+  .ui-field::placeholder { color: #94a3b8; }
+  .ui-field:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgb(186 230 253 / 0.55); }
+  .ui-field:disabled { cursor: not-allowed; background: #f1f5f9; color: #94a3b8; }
+  textarea.ui-field { min-height: 144px; padding-top: 12px; padding-bottom: 12px; line-height: 1.65; resize: vertical; }
+  .ui-label { display: grid; gap: 8px; color: #475569; font-size: 0.875rem; font-weight: 700; }
+  .ui-helper { color: #94a3b8; font-size: 0.75rem; font-weight: 600; }
 }
 
 img {

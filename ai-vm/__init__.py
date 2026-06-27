@@ -1,1 +1,2 @@
 """AI VM application package."""
+# 역할: ai-vm 프로젝트 루트 패키지 초기화 파일입니다.

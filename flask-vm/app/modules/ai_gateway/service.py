@@ -15,7 +15,15 @@ from flask import current_app
 class AIGatewayService:
     # 설명: `request_analysis` 함수는 외부 처리 또는 비동기 작업을 요청하는 함수다.
     @staticmethod
-    def request_analysis(report_id, file_path, cctv_id=None, camera_id=None):
+    def request_analysis(
+        report_id,
+        file_path,
+        cctv_id=None,
+        camera_id=None,
+        model_id=None,
+        comparison_run_id=None,
+        timeout_seconds=None,
+    ):
         """
         신고 첨부파일을 AI-vm /detect API로 multipart/form-data 전송합니다.
 
@@ -36,6 +44,20 @@ class AIGatewayService:
 
         # 설명: `detect_url`에 f'{ai_server_url.rstrip('/')}/detect' 표현식의 계산 결과를 저장한다.
         detect_url = f"{ai_server_url.rstrip('/')}/detect"
+
+        requested_timeout_seconds = timeout_seconds
+
+        # AI-vm /detect는 내부 Bearer 인증을 요구한다.
+        internal_api_token = str(
+            current_app.config.get("INTERNAL_API_TOKEN")
+            or os.getenv("INTERNAL_API_TOKEN", "")
+        ).strip()
+
+        if not internal_api_token:
+            return False, {
+                "status": "internal_api_token_missing",
+                "message": "INTERNAL_API_TOKEN is required for AI report analysis.",
+            }
 
         # 설명: `current_app.logger.info`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         current_app.logger.info(
@@ -88,6 +110,12 @@ class AIGatewayService:
                     # 설명: `data['camera_id']`에 `str` 호출 결과를 저장해 다음 처리에서 사용한다.
                     data["camera_id"] = str(camera_id)
 
+                if model_id:
+                    data["model_id"] = str(model_id)
+
+                if comparison_run_id:
+                    data["comparison_run_id"] = str(comparison_run_id)
+
                 # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
                 try:
                     # 설명: `timeout_seconds`에 `int` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -102,7 +130,26 @@ class AIGatewayService:
                 # 설명: `timeout_seconds`에 `max` 호출 결과를 저장해 다음 처리에서 사용한다.
                 timeout_seconds = max(1, timeout_seconds)
 
+                if requested_timeout_seconds is not None:
+                    try:
+                        timeout_seconds = max(
+                            1,
+                            int(requested_timeout_seconds),
+                        )
+                    except (TypeError, ValueError):
+                        return False, {
+                            "status": "invalid_ai_detect_timeout",
+                            "message": (
+                                "comparison analysis timeout must be "
+                                "a positive integer."
+                            ),
+                        }
+
                 # 설명: `response`에 `requests.post` 호출 결과를 저장해 다음 처리에서 사용한다.
+                headers = {
+                    "Authorization": f"Bearer {internal_api_token}",
+                }
+
                 response = requests.post(
                     detect_url,
                     files=files,

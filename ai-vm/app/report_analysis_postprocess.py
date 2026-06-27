@@ -1,3 +1,4 @@
+# 역할: 업로드 리포트 분석 결과를 차량/위험 후보 중심으로 후처리합니다.
 import os
 from typing import Any
 
@@ -15,6 +16,7 @@ VEHICLE_CLASSES = {"car", "bus", "truck"}
 SHOULDER_ROI_IDS = {"LEFT_SHOULDER", "RIGHT_SHOULDER"}
 
 
+# _env_bool 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
@@ -22,6 +24,7 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# _env_float 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _env_float(name: str, default: float) -> float:
     try:
         return float(os.getenv(name, str(default)))
@@ -29,6 +32,7 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+# _env_int 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
@@ -36,6 +40,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+# _bbox_values 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _bbox_values(detection: dict[str, Any]) -> tuple[float, float, float, float] | None:
     bbox = detection.get("bbox")
     if not isinstance(bbox, list) or len(bbox) != 4:
@@ -52,6 +57,7 @@ def _bbox_values(detection: dict[str, Any]) -> tuple[float, float, float, float]
     return x1, y1, x2, y2
 
 
+# _point_in_polygon 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
     """Return True when point is inside polygon using ray-casting."""
     x, y = point
@@ -77,6 +83,7 @@ def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, flo
     return inside
 
 
+# _roi_ids_for_bbox 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _roi_ids_for_bbox(
     bbox: tuple[float, float, float, float],
     frame_width: int | float | None,
@@ -121,6 +128,7 @@ def _roi_ids_for_bbox(
     return roi_ids
 
 
+# _class_name 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _class_name(detection: dict[str, Any]) -> str:
     value = (
         detection.get("class_name")
@@ -131,6 +139,7 @@ def _class_name(detection: dict[str, Any]) -> str:
     return str(value).strip().lower()
 
 
+# postprocess_report_analysis_detections 기능을 수행하는 함수입니다.
 def postprocess_report_analysis_detections(
     detections: list[dict[str, Any]],
     frame_width: int | float | None,

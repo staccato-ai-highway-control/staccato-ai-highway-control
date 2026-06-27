@@ -1,3 +1,7 @@
+/**
+ * 파일 역할: 설정 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 import {
   Activity,
   Cctv,
@@ -7,11 +11,16 @@ import {
   Radio,
   Server,
 } from "lucide-react";
+// 코드 설명: @/components/auth/RequireSuperAdmin 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
+// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
+// 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
+// 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
 
+// 코드 설명: environmentItems 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const environmentItems = [
   {
     title: "시스템 상태",
@@ -50,7 +59,9 @@ const environmentItems = [
   },
 ];
 
+// 코드 설명: SettingsPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function SettingsPage() {
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireSuperAdmin title="운영 환경 정보">
       <AppLayout title="운영 환경 정보">
@@ -75,8 +86,10 @@ export default function SettingsPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {environmentItems.map((item) => {
+            // 코드 설명: Icon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
             const Icon = item.icon;
 
+            // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
             return (
               <Card key={item.title} className="p-5">
                 <div className="flex items-start gap-4">

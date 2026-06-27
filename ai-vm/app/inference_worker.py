@@ -1,4 +1,5 @@
 from __future__ import annotations
+# 역할: 분석 큐의 프레임을 YOLO로 추론하고 bbox, 이벤트, 상태 정보를 갱신합니다.
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from .realtime_detection_filter import filter_realtime_display_detections
 
 
 
+# 추론 워커의 생명주기 상태값입니다.
 class InferenceStatus(str, Enum):
     INIT = "INIT"
     RUNNING = "RUNNING"
@@ -23,6 +25,7 @@ class InferenceStatus(str, Enum):
     STOPPED = "STOPPED"
 
 
+# 한 프레임의 추론 결과와 이벤트 정보를 API 응답 형태로 담는 데이터 구조입니다.
 @dataclass(frozen=True)
 class InferenceResult:
     camera_id: str
@@ -36,6 +39,7 @@ class InferenceResult:
     events: list[dict[str, Any]]
     inference_ms: float
 
+    # 객체 상태를 JSON 응답에 맞는 dict로 변환합니다.
     def to_dict(self) -> dict[str, Any]:
         return {
             "camera_id": self.camera_id,
@@ -53,7 +57,9 @@ class InferenceResult:
         }
 
 
+# 분석 큐를 소비해 YOLO 추론과 이벤트 감지를 백그라운드에서 수행합니다.
 class InferenceWorker:
+    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         camera_id: str,
@@ -89,11 +95,13 @@ class InferenceWorker:
         self.frames_analyzed = 0
         self.error_message: str | None = None
 
+    # status 기능을 수행하는 함수입니다.
     @property
     def status(self) -> InferenceStatus:
         with self._status_lock:
             return self._status
 
+    # 백그라운드 작업 스레드를 시작합니다.
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -108,6 +116,7 @@ class InferenceWorker:
         )
         self._thread.start()
 
+    # 백그라운드 작업을 멈추고 관련 리소스를 정리합니다.
     def stop(self, join_timeout: float = 2.0) -> None:
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
@@ -115,13 +124,16 @@ class InferenceWorker:
         self._set_status(InferenceStatus.STOPPED)
         self.analysis_queue.clear()
 
+    # 현재 워커 스레드가 살아 있는지 반환합니다.
     def is_running(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
+    # get_latest_result 기능을 수행하는 함수입니다.
     def get_latest_result(self) -> InferenceResult | None:
         with self._latest_result_lock:
             return self._latest_result
 
+    # 모니터링/API 응답에 쓰는 현재 상태 payload를 만듭니다.
     def to_status_payload(self) -> dict[str, Any]:
         latest_result = self.get_latest_result()
         return {
@@ -145,6 +157,7 @@ class InferenceWorker:
             "error_message": self.error_message,
         }
 
+    # _inference_loop 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _inference_loop(self) -> None:
         self._set_status(InferenceStatus.RUNNING)
 
@@ -219,6 +232,7 @@ class InferenceWorker:
 
         self._set_status(InferenceStatus.STOPPED)
 
+    # _set_status 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     def _set_status(self, status: InferenceStatus) -> None:
         with self._status_lock:
             if self._status == status:
@@ -226,10 +240,12 @@ class InferenceWorker:
             self._status = status
             self.status_changed_at = self._utc_now()
 
+    # _utc_now 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _utc_now() -> datetime:
         return datetime.now(timezone.utc)
 
+    # _format_dt 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
     def _format_dt(value: datetime | None) -> str | None:
         return value.isoformat() if value else None

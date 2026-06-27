@@ -1,10 +1,12 @@
 from __future__ import annotations
+# 역할: 프론트 실시간 bbox 표시용으로 낮은 신뢰도나 고정 오버레이 탐지를 걸러냅니다.
 
 import os
 
 from .detector import Detection
 
 
+# _env_bool 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _env_bool(key: str, default: str = "true") -> bool:
     return os.getenv(key, default).lower() in {"1", "true", "yes", "on"}
 
@@ -52,10 +54,12 @@ DEFAULT_IGNORE_RECT_RATIOS: dict[str, list[tuple[float, float, float, float]]] =
 }
 
 
+# _env_key_for_camera 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _env_key_for_camera(camera_id: str) -> str:
     return camera_id.upper().replace("-", "_")
 
 
+# _parse_roi_ratio_polygon 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _parse_roi_ratio_polygon(raw_value: str | None) -> list[tuple[float, float]]:
     if not raw_value:
         return []
@@ -78,6 +82,7 @@ def _parse_roi_ratio_polygon(raw_value: str | None) -> list[tuple[float, float]]
     return points if len(points) >= 3 else []
 
 
+# _parse_ignore_rects 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _parse_ignore_rects(raw_value: str | None) -> list[tuple[float, float, float, float]]:
     if not raw_value:
         return []
@@ -105,6 +110,7 @@ def _parse_ignore_rects(raw_value: str | None) -> list[tuple[float, float, float
     return rects
 
 
+# _road_roi_ratio_polygon 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _road_roi_ratio_polygon(camera_id: str) -> list[tuple[float, float]]:
     env_key = f"REALTIME_ROAD_ROI_{_env_key_for_camera(camera_id)}"
     configured = _parse_roi_ratio_polygon(os.getenv(env_key))
@@ -114,6 +120,7 @@ def _road_roi_ratio_polygon(camera_id: str) -> list[tuple[float, float]]:
     return DEFAULT_ROAD_ROI_RATIOS.get(camera_id, [])
 
 
+# _ignore_rect_ratios 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _ignore_rect_ratios(camera_id: str) -> list[tuple[float, float, float, float]]:
     env_key = f"REALTIME_IGNORE_RECTS_{_env_key_for_camera(camera_id)}"
     configured = _parse_ignore_rects(os.getenv(env_key))
@@ -123,6 +130,7 @@ def _ignore_rect_ratios(camera_id: str) -> list[tuple[float, float, float, float
     return DEFAULT_IGNORE_RECT_RATIOS.get(camera_id, [])
 
 
+# _point_in_polygon 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
     x, y = point
     inside = False
@@ -148,12 +156,14 @@ def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, flo
     return inside
 
 
+# _point_in_rect 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _point_in_rect(point: tuple[float, float], rect: tuple[float, float, float, float]) -> bool:
     x, y = point
     left, top, right, bottom = rect
     return left <= x <= right and top <= y <= bottom
 
 
+# _passes_display_confidence 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _passes_display_confidence(detection: Detection) -> bool:
     try:
         confidence = float(detection.confidence)
@@ -170,6 +180,7 @@ def _passes_display_confidence(detection: Detection) -> bool:
     return confidence >= threshold
 
 
+# filter_realtime_display_detections 기능을 수행하는 함수입니다.
 def filter_realtime_display_detections(
     *,
     camera_id: str,
@@ -235,6 +246,7 @@ def filter_realtime_display_detections(
     return filtered
 
 
+# filter_detections_by_road_roi 기능을 수행하는 함수입니다.
 def filter_detections_by_road_roi(
     *,
     camera_id: str,

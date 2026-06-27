@@ -1,3 +1,4 @@
+# 역할: ITS OpenAPI에서 CCTV 목록을 조회하고 실패 시 캐시 fallback을 제공합니다.
 import re
 from typing import Any
 
@@ -19,7 +20,9 @@ from .its_cctv_cache import load_its_cctv_cache, save_its_cctv_cache
 _CCTV_NAME_REMOVE_PATTERN = re.compile(r"[\[\]\s_]+")
 
 
+# ITS API 오류 유형과 상태 코드를 함께 담는 예외입니다.
 class ITSOpenAPIError(requests.RequestException):
+    # 객체 생성에 필요한 설정값과 내부 상태를 초기화합니다.
     def __init__(
         self,
         message: str,
@@ -34,6 +37,7 @@ class ITSOpenAPIError(requests.RequestException):
         self.result_code = result_code
 
 
+# normalize_cctv_item 기능을 수행하는 함수입니다.
 def normalize_cctv_item(item: dict) -> dict:
     return {
         "name": item.get("cctvname", ""),
@@ -48,10 +52,12 @@ def normalize_cctv_item(item: dict) -> dict:
     }
 
 
+# normalize_cctv_name 기능을 수행하는 함수입니다.
 def normalize_cctv_name(name: str | None) -> str:
     return _CCTV_NAME_REMOVE_PATTERN.sub("", name or "").strip().lower()
 
 
+# _extract_result_code 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _extract_result_code(data: Any) -> str | None:
     if not isinstance(data, dict):
         return None
@@ -78,6 +84,7 @@ def _extract_result_code(data: Any) -> str | None:
     return None
 
 
+# _extract_result_message 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _extract_result_message(data: Any) -> str:
     if isinstance(data, dict):
         for key in ("resultMsg", "resultMessage", "message", "msg"):
@@ -102,6 +109,7 @@ def _extract_result_message(data: Any) -> str:
     return "ITS API request failed."
 
 
+# _error_info 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _error_info(
     *,
     error_type: str,
@@ -117,6 +125,7 @@ def _error_info(
     }
 
 
+# _error_info_from_status 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _error_info_from_status(status_code: int, result_code: str | None, message: str) -> dict[str, Any]:
     if result_code == "4001":
         error_type = "ITS_QUOTA_EXCEEDED"
@@ -135,6 +144,7 @@ def _error_info_from_status(status_code: int, result_code: str | None, message: 
     )
 
 
+# _should_fallback 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _should_fallback(error_info: dict[str, Any]) -> bool:
     status_code = error_info.get("statusCode")
     return (
@@ -145,6 +155,7 @@ def _should_fallback(error_info: dict[str, Any]) -> bool:
     )
 
 
+# _cache_response 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _cache_response(error_info: dict[str, Any]) -> dict[str, Any] | None:
     if not _should_fallback(error_info):
         return None
@@ -162,6 +173,7 @@ def _cache_response(error_info: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+# _raise_safe_request_error 내부 보조 함수로 주요 처리 흐름을 분리합니다.
 def _raise_safe_request_error(error_info: dict[str, Any]) -> None:
     raise ITSOpenAPIError(
         error_info.get("message") or "ITS API request failed.",
@@ -171,6 +183,7 @@ def _raise_safe_request_error(error_info: dict[str, Any]) -> None:
     )
 
 
+# get_its_cctv_list_response 기능을 수행하는 함수입니다.
 def get_its_cctv_list_response(
     min_x: str = ITS_CCTV_DEFAULT_MIN_X,
     max_x: str = ITS_CCTV_DEFAULT_MAX_X,
@@ -245,6 +258,7 @@ def get_its_cctv_list_response(
     }
 
 
+# get_its_cctv_list 기능을 수행하는 함수입니다.
 def get_its_cctv_list(
     min_x: str = ITS_CCTV_DEFAULT_MIN_X,
     max_x: str = ITS_CCTV_DEFAULT_MAX_X,
@@ -264,6 +278,7 @@ def get_its_cctv_list(
     return response["items"]
 
 
+# find_its_cctv_by_name 기능을 수행하는 함수입니다.
 def find_its_cctv_by_name(
     name: str,
     *,
