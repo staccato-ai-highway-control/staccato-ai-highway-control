@@ -891,6 +891,8 @@ async def detect_legacy_report_file(
     report_id: str = Form(default=""),
     cctv_id: str = Form(default=""),
     camera_id: str = Form(default=""),
+    model_id: str = Form(default=""),
+    comparison_run_id: str = Form(default=""),
     _auth: None = Depends(require_internal_token),
 ):
     """Legacy Flask report-analysis compatibility endpoint.
@@ -906,6 +908,7 @@ async def detect_legacy_report_file(
     """
     import os
     import tempfile
+    import time
     import uuid
     from pathlib import Path
 
@@ -935,7 +938,61 @@ async def detect_legacy_report_file(
     best_frame = None
     best_detections = []
     frames_processed = 0
+    total_frames = 1
     source_type = "video" if is_video else "image"
+
+    selected_model_id = str(model_id or "").strip().lower() or None
+    comparison_run_id = str(comparison_run_id or "").strip() or None
+
+    selected_detector = detector
+    selected_model_name = None
+    selected_model_version = None
+
+    if selected_model_id:
+        from .model_registry import (
+            ReportModelUnavailableError,
+            UnknownReportModelError,
+            report_model_registry,
+        )
+
+        try:
+            selected_spec, selected_detector = report_model_registry.get(
+                selected_model_id
+            )
+        except UnknownReportModelError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except ReportModelUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        selected_model_name = selected_spec.model_name
+        selected_model_version = selected_spec.model_version
+
+    artifact_parts = [str(report_id or "unknown")]
+    if selected_model_id:
+        artifact_parts.append(selected_model_id)
+    if comparison_run_id:
+        artifact_parts.append(comparison_run_id)
+
+    artifact_report_id = "_".join(artifact_parts)
+
+    analysis_started_at = time.perf_counter()
+    inference_seconds = 0.0
+
+    def detect_with_metrics(frame):
+        nonlocal inference_seconds
+
+        inference_started_at = time.perf_counter()
+
+        try:
+            detections = selected_detector.detect(frame)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=f"YOLO model inference failed: {exc}",
+            ) from exc
+
+        inference_seconds += time.perf_counter() - inference_started_at
+        return detections
 
     if is_video:
         tmp_path = Path(tempfile.gettempdir()) / f"staccato-detect-{uuid.uuid4().hex}{suffix or '.mp4'}"
@@ -947,6 +1004,7 @@ async def detect_legacy_report_file(
             if not cap.isOpened():
                 raise HTTPException(status_code=400, detail="Failed to open video file.")
 
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
             frame_index = 0
             while frames_processed < max_frames:
                 ok, frame = cap.read()
@@ -954,7 +1012,7 @@ async def detect_legacy_report_file(
                     break
 
                 if frame_index % frame_stride == 0:
-                    frame_detections = detector.detect(frame)
+                    frame_detections = detect_with_metrics(frame)
                     frame_detection_dicts = []
                     for item in frame_detections:
                         detection = item.to_dict()
@@ -980,7 +1038,7 @@ async def detect_legacy_report_file(
         if frame is None:
             raise HTTPException(status_code=400, detail="Failed to decode image file.")
 
-        frame_detections = detector.detect(frame)
+        frame_detections = detect_with_metrics(frame)
         detections_payload = [item.to_dict() for item in frame_detections]
         best_frame = frame.copy()
         best_detections = detections_payload
@@ -1012,6 +1070,36 @@ async def detect_legacy_report_file(
     raw_detections_payload = detections_payload
     raw_count = len(raw_detections_payload)
 
+    confidence_values = []
+    class_summary = {}
+
+    for detection in raw_detections_payload:
+        if not isinstance(detection, dict):
+            continue
+
+        confidence = detection.get("confidence")
+        if isinstance(confidence, (int, float)):
+            confidence_values.append(float(confidence))
+
+        class_name = str(
+            detection.get("class_name")
+            or detection.get("raw_class_name")
+            or detection.get("class_id")
+            or "unknown"
+        )
+        class_summary[class_name] = class_summary.get(class_name, 0) + 1
+
+    avg_confidence = (
+        round(sum(confidence_values) / len(confidence_values), 5)
+        if confidence_values
+        else None
+    )
+    max_confidence = (
+        round(max(confidence_values), 5)
+        if confidence_values
+        else None
+    )
+
     detections_payload = postprocess_result["display_detections"]
     best_detections = best_postprocess_result["display_detections"]
 
@@ -1021,19 +1109,19 @@ async def detect_legacy_report_file(
     if is_video:
         annotated_video_url = _save_report_analysis_annotated_video(
             source_path=Path(tmp_path),
-            report_id=report_id,
+            report_id=artifact_report_id,
             detections=detections_payload,
         )
 
         if not annotated_video_url:
             annotated_image_url = _save_report_analysis_annotated_image(
-                report_id=report_id,
+                report_id=artifact_report_id,
                 frame=best_frame,
                 detections=best_detections,
             )
     else:
         annotated_image_url = _save_report_analysis_annotated_image(
-            report_id=report_id,
+            report_id=artifact_report_id,
             frame=best_frame,
             detections=best_detections,
         )
@@ -1046,6 +1134,21 @@ async def detect_legacy_report_file(
         except Exception:
             pass
 
+    total_elapsed_ms = int(
+        round((time.perf_counter() - analysis_started_at) * 1000)
+    )
+    inference_ms = int(round(inference_seconds * 1000))
+    processed_fps = (
+        round(frames_processed / (total_elapsed_ms / 1000), 2)
+        if total_elapsed_ms > 0
+        else None
+    )
+    inference_fps = (
+        round(frames_processed / inference_seconds, 2)
+        if inference_seconds > 0
+        else None
+    )
+
     return {
         "success": True,
         "status": "OK",
@@ -1054,9 +1157,22 @@ async def detect_legacy_report_file(
         "camera_id": camera_id or None,
         "filename": filename,
         "source_type": source_type,
-        "model": detector.model_name,
+        "model": selected_detector.model_name,
+        "model_id": selected_model_id,
+        "model_name": selected_model_name,
+        "model_version": selected_model_version,
+        "comparison_run_id": comparison_run_id,
         "count": len(detections_payload),
         "raw_count": raw_count,
+        "total_frames": max(total_frames, frames_processed),
+        "frames_processed": frames_processed,
+        "total_elapsed_ms": total_elapsed_ms,
+        "inference_ms": inference_ms,
+        "processed_fps": processed_fps,
+        "inference_fps": inference_fps,
+        "avg_confidence": avg_confidence,
+        "max_confidence": max_confidence,
+        "class_summary": class_summary,
         "filtered_count": postprocess_result.get("filtered_count"),
         "incident_candidate_count": postprocess_result.get("incident_candidate_count"),
         "detections": detections_payload,

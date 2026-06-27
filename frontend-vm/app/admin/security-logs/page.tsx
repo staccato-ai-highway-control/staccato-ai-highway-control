@@ -1,21 +1,38 @@
+/**
+ * 파일 역할: 관리자 / security-logs 경로의 화면 진입점으로, 필요한 데이터와 UI 컴포넌트를 조합합니다.
+ * 유지보수 참고: 라우트 수준의 상태, 권한, 로딩 및 오류 흐름을 담당하고 세부 표현은 하위 컴포넌트에 위임합니다.
+ */
 "use client";
 
+// 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useCallback, useEffect, useState } from "react";
+// 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Download, RefreshCw, ShieldCheck } from "lucide-react";
+// 코드 설명: @/components/auth/RequireSuperAdmin 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
+// 코드 설명: @/components/layout/AppLayout 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { AppLayout } from "@/components/layout/AppLayout";
+// 코드 설명: @/features/resources/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   downloadResourceFile,
   getSecurityLogResources,
 } from "@/features/resources/api";
+// 코드 설명: @/features/resources/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { ResourceItem } from "@/features/resources/types";
 
+const PAGE_SIZE = 10;
+
+// 코드 설명: formatDate 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatDate(value?: string | null) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !value
   if (!value) return "-";
 
+  // 코드 설명: date 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const date = new Date(value);
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: Number.isNaN(date.getTime())
   if (Number.isNaN(date.getTime())) return value;
 
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: date.toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: …
   return date.toLocaleString("ko-KR", {
     year: "numeric",
     month: "2-digit",
@@ -25,50 +42,79 @@ function formatDate(value?: string | null) {
   });
 }
 
+// 코드 설명: formatFileSize 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatFileSize(size?: number | null) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !size
   if (!size) return "-";
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: size < 1024
   if (size < 1024) return `${size} B`;
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: size < 1024 * 1024
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${(size / 1024 / 1024).toFixed(1)} MB`
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// 코드 설명: SecurityLogsPage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export default function SecurityLogsPage() {
+  // 코드 설명: [logs, setLogs] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const [logs, setLogs] = useState<ResourceItem[]>([]);
+  // 코드 설명: [loading, setLoading] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [loading, setLoading] = useState(true);
+  // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
+  const [page, setPage] = useState(1);
 
+  // 코드 설명: loadLogs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const loadLogs = useCallback(async () => {
+    // 코드 설명: setLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setLoading(true);
+    // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
     setErrorMessage("");
 
+    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
+      // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const response = await getSecurityLogResources({
         page: 1,
-        size: 20,
+        size: 1000,
       });
 
+      // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLogs(response.items ?? []);
+      setPage(1);
     } catch (error) {
+      // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLogs([]);
+      // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(
         error instanceof Error
           ? error.message
           : "보안 로그를 불러오지 못했습니다."
       );
     } finally {
+      // 코드 설명: setLoading 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLoading(false);
     }
   }, []);
 
+  // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: loadLogs();
     loadLogs();
   }, [loadLogs]);
 
+  const totalPages = Math.max(1, Math.ceil(logs.length / PAGE_SIZE));
+  const visibleLogs = logs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // 코드 설명: handleDownload 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const handleDownload = async (log: ResourceItem) => {
+    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !log.file_name
     if (!log.file_name) return;
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: await downloadResourceFile(log.id, log.file_name);
     await downloadResourceFile(log.id, log.file_name);
   };
 
+  // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
   return (
     <RequireSuperAdmin title="보안 로그">
       <AppLayout title="보안 로그">
@@ -166,7 +212,7 @@ export default function SecurityLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.map((log) => (
+                    {visibleLogs.map((log) => (
                       <tr
                         key={log.id}
                         className="border-b border-slate-100 text-sm last:border-b-0"
@@ -230,6 +276,13 @@ export default function SecurityLogsPage() {
                 </table>
               </div>
             )}
+            {!loading && !errorMessage && logs.length > 0 ? (
+              <div className="flex items-center justify-between border-t border-slate-100 px-5 py-4">
+                <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">이전</button>
+                <span className="text-xs font-bold text-slate-500">10개 단위 · {page} / {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">다음</button>
+              </div>
+            ) : null}
           </section>
         </main>
       </AppLayout>

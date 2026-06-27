@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Newspaper,
   MessageSquareText,
+  FileText,
   SlidersHorizontal,
   Users,
 } from "lucide-react";
@@ -77,6 +78,7 @@ export const navigationSections: NavigationSection[] = [
       { href: "/admin/users", icon: Users, label: "사용자 관리", allowedRoles: allRoles },
       { href: "/settings", icon: SlidersHorizontal, label: "운영 환경 정보", allowedRoles: allRoles },
       { href: "/board", icon: Newspaper, label: "게시판", allowedRoles: allRoles },
+      { href: "/resources", icon: FileText, label: "자료실", allowedRoles: allRoles },
       { href: "/bug-reports", icon: MessageSquareText, label: "버그리포트", allowedRoles: allRoles },
     ],
   },

@@ -8,15 +8,17 @@ export function DashboardPanel({
   className,
   bodyClassName,
   titleAction,
+  compact = false,
 }: {
   title: string;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
   titleAction?: ReactNode;
+  compact?: boolean;
 }) {
   return (
-    <Card className={cn("flex min-h-72 flex-col overflow-hidden rounded-lg p-5 shadow-none", className)}>
+    <Card className={cn("flex flex-col overflow-hidden rounded-2xl p-5 shadow-[0_16px_40px_-30px_rgba(15,23,42,0.45)]", compact ? "min-h-0" : "min-h-72", className)}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-black text-slate-950">{title}</h2>
         {titleAction}

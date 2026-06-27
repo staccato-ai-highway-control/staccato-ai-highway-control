@@ -1,0 +1,12 @@
+[Unit]
+Description=Run STACCATO Report Model Comparison Worker periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Persistent=true
+Unit=staccato-report-model-comparison-worker.service
+
+[Install]
+WantedBy=timers.target
