@@ -1078,6 +1078,11 @@ async def detect_legacy_report_file(
         best_detections = detections_payload
         frames_processed = 1
 
+    # 원시 탐지 결과는 최종 후처리 결과와 분리해 보관한다.
+    # 최종 탐지가 0건이어도 실제 모델의 탐지 박스를 미리보기로 확인할 수 있다.
+    raw_detections_payload = list(detections_payload)
+    raw_best_detections = list(best_detections)
+
     from .report_analysis_postprocess import postprocess_report_analysis_detections
 
     frame_height = 0
@@ -1101,7 +1106,6 @@ async def detect_legacy_report_file(
         source_type=source_type,
     )
 
-    raw_detections_payload = detections_payload
     raw_count = len(raw_detections_payload)
 
     confidence_values = []
@@ -1137,6 +1141,20 @@ async def detect_legacy_report_file(
     detections_payload = postprocess_result["display_detections"]
     best_detections = best_postprocess_result["display_detections"]
 
+    # 최종 필터를 모두 통과하지 못해도 원시 탐지가 있으면,
+    # 모델이 실제로 반환한 박스를 결과 미리보기에서 확인할 수 있게 한다.
+    # 단, API의 count/detections 값은 기존처럼 최종 후처리 결과만 반환한다.
+    media_detections = detections_payload
+    media_best_detections = best_detections
+    media_uses_raw_detections = bool(
+        raw_detections_payload
+        and not detections_payload
+    )
+
+    if media_uses_raw_detections:
+        media_detections = raw_detections_payload
+        media_best_detections = raw_best_detections
+
     annotated_image_url = None
     annotated_video_url = None
 
@@ -1144,20 +1162,20 @@ async def detect_legacy_report_file(
         annotated_video_url = _save_report_analysis_annotated_video(
             source_path=Path(tmp_path),
             report_id=artifact_report_id,
-            detections=detections_payload,
+            detections=media_detections,
         )
 
         if not annotated_video_url:
             annotated_image_url = _save_report_analysis_annotated_image(
                 report_id=artifact_report_id,
                 frame=best_frame,
-                detections=best_detections,
+                detections=media_best_detections,
             )
     else:
         annotated_image_url = _save_report_analysis_annotated_image(
             report_id=artifact_report_id,
             frame=best_frame,
-            detections=best_detections,
+            detections=media_best_detections,
         )
 
     annotated_media_type = "video" if annotated_video_url else "image" if annotated_image_url else None
