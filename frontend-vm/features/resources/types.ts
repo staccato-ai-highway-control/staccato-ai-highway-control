@@ -23,6 +23,10 @@ export type ResourceItem = {
   download_url?: string;
   created_at: string;
   updated_at: string;
+  allowed_actions?: {
+    view?: boolean;
+    download?: boolean;
+  } | null;
 };
 
 // 코드 설명: GetResourcesParams 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.

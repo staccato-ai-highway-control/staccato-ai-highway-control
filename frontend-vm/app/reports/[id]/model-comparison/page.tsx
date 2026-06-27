@@ -54,7 +54,7 @@ function runStatusTone(status: string): "slate" | "blue" | "green" | "amber" | "
   if (status === "COMPLETED") return "green";
   if (status === "FAILED") return "red";
   if (status === "RUNNING") return "amber";
-  if (status === "PENDING") return "blue";
+  if (status === "QUEUED") return "blue";
   return "slate";
 }
 
@@ -62,7 +62,7 @@ function batchStatusTone(status: string): "slate" | "blue" | "green" | "amber" |
   if (status === "COMPLETED") return "green";
   if (status === "FAILED") return "red";
   if (status === "PARTIAL_FAILED") return "amber";
-  if (status === "RUNNING" || status === "PENDING") return "amber";
+  if (status === "RUNNING" || status === "QUEUED") return "amber";
   return "slate";
 }
 
@@ -303,13 +303,24 @@ export default function ModelComparisonPage({
         const data = await getModelComparisonBatch(batchId);
         if (disposed) return;
 
+        // [3] polling 매 회차
+        console.log("[STACCATO-DEBUG] polling 회차 — batchId:", batchId, "응답 전체:", data);
+
         const status = (data.batch?.status ?? data.batch?.batch_status ?? data.status ?? "UNKNOWN") as string;
         const newResults = (data.batch?.runs ?? data.batch?.results ?? data.runs ?? data.results ?? []) as ModelComparisonItem[];
+
+        console.log("[STACCATO-DEBUG] polling runs:", newResults.map((r) => ({
+          model_name: r.model_name,
+          run_status: r.run_status,
+          detection_count: r.detection_count,
+        })));
 
         setBatchStatus(status);
         setResults(newResults);
 
         if (TERMINAL_STATUSES.includes(status)) {
+          // [4] polling 종료
+          console.log("[STACCATO-DEBUG] polling 종료 — 최종 상태:", status, "최종 runs:", newResults);
           setPhase("done");
         } else {
           timerRef.current = window.setTimeout(() => poll(batchId), POLL_INTERVAL_MS);
@@ -346,6 +357,9 @@ export default function ModelComparisonPage({
         ]);
         if (disposed) return;
 
+        // [1] 모델 목록 조회
+        console.log("[STACCATO-DEBUG] 모델 목록 조회 완료:", models);
+
         setReport(reportData);
 
         if (models.length === 0) {
@@ -368,6 +382,9 @@ export default function ModelComparisonPage({
         const modelIds = models.slice(0, MAX_MODELS).map((m) => m.model_id);
         setPhase("starting");
 
+        // [2] 분석 시작 POST 요청 body
+        console.log("[STACCATO-DEBUG] 분석 시작 요청 body:", { attachment_id: Number(attachmentId), model_ids: modelIds });
+
         let batchId: string | number | null = null;
 
         try {
@@ -376,6 +393,8 @@ export default function ModelComparisonPage({
             model_ids: modelIds,
           });
           batchId = startResponse.batch?.id ?? null;
+          // [2] 분석 시작 응답
+          console.log("[STACCATO-DEBUG] 분석 시작 응답 batchId:", batchId);
         } catch (err) {
           // 409: 동일 조합이 이미 실행 중 → 기존 배치 ID를 이어서 polling
           if (isApiError(err) && err.statusCode === 409) {
@@ -417,6 +436,21 @@ export default function ModelComparisonPage({
       if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
     };
   }, [id]);
+
+  // [5] 결과 렌더링 시
+  useEffect(() => {
+    if (results.length > 0) {
+      console.log("[STACCATO-DEBUG] 결과 렌더링 데이터:", results.map((r) => ({
+        model_name: r.model_name,
+        run_status: r.run_status,
+        detection_count: r.detection_count,
+        avg_confidence: r.avg_confidence,
+        inference_ms: r.inference_ms,
+        inference_fps: r.inference_fps,
+        total_elapsed_ms: r.total_elapsed_ms,
+      })));
+    }
+  }, [results]);
 
   const completedResults = results.filter((r) => r.run_status === "COMPLETED");
   const isActive = phase === "loading" || phase === "starting" || phase === "polling";

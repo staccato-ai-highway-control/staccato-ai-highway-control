@@ -23,6 +23,7 @@ import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
+import { MarkdownContent } from "@/components/common/MarkdownContent";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { deleteBoardPost, getBoardPost } from "@/features/board/api";
 // 코드 설명: @/features/board/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -348,7 +349,9 @@ export default function AdminBoardDetailPage({ params }: { params: Promise<{ id:
             <span>작성일 {formatBoardDate(post.created_at)}</span>
             <span>수정일 {formatBoardDate(post.updated_at)}</span>
           </div>
-          <p className="mt-6 whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-700">{post.content}</p>
+          <article className="mt-6 rounded-xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
+            <MarkdownContent content={post.content} />
+          </article>
         </Card>
 
         <Card className="mt-5 p-5">
