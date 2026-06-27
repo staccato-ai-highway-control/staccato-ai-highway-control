@@ -121,6 +121,13 @@ from app.models.mlops_models import (
 )
 
 # 설명: `__all__`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
+
+# 모델 비교 분석 전용 Batch/Run 엔터티를 외부 모듈에서 재사용한다.
+from app.models.report_model_comparison_models import (
+    ReportModelComparisonBatch,
+    ReportModelComparisonRun,
+)
+
 __all__ = [
     "User",
     "SignupRequest",
@@ -168,4 +175,6 @@ __all__ = [
     "AiModelVersion",
     "TrainingDataset",
     "TrainingJob",
+    "ReportModelComparisonBatch",
+    "ReportModelComparisonRun",
 ]

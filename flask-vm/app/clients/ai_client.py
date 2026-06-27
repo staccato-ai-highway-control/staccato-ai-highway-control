@@ -49,8 +49,8 @@ def request_ai_analysis(payload: dict) -> dict:
 
     # 설명: `INTERNAL_API_TOKEN` 조건 결과에 따라 실행 경로를 분기한다.
     if INTERNAL_API_TOKEN:
-        # 설명: `headers['X-Internal-Token']`에 INTERNAL_API_TOKEN 표현식의 계산 결과를 저장한다.
-        headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+        # 설명: AI-vm /detect 인증 규약에 맞춰 Authorization Bearer 헤더에 내부 토큰을 설정한다.
+        headers["Authorization"] = f"Bearer {INTERNAL_API_TOKEN}"
 
     # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
     try:
