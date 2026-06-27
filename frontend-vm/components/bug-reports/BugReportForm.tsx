@@ -14,6 +14,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/common/Button";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
+import { MarkdownEditor } from "@/components/common/MarkdownEditor";
 // 코드 설명: @/features/bug-reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { createBugReport } from "@/features/bug-reports/api";
 // 코드 설명: @/features/bug-reports/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -125,10 +126,10 @@ export function BugReportForm() {
               <input value={form.title} onChange={(event) => updateField("title", event.target.value)} className="ui-field" />
             </label>
 
-            <label className="grid gap-2 text-sm font-bold text-slate-700">
-              내용
-              <textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} className="ui-field" />
-            </label>
+            <div className="grid gap-2 text-sm font-bold text-slate-700">
+              <span>내용</span>
+              <MarkdownEditor value={form.description} onChange={(description) => updateField("description", description)} />
+            </div>
 
             <div className="grid gap-4 md:grid-cols-3">
               <label className="grid gap-2 text-sm font-bold text-slate-700">
