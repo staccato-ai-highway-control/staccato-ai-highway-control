@@ -23,20 +23,20 @@ class ReportModelComparisonService:
         {
             "model_id": "yolo11s",
             "model_name": "YOLO11 Small",
-            "model_version": None,
+            "model_version": "best.pt",
             "description": "YOLO11 Small 기반 차량 탐지 모델",
         },
         {
-            "model_id": "yolo11n",
-            "model_name": "YOLO11 Nano",
-            "model_version": None,
-            "description": "YOLO11 Nano 기반 차량 탐지 모델",
+            "model_id": "keras_yolov8",
+            "model_name": "Keras YOLOv8 Vehicle Detector",
+            "model_version": "best.keras",
+            "description": "KerasCV YOLOv8 기반 차량 탐지 모델 (CPU)",
         },
         {
-            "model_id": "yolo8n",
-            "model_name": "YOLOv8 Nano",
-            "model_version": None,
-            "description": "YOLOv8 Nano 기반 차량 탐지 모델",
+            "model_id": "rtdetr",
+            "model_name": "RT-DETR Vehicle Detector",
+            "model_version": "best.pt",
+            "description": "RT-DETR 기반 차량 탐지 모델",
         },
     )
 
