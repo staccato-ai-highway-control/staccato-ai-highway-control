@@ -112,6 +112,59 @@ class ReportModelComparisonService:
         return data
 
     @classmethod
+    def list_all_batches(cls, current_user, page=1, size=20, status=None):
+        denied = cls._require_admin(current_user)
+        if denied:
+            return denied
+
+        from math import ceil
+
+        page = max(1, int(page or 1))
+        size = max(1, min(int(size or 20), 100))
+
+        query = ReportModelComparisonBatch.query
+
+        valid_statuses = {"QUEUED", "RUNNING", "COMPLETED", "PARTIAL_FAILED", "FAILED"}
+        if status and status.upper() in valid_statuses:
+            query = query.filter(
+                ReportModelComparisonBatch.batch_status == status.upper()
+            )
+
+        total_count = query.count()
+        total_pages = max(1, ceil(total_count / size))
+
+        batches = (
+            query
+            .order_by(ReportModelComparisonBatch.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+            .all()
+        )
+
+        items = []
+        for batch in batches:
+            batch_dict = cls._serialize_batch(batch, include_runs=True)
+
+            report = db.session.get(IncidentReport, batch.report_id)
+            if report:
+                batch_dict["report_code"] = getattr(report, "report_code", None)
+                batch_dict["report_title"] = (
+                    getattr(report, "title", None)
+                    or getattr(report, "subject", None)
+                )
+
+            items.append(batch_dict)
+
+        return {
+            "success": True,
+            "page": page,
+            "size": size,
+            "total_count": total_count,
+            "total_pages": total_pages,
+            "batches": items,
+        }, 200
+
+    @classmethod
     def list_models(cls, current_user):
         denied = cls._require_admin(current_user)
         if denied:

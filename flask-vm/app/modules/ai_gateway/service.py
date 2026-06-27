@@ -154,7 +154,6 @@ class AIGatewayService:
                     detect_url,
                     files=files,
                     data=data,
-                    headers=headers,
                     timeout=timeout_seconds,
                 )
 
