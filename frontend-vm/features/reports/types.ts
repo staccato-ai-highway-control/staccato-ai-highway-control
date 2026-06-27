@@ -271,11 +271,12 @@ export type ReportUploadResponse = {
 export interface ModelComparisonModel {
   model_id: string;
   model_name?: string | null;
+  model_version?: string | null;
   description?: string | null;
 }
 
 export type ModelComparisonBatchStatus =
-  | "PENDING"
+  | "QUEUED"
   | "RUNNING"
   | "COMPLETED"
   | "PARTIAL_FAILED"
@@ -283,7 +284,7 @@ export type ModelComparisonBatchStatus =
   | string;
 
 export type ModelComparisonRunStatus =
-  | "PENDING"
+  | "QUEUED"
   | "RUNNING"
   | "COMPLETED"
   | "FAILED"
@@ -291,6 +292,8 @@ export type ModelComparisonRunStatus =
 
 export interface ModelComparisonItem {
   model_name: string;
+  model_id?: string | null;
+  model_version?: string | null;
   run_status: ModelComparisonRunStatus;
   detection_count?: number | null;
   avg_confidence?: number | null;

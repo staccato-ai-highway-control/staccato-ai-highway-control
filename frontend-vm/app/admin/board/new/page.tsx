@@ -21,6 +21,7 @@ import { Button } from "@/components/common/Button";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
+import { MarkdownEditor } from "@/components/common/MarkdownEditor";
 // 코드 설명: @/features/board/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { createBoardPost } from "@/features/board/api";
 // 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -194,10 +195,10 @@ export default function AdminBoardNewPage() {
               <span className="text-xs font-black text-slate-500">제목</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} className="ui-field" />
             </label>
-            <label className="grid gap-2">
+            <div className="grid gap-2">
               <span className="text-xs font-black text-slate-500">내용</span>
-              <textarea value={content} onChange={(event) => setContent(event.target.value)} rows={12} className="ui-field min-h-72" />
-            </label>
+              <MarkdownEditor value={content} onChange={setContent} />
+            </div>
 
             {canPin ? (
               <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm font-bold text-slate-700">

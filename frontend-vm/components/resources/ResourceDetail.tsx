@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Badge } from "@/components/common/Badge";
 // 코드 설명: @/components/common/Card 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Card } from "@/components/common/Card";
+import { MarkdownContent } from "@/components/common/MarkdownContent";
 // 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
 // 코드 설명: @/features/resources/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -195,7 +196,9 @@ export function ResourceDetail({ resourceId }: { resourceId: string }) {
 
             <Card className="p-5">
               <h2 className="mb-3 text-base font-black text-slate-950">설명</h2>
-              <p className="whitespace-pre-wrap text-sm font-semibold leading-7 text-slate-700">{resource.description || "설명이 없습니다."}</p>
+              <article className="rounded-xl border border-slate-200 bg-white px-5 py-5 sm:px-7">
+                <MarkdownContent content={resource.description || "설명이 없습니다."} />
+              </article>
             </Card>
 
             <Card className="p-5">

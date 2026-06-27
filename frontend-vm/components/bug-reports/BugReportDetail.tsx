@@ -16,6 +16,8 @@ import { Badge } from "@/components/common/Badge";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
+import { MarkdownContent } from "@/components/common/MarkdownContent";
+import { MarkdownEditor } from "@/components/common/MarkdownEditor";
 // 코드 설명: @/features/bug-reports/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
   downloadBugReportAttachment,
@@ -404,10 +406,10 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                     <input value={editDraft.title ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, title: event.target.value }))} className="ui-field" />
                   </label>
 
-                  <label className="grid gap-2 text-sm font-bold text-slate-700">
-                    내용
-                    <textarea value={editDraft.description ?? ""} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="ui-field" />
-                  </label>
+                  <div className="grid gap-2 text-sm font-bold text-slate-700">
+                    <span>내용</span>
+                    <MarkdownEditor value={editDraft.description ?? ""} onChange={(description) => setEditDraft((current) => ({ ...current, description }))} />
+                  </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
                     <label className="grid gap-2 text-sm font-bold text-slate-700">
@@ -446,14 +448,15 @@ export function BugReportDetail({ params }: { params: Promise<{ id: string }> })
                 </div>
               </div>
 
-              <dl className="grid gap-4">
-                <DetailRow label="제목" value={report.title || "제목 없음"} />
-                <DetailRow label="내용" value={report.description || "설명이 없습니다."} />
-                <div className="grid gap-4 md:grid-cols-3">
-                  <DetailRow label="카테고리" value={report.category ?? "GENERAL"} />
-                  <DetailRow label="심각도" value={report.severity ?? "MINOR"} />
-                  <DetailRow label="우선순위" value={report.priority ?? "MEDIUM"} />
-                </div>
+              <article className="rounded-xl border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-8">
+                <h1 className="border-b border-slate-200 pb-4 text-2xl font-black leading-tight text-slate-950 sm:text-3xl">{report.title || "제목 없음"}</h1>
+                <MarkdownContent content={report.description || "설명이 없습니다."} className="py-4" />
+              </article>
+
+              <dl className="mt-5 grid gap-4 md:grid-cols-4">
+                <DetailRow label="카테고리" value={report.category ?? "GENERAL"} />
+                <DetailRow label="심각도" value={report.severity ?? "MINOR"} />
+                <DetailRow label="우선순위" value={report.priority ?? "MEDIUM"} />
                 <DetailRow label="페이지 URL" value={report.page_url} />
               </dl>
 
