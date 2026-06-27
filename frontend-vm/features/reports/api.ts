@@ -10,6 +10,9 @@ import { getStoredAccessToken } from "@/lib/authStorage";
 // 코드 설명: ./types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type {
   MyReportListParams,
+  ModelComparisonBatchResult,
+  ModelComparisonModel,
+  PaginatedModelComparisonBatches,
   PaginatedReports,
   Report,
   ReportListParams,
@@ -669,4 +672,46 @@ export function downloadReportAttachment(attachmentId: string | number) {
 export function downloadReportAttachmentUrl(path: string) {
   // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: fetchAttachmentBlob(path)
   return fetchAttachmentBlob(path);
+}
+
+// ─── 모델 비교 분석 API ───────────────────────────────────────────────────────
+
+export async function getModelComparisonBatches(params: {
+  page?: number;
+  size?: number;
+  status?: string;
+} = {}): Promise<PaginatedModelComparisonBatches> {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.size) query.set("size", String(params.size));
+  if (params.status) query.set("status", params.status);
+  const qs = query.toString();
+  const response = await apiClient<PaginatedModelComparisonBatches>(
+    `/api/report-model-comparisons${qs ? `?${qs}` : ""}`
+  );
+  return response;
+}
+
+export async function getModelComparisonModels(): Promise<ModelComparisonModel[]> {
+  const response = await apiClient<{ models?: ModelComparisonModel[] } | ModelComparisonModel[]>(
+    "/api/report-model-comparisons/models"
+  );
+  if (Array.isArray(response)) return response;
+  return (response as { models?: ModelComparisonModel[] }).models ?? [];
+}
+
+export function startModelComparison(
+  reportId: string | number,
+  payload: { attachment_id: number; model_ids: string[] }
+) {
+  return apiClient<{ batch: { id: string | number } }>(
+    `/api/reports/${reportId}/model-comparisons`,
+    { method: "POST", body: payload }
+  );
+}
+
+export function getModelComparisonBatch(batchId: string | number) {
+  return apiClient<ModelComparisonBatchResult>(
+    `/api/report-model-comparisons/${batchId}`
+  );
 }
