@@ -25,7 +25,7 @@ class CameraStartPayload(BaseModel):
 class ManualEventPayload(BaseModel):
     source_url: str | None = None
     name: str | None = None
-    event_type: str = "STOPPED_VEHICLE"
+    event_type: str = "LANE_STOP"
     severity: str = "WARNING"
     message: str | None = None
     pre_seconds: float | None = Field(default=None, gt=0, le=60)

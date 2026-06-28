@@ -174,6 +174,24 @@ EVENT_STOPPED_MIN_BBOX_AREA = float(os.environ.get("EVENT_STOPPED_MIN_BBOX_AREA"
 EVENT_COOLDOWN_SECONDS = float(os.environ.get("EVENT_COOLDOWN_SECONDS", "60.0"))
 EVENT_TRACK_MATCH_DISTANCE = float(os.environ.get("EVENT_TRACK_MATCH_DISTANCE", "90.0"))
 EVENT_TRACK_STALE_FRAMES = int(os.environ.get("EVENT_TRACK_STALE_FRAMES", "30"))
+
+# 신고/업로드 영상 정차 탐지 전용 설정
+# 실시간 CCTV EVENT_* 정책과 분리한다.
+REPORT_STOP_MIN_CONFIDENCE = float(
+    os.environ.get("REPORT_STOP_MIN_CONFIDENCE", str(EVENT_MIN_CONFIDENCE))
+)
+REPORT_STOPPED_MIN_CONFIDENCE = float(
+    os.environ.get(
+        "REPORT_STOPPED_MIN_CONFIDENCE",
+        str(EVENT_STOPPED_MIN_CONFIDENCE),
+    )
+)
+REPORT_STOPPED_MOVE_PX = float(
+    os.environ.get("REPORT_STOPPED_MOVE_PX", str(EVENT_STOPPED_MOVE_PX))
+)
+REPORT_STOP_DANGER_SECONDS = float(
+    os.environ.get("REPORT_STOP_DANGER_SECONDS", "2.0")
+)
 ROI_BASE_WIDTH = int(os.environ.get("ROI_BASE_WIDTH", "1920"))
 ROI_BASE_HEIGHT = int(os.environ.get("ROI_BASE_HEIGHT", "1080"))
 

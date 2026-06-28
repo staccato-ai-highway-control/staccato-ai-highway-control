@@ -211,7 +211,7 @@ class CameraWorker:
     def trigger_manual_event(
         self,
         *,
-        event_type: str = "STOPPED_VEHICLE",
+        event_type: str = "LANE_STOP",
         severity: str = "WARNING",
         message: str | None = None,
         pre_seconds: float | None = None,
