@@ -236,17 +236,15 @@ class ReportStopAnalyzer:
             if stopped_seconds < REPORT_STOP_DANGER_SECONDS:
                 continue
 
-            if not roi_ids:
-                continue
-
             if track.emitted_stop_event:
                 continue
 
-            incident_type = (
-                "SHOULDER_STOP"
-                if roi_type == "SHOULDER"
-                else "LANE_STOP"
-            )
+            if roi_type == "SHOULDER":
+                incident_type = "SHOULDER_STOP"
+            elif roi_ids:
+                incident_type = "LANE_STOP"
+            else:
+                incident_type = "STOPPED_VEHICLE"
 
             event = {
                 "detected": True,
@@ -281,6 +279,11 @@ class ReportStopAnalyzer:
                 "risk_reason": (
                     "vehicle stayed below the movement threshold "
                     f"for {stopped_seconds:.1f}s inside {roi_type}"
+                    if roi_ids
+                    else (
+                        "vehicle stayed below the movement threshold "
+                        f"for {stopped_seconds:.1f}s without a matched ROI"
+                    )
                 ),
             }
 
@@ -332,9 +335,6 @@ class ReportStopAnalyzer:
 
         if self._stop_confident_vehicle_count == 0:
             return "LOW_CONFIDENCE_ONLY"
-
-        if not self.camera_id or self._roi_matched_count == 0:
-            return "NO_ROI_MATCH"
 
         if not self._tracked_ids:
             return "TRACKING_FAILED"
@@ -475,14 +475,14 @@ class ReportStopAnalyzer:
         return str(detection.class_name or "").strip().lower()
 
     @staticmethod
-    def _roi_type(roi_ids: list[str]) -> str | None:
+    def _roi_type(roi_ids: list[str]) -> str:
         if SHOULDER_ROI_IDS.intersection(roi_ids):
             return "SHOULDER"
 
         if roi_ids:
             return "DRIVING_LANE"
 
-        return None
+        return "UNKNOWN"
 
     @staticmethod
     def _bottom_center(
