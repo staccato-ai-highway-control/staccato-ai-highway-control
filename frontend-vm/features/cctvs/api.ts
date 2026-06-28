@@ -8,8 +8,6 @@ import type { Cctv, CctvListParams, CctvSlot, StreamStatus } from "./types";
 
 // 코드 설명: CAMERA_SLOT_STORAGE_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const CAMERA_SLOT_STORAGE_KEY = "staccato.cameraSlotConfig";
-// 코드 설명: CAMERA_ROI_STORAGE_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-export const CAMERA_ROI_STORAGE_KEY = "staccato.cameraRoiConfig";
 // 코드 설명: ORIGINAL_WIDTH 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const ORIGINAL_WIDTH = 1920;
 // 코드 설명: ORIGINAL_HEIGHT 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
@@ -322,22 +320,13 @@ export async function saveCameraSlotConfig(config: CameraSlotConfig[]) {
   return normalizeSlots(response);
 }
 
-// 코드 설명: defaultRoiMeta 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const defaultRoiMeta: Array<{ roiIndex: 1 | 2 | 3; roiName: string; roiType: RoiType }> = [
   { roiIndex: 1, roiName: "주행 차로", roiType: "DRIVING_LANE" },
   { roiIndex: 2, roiName: "갓길", roiType: "SHOULDER" },
   { roiIndex: 3, roiName: "제외 영역", roiType: "IGNORE_ZONE" },
 ];
 
-// 코드 설명: canUseStorage 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-function canUseStorage() {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: typeof window !== "undefined" && typeof window.localStorage !== "undefi…
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-// 코드 설명: createDefaultCameraRoiConfig 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export function createDefaultCameraRoiConfig(cameraSlotNumber: 1 | 2, cctvId: string): CameraRoiConfig {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: { cameraSlotNumber, cctvId, originalWidth: ORIGINAL_WIDTH, originalHeig…
   return {
     cameraSlotNumber,
     cctvId,
@@ -355,78 +344,69 @@ export function createDefaultCameraRoiConfig(cameraSlotNumber: 1 | 2, cctvId: st
   };
 }
 
-// 코드 설명: getStoredRoiConfigs 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-function getStoredRoiConfigs() {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !canUseStorage()
-  if (!canUseStorage()) return [] as CameraRoiConfig[];
+type RoiApiItem = {
+  id?: number;
+  roi_type?: string;
+  roi_name?: string;
+  polygon_json?: number[][];
+  is_active?: boolean | number;
+};
 
-  // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
+function normalizeRoiApiToConfig(cctvId: string, cameraSlotNumber: 1 | 2, items: RoiApiItem[]): CameraRoiConfig {
+  const defaultConfig = createDefaultCameraRoiConfig(cameraSlotNumber, cctvId);
+  if (!items || items.length === 0) return defaultConfig;
+
+  const polygons = defaultConfig.polygons.map((defaultPolygon) => {
+    const serverRoi = items.find((item) => item.roi_type === defaultPolygon.roiType);
+    if (!serverRoi) return defaultPolygon;
+
+    const points = (serverRoi.polygon_json ?? []).map(([x, y]) => ({ x, y }));
+    return {
+      ...defaultPolygon,
+      roiName: serverRoi.roi_name ?? defaultPolygon.roiName,
+      roiType: (serverRoi.roi_type as RoiType) ?? defaultPolygon.roiType,
+      points,
+    };
+  });
+
+  return { ...defaultConfig, polygons };
+}
+
+export async function getCctvRois(cctvId: string, cameraSlotNumber: 1 | 2): Promise<CameraRoiConfig> {
   try {
-    // 코드 설명: raw 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-    const raw = window.localStorage.getItem(CAMERA_ROI_STORAGE_KEY);
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !raw
-    if (!raw) return [];
-    // 코드 설명: parsed 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-    const parsed = JSON.parse(raw) as CameraRoiConfig[];
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: Array.isArray(parsed) ? parsed : []
-    return Array.isArray(parsed) ? parsed : [];
+    const response = await apiClient<{ success: boolean; items?: RoiApiItem[] }>(
+      `/api/cctvs/${cctvId}/rois`,
+      { auth: false },
+    );
+    const items = Array.isArray(response) ? (response as RoiApiItem[]) : ((response as { items?: RoiApiItem[] }).items ?? []);
+    return normalizeRoiApiToConfig(cctvId, cameraSlotNumber, items);
   } catch {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: []
-    return [];
+    return createDefaultCameraRoiConfig(cameraSlotNumber, cctvId);
   }
 }
 
-// 코드 설명: getCameraRoiConfig 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-export function getCameraRoiConfig(cameraSlotNumber: 1 | 2, cctvId: string): CameraRoiConfig {
-  // 코드 설명: saved 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const saved = getStoredRoiConfigs().find((item) => item.cameraSlotNumber === cameraSlotNumber);
-  // 코드 설명: fallback 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const fallback = createDefaultCameraRoiConfig(cameraSlotNumber, cctvId);
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !saved
-  if (!saved) return fallback;
+export async function saveCctvRois(cctvId: string, config: CameraRoiConfig): Promise<void> {
+  const items = config.polygons.map((polygon) => ({
+    roi_type: polygon.roiType,
+    roi_name: polygon.roiName,
+    polygon_json: polygon.points.map((p) => [
+      Math.max(0, Math.min(ORIGINAL_WIDTH, Math.round(p.x))),
+      Math.max(0, Math.min(ORIGINAL_HEIGHT, Math.round(p.y))),
+    ]),
+    is_active: true,
+  }));
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: { ...fallback, cctvId, polygons: fallback.polygons.map((polygon) => { c…
-  return {
-    ...fallback,
-    cctvId,
-    polygons: fallback.polygons.map((polygon) => {
-      // 코드 설명: savedPolygon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-      const savedPolygon = saved.polygons.find((item) => item.roiIndex === polygon.roiIndex);
-      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: savedPolygon ? { ...polygon, ...savedPolygon, cameraSlotNumber, cctvId …
-      return savedPolygon
-        ? { ...polygon, ...savedPolygon, cameraSlotNumber, cctvId }
-        : polygon;
-    }),
-  };
+  await apiClient(`/api/cctvs/${cctvId}/rois`, {
+    method: "PUT",
+    auth: false,
+    body: { items },
+  });
 }
 
-// 코드 설명: saveCameraRoiConfig 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-export function saveCameraRoiConfig(cameraSlotNumber: 1 | 2, roiConfig: CameraRoiConfig) {
-  // 코드 설명: normalized 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const normalized: CameraRoiConfig = {
-    ...roiConfig,
-    cameraSlotNumber,
-    originalWidth: ORIGINAL_WIDTH,
-    originalHeight: ORIGINAL_HEIGHT,
-    polygons: roiConfig.polygons.map((polygon) => ({
-      ...polygon,
-      cameraSlotNumber,
-      cctvId: roiConfig.cctvId,
-      points: polygon.points.map((point) => ({
-        x: Math.max(0, Math.min(ORIGINAL_WIDTH, Math.round(point.x))),
-        y: Math.max(0, Math.min(ORIGINAL_HEIGHT, Math.round(point.y))),
-      })),
-    })),
-  };
-
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: canUseStorage()
-  if (canUseStorage()) {
-    // 코드 설명: others 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-    const others = getStoredRoiConfigs().filter((item) => item.cameraSlotNumber !== cameraSlotNumber);
-    // 코드 설명: 브라우저 localStorage의 인증 또는 사용자 설정 값을 읽거나 갱신합니다.
-    window.localStorage.setItem(CAMERA_ROI_STORAGE_KEY, JSON.stringify([...others, normalized]));
-  }
-
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalized
-  return normalized;
+export async function createManualCctvEvent(cameraId: string): Promise<void> {
+  await apiClient(`/api/cctvs/${cameraId}/manual-events`, {
+    method: "POST",
+    auth: false,
+    body: {},
+  });
 }

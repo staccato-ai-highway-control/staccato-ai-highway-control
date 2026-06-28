@@ -20,6 +20,9 @@ import urllib.parse
 # 설명: urllib.request 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import urllib.request
 
+# 설명: requests 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
+import requests as http_requests
+
 # 설명: flask에서 Blueprint, current_app, jsonify, request 이름을 가져와 아래 로직에서 재사용한다.
 from flask import Blueprint, current_app, jsonify, request
 
@@ -744,6 +747,89 @@ def get_cctv_rois(cctv_id: int):
     }), 200
 
 
+@cctv_bp.put("/cctvs/<int:cctv_id>/rois")
+def put_cctv_rois(cctv_id: int):
+    item = db.session.get(Cctv, cctv_id)
+    if item is None:
+        return jsonify({"success": False, "error": "CCTV not found."}), 404
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"success": False, "error": "JSON body is required."}), 400
+
+    items_payload = payload.get("items")
+    if not isinstance(items_payload, list):
+        return jsonify({"success": False, "error": "items must be a list."}), 400
+
+    valid_roi_types = {"DRIVING_LANE", "SHOULDER", "IGNORE_ZONE"}
+
+    try:
+        now = _utc_now_naive()
+        saved_rois = []
+
+        for roi_data in items_payload:
+            if not isinstance(roi_data, dict):
+                raise ValueError("Each ROI item must be an object.")
+
+            roi_type = str(roi_data.get("roi_type") or "").strip().upper()
+            if roi_type not in valid_roi_types:
+                raise ValueError(f"Invalid roi_type: {roi_type!r}. Must be one of {sorted(valid_roi_types)}.")
+
+            polygon_json = roi_data.get("polygon_json")
+            if not isinstance(polygon_json, list):
+                raise ValueError("polygon_json must be a list of coordinate pairs.")
+
+            is_active_raw = roi_data.get("is_active", True)
+            is_active = 0 if is_active_raw in (False, 0, "false", "0", "no") else 1
+
+            roi_name = str(roi_data.get("roi_name") or roi_type).strip()
+
+            existing = CctvRoi.query.filter(
+                CctvRoi.cctv_id == cctv_id,
+                CctvRoi.roi_type == roi_type,
+            ).first()
+
+            if existing:
+                existing.roi_name = roi_name
+                existing.polygon_json = polygon_json
+                existing.is_active = is_active
+                existing.updated_at = now
+                saved_rois.append(existing)
+            else:
+                new_roi = CctvRoi(
+                    cctv_id=cctv_id,
+                    roi_type=roi_type,
+                    roi_name=roi_name,
+                    polygon_json=polygon_json,
+                    is_active=is_active,
+                    created_at=now,
+                    updated_at=None,
+                )
+                db.session.add(new_roi)
+                saved_rois.append(new_roi)
+
+        updated_types = {str(r.get("roi_type") or "").strip().upper() for r in items_payload if isinstance(r, dict)}
+        CctvRoi.query.filter(
+            CctvRoi.cctv_id == cctv_id,
+            ~CctvRoi.roi_type.in_(updated_types),
+        ).update({"is_active": 0, "updated_at": now}, synchronize_session="fetch")
+
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return jsonify({
+        "success": True,
+        "cctv_id": cctv_id,
+        "count": len(saved_rois),
+        "items": [_serialize_roi(roi) for roi in saved_rois],
+    }), 200
+
+
 # 설명: `get_cctv_stream_status` 함수는 단일 값이나 리소스를 조회하는 함수다.
 @cctv_bp.get("/cctvs/<int:cctv_id>/stream-status")
 def get_cctv_stream_status(cctv_id: int):
@@ -958,3 +1044,65 @@ def get_camera(camera_id: str):
         "success": True,
         "camera": _serialize_cctv(item),
     }), 200
+
+
+@cctv_bp.post("/cctvs/<camera_id>/manual-events")
+def create_manual_event(camera_id: str):
+    cctv = _get_cctv_by_id_or_code(camera_id)
+    if cctv is None:
+        return jsonify({"success": False, "error": "CCTV not found."}), 404
+
+    ai_server_url = (
+        current_app.config.get("AI_SERVER_URL")
+        or os.environ.get("AI_SERVER_URL")
+        or "http://192.168.0.186:5001"
+    ).rstrip("/")
+
+    internal_token = str(
+        current_app.config.get("INTERNAL_API_TOKEN")
+        or os.environ.get("INTERNAL_API_TOKEN")
+        or ""
+    ).strip()
+
+    ai_payload = {
+        "camera_id": cctv.cctv_code,
+        "source_url": cctv.stream_url or "",
+        "name": cctv.cctv_name,
+    }
+
+    extra_body = request.get_json(silent=True)
+    if isinstance(extra_body, dict):
+        ai_payload.update(extra_body)
+
+    headers = {"Content-Type": "application/json"}
+    if internal_token:
+        headers["Authorization"] = f"Bearer {internal_token}"
+
+    try:
+        ai_response = http_requests.post(
+            f"{ai_server_url}/internal/cameras/{cctv.cctv_code}/manual-event",
+            json=ai_payload,
+            headers=headers,
+            timeout=15,
+        )
+        ai_data = ai_response.json()
+    except http_requests.ConnectionError:
+        return jsonify({"success": False, "error": "AI 서버에 연결할 수 없습니다."}), 502
+    except http_requests.Timeout:
+        return jsonify({"success": False, "error": "AI 서버 응답 시간이 초과되었습니다."}), 504
+    except Exception as exc:
+        current_app.logger.exception("manual-event AI VM call failed: camera_id=%s", cctv.cctv_code)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+    if not ai_response.ok:
+        return jsonify({
+            "success": False,
+            "error": ai_data.get("error") or ai_data.get("message") or f"AI 서버 오류: {ai_response.status_code}",
+            "ai_status_code": ai_response.status_code,
+        }), ai_response.status_code
+
+    return jsonify({
+        "success": True,
+        "camera_id": cctv.cctv_code,
+        "data": ai_data,
+    }), 201
