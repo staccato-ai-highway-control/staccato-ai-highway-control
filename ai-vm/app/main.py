@@ -1050,13 +1050,29 @@ async def detect_legacy_report_file(
     analysis_started_at = time.perf_counter()
     inference_seconds = 0.0
 
+    # 신고 영상에서만 선정 YOLO11s의 전경 crop 보강 추론을 사용합니다.
+    # 실시간 CCTV, 이미지 분석, RT-DETR, Keras 경로에는 적용하지 않습니다.
+    report_foreground_crop_enabled = bool(
+        is_video
+        and (
+            selected_model_id is None
+            or selected_model_id == "yolo11s"
+        )
+    )
+
     def detect_with_metrics(frame):
         nonlocal inference_seconds
 
         inference_started_at = time.perf_counter()
 
         try:
-            detections = selected_detector.detect(frame)
+            if report_foreground_crop_enabled:
+                detections = selected_detector.detect(
+                    frame,
+                    report_foreground_crop=True,
+                )
+            else:
+                detections = selected_detector.detect(frame)
         except RuntimeError as exc:
             raise HTTPException(
                 status_code=503,
