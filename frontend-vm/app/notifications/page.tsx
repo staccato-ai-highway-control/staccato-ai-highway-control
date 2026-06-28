@@ -16,6 +16,7 @@ import { RequireAuth } from "@/components/auth/RequireAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
 // 코드 설명: @/components/common/Badge 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Badge } from "@/components/common/Badge";
+import { RetryableVideo } from "@/components/common/RetryableVideo";
 // 코드 설명: @/features/realtime/useRealtimeIncidents 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { useRealtimeIncidents } from "@/features/realtime/useRealtimeIncidents";
 // 코드 설명: @/features/realtime/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -438,12 +439,13 @@ export default function NotificationsPage() {
                             {videoUrl ? (
                               <div>
                                 <p className="mb-2 text-xs font-black text-slate-500">영상 미리보기</p>
-                                <video
+                                <RetryableVideo
                                   src={videoUrl}
                                   controls
                                   preload="metadata"
                                   playsInline
                                   className="max-h-48 w-full rounded-lg border border-slate-200 bg-black"
+                                  errorMessage="영상을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
                                 />
                                 <a
                                   href={videoUrl}

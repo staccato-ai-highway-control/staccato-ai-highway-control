@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Maximize2 } from "lucide-react";
 import { MediaLightbox } from "@/components/common/MediaLightbox";
+import { RetryableVideo } from "@/components/common/RetryableVideo";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/common/Button";
 import { cn } from "@/lib/utils";
@@ -103,10 +104,11 @@ function ResultCard({ item }: { item: ModelComparisonItem }) {
               aria-label="확대해서 보기"
             >
               {isVideo ? (
-                <video
+                <RetryableVideo
                   src={mediaUrl}
                   className="w-full rounded-lg"
                   style={{ maxHeight: "180px" }}
+                  errorMessage="영상을 불러오지 못했습니다."
                 />
               ) : (
                 <img
