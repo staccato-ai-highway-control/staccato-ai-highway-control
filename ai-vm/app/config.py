@@ -103,6 +103,27 @@ YOLO_FAR_RESIZE_SCALE = float(os.environ.get("YOLO_FAR_RESIZE_SCALE", "1.5"))
 YOLO_FAR_CONFIDENCE = float(os.environ.get("YOLO_FAR_CONFIDENCE", "0.07"))
 YOLO_FAR_IOU = float(os.environ.get("YOLO_FAR_IOU", "0.35"))
 YOLO_FAR_DETECT_INTERVAL = int(os.environ.get("YOLO_FAR_DETECT_INTERVAL", "2"))
+
+# 신고/업로드 영상에서 가까운 전경 차량을 한 번 더 탐지하는 설정입니다.
+# 전체 화면 탐지에서 놓치는 갓길의 큰 차량을 보강합니다.
+YOLO_REPORT_FOREGROUND_TOP_RATIO = float(
+    os.environ.get("YOLO_REPORT_FOREGROUND_TOP_RATIO", "0.28")
+)
+YOLO_REPORT_FOREGROUND_BOTTOM_RATIO = float(
+    os.environ.get("YOLO_REPORT_FOREGROUND_BOTTOM_RATIO", "0.75")
+)
+YOLO_REPORT_FOREGROUND_CONFIDENCE = float(
+    os.environ.get("YOLO_REPORT_FOREGROUND_CONFIDENCE", "0.25")
+)
+YOLO_REPORT_FOREGROUND_IOU = float(
+    os.environ.get("YOLO_REPORT_FOREGROUND_IOU", "0.45")
+)
+YOLO_REPORT_FOREGROUND_MAX_DET = int(
+    os.environ.get("YOLO_REPORT_FOREGROUND_MAX_DET", "40")
+)
+YOLO_REPORT_FOREGROUND_NMS_IOU = float(
+    os.environ.get("YOLO_REPORT_FOREGROUND_NMS_IOU", "0.55")
+)
 YOLO_FAR_MAX_DET = int(os.environ.get("YOLO_FAR_MAX_DET", "300"))
 YOLO_FAR_MIN_BOX_WIDTH = int(os.environ.get("YOLO_FAR_MIN_BOX_WIDTH", "3"))
 YOLO_FAR_MIN_BOX_HEIGHT = int(os.environ.get("YOLO_FAR_MIN_BOX_HEIGHT", "3"))

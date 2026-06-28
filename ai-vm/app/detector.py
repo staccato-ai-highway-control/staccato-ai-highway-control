@@ -20,6 +20,12 @@ from .config import (
     YOLO_FAR_MIN_BOX_WIDTH,
     YOLO_FAR_RESIZE_SCALE,
     YOLO_FAR_TOP_RATIO,
+    YOLO_REPORT_FOREGROUND_BOTTOM_RATIO,
+    YOLO_REPORT_FOREGROUND_CONFIDENCE,
+    YOLO_REPORT_FOREGROUND_IOU,
+    YOLO_REPORT_FOREGROUND_MAX_DET,
+    YOLO_REPORT_FOREGROUND_NMS_IOU,
+    YOLO_REPORT_FOREGROUND_TOP_RATIO,
     YOLO_IMGSZ,
     YOLO_IOU,
     YOLO_MODEL_PATHS,
@@ -101,6 +107,7 @@ class YoloDetector:
         iou: float | None = None,
         imgsz: int | None = None,
         frame_id: int | None = None,
+        report_foreground_crop: bool = False,
         lock_already_held: bool = False,
     ) -> list[Detection]:
         model = self._ensure_model_loaded()
@@ -115,6 +122,7 @@ class YoloDetector:
                 iou=effective_iou,
                 imgsz=effective_imgsz,
                 frame_id=frame_id,
+                report_foreground_crop=report_foreground_crop,
             )
 
         with self._predict_lock:
@@ -125,6 +133,7 @@ class YoloDetector:
                 iou=effective_iou,
                 imgsz=effective_imgsz,
                 frame_id=frame_id,
+                report_foreground_crop=report_foreground_crop,
             )
 
     # acquire_predict_slot 기능을 수행하는 함수입니다.
@@ -148,6 +157,7 @@ class YoloDetector:
         iou: float,
         imgsz: int,
         frame_id: int | None,
+        report_foreground_crop: bool,
     ) -> list[Detection]:
         results = model.predict(
             source=frame,
@@ -166,6 +176,19 @@ class YoloDetector:
                     frame=frame,
                     imgsz=imgsz,
                 )
+            )
+
+        if report_foreground_crop:
+            detections.extend(
+                self._detect_report_foreground_crop(
+                    model=model,
+                    frame=frame,
+                    imgsz=imgsz,
+                )
+            )
+            return self._deduplicate_detections(
+                detections,
+                iou_threshold=YOLO_REPORT_FOREGROUND_NMS_IOU,
             )
 
         return detections
@@ -320,6 +343,127 @@ class YoloDetector:
             max_width=YOLO_FAR_MAX_BOX_WIDTH,
             max_height=YOLO_FAR_MAX_BOX_HEIGHT,
         )
+
+    # 신고/업로드 영상에서 가까운 전경 차량을 보강 탐지합니다.
+    def _detect_report_foreground_crop(
+        self,
+        *,
+        model: Any,
+        frame: np.ndarray,
+        imgsz: int,
+    ) -> list[Detection]:
+        height, width = frame.shape[:2]
+        crop_top, crop_bottom = self._report_foreground_crop_bounds(height)
+
+        if crop_bottom <= crop_top:
+            return []
+
+        foreground_crop = frame[crop_top:crop_bottom, :width]
+        if foreground_crop.size <= 0:
+            return []
+
+        results = model.predict(
+            source=foreground_crop,
+            conf=YOLO_REPORT_FOREGROUND_CONFIDENCE,
+            iou=YOLO_REPORT_FOREGROUND_IOU,
+            imgsz=imgsz,
+            agnostic_nms=True,
+            max_det=YOLO_REPORT_FOREGROUND_MAX_DET,
+            verbose=False,
+            **self._device_kwargs(),
+        )
+
+        if not results:
+            return []
+
+        return self._parse_result(
+            results[0],
+            source="report_foreground_crop",
+            offset_y=float(crop_top),
+        )
+
+    # 신고 영상 전경 crop의 세로 범위를 정규화 비율로 계산합니다.
+    @staticmethod
+    def _report_foreground_crop_bounds(height: int) -> tuple[int, int]:
+        if height <= 0:
+            return 0, 0
+
+        crop_top = int(height * YOLO_REPORT_FOREGROUND_TOP_RATIO)
+        crop_bottom = int(height * YOLO_REPORT_FOREGROUND_BOTTOM_RATIO)
+
+        crop_top = max(0, min(height - 1, crop_top))
+        crop_bottom = max(crop_top + 1, min(height, crop_bottom))
+
+        return crop_top, crop_bottom
+
+    # 전체 화면/far crop/전경 crop에서 중복된 동일 차량 bbox를 하나로 정리합니다.
+    @staticmethod
+    def _deduplicate_detections(
+        detections: list[Detection],
+        *,
+        iou_threshold: float,
+    ) -> list[Detection]:
+        ordered = sorted(
+            detections,
+            key=lambda detection: (
+                float(detection.confidence),
+                detection.source == "report_foreground_crop",
+            ),
+            reverse=True,
+        )
+
+        kept: list[Detection] = []
+
+        for candidate in ordered:
+            overlaps_existing = any(
+                YoloDetector._bbox_iou(candidate.bbox, existing.bbox)
+                >= iou_threshold
+                for existing in kept
+            )
+
+            if not overlaps_existing:
+                kept.append(candidate)
+
+        return kept
+
+    # xyxy 형식 bbox 두 개의 IoU를 계산합니다.
+    @staticmethod
+    def _bbox_iou(
+        first_bbox: list[float],
+        second_bbox: list[float],
+    ) -> float:
+        first_x1, first_y1, first_x2, first_y2 = [
+            float(value)
+            for value in first_bbox
+        ]
+        second_x1, second_y1, second_x2, second_y2 = [
+            float(value)
+            for value in second_bbox
+        ]
+
+        intersection_x1 = max(first_x1, second_x1)
+        intersection_y1 = max(first_y1, second_y1)
+        intersection_x2 = min(first_x2, second_x2)
+        intersection_y2 = min(first_y2, second_y2)
+
+        intersection_width = max(0.0, intersection_x2 - intersection_x1)
+        intersection_height = max(0.0, intersection_y2 - intersection_y1)
+        intersection_area = intersection_width * intersection_height
+
+        first_area = max(0.0, first_x2 - first_x1) * max(
+            0.0,
+            first_y2 - first_y1,
+        )
+        second_area = max(0.0, second_x2 - second_x1) * max(
+            0.0,
+            second_y2 - second_y1,
+        )
+        union_area = first_area + second_area - intersection_area
+
+        if union_area <= 0.0:
+            return 0.0
+
+        return intersection_area / union_area
 
     # _should_run_far_crop 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
