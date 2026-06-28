@@ -42,7 +42,7 @@ function getAttachmentType(attachment?: ReportAttachment, report?: Report) {
 // 코드 설명: getPreviewUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function getPreviewUrl(report: Report, attachment?: ReportAttachment) {
   // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalizeMediaUrl(attachment?.preview_url ?? attachment?.file_url ?? re…
-  return normalizeMediaUrl(attachment?.preview_url ?? attachment?.file_url ?? report.preview_url ?? report.thumbnail_url ?? null) ?? undefined;
+  return normalizeMediaUrl(attachment?.preview_url ?? report.preview_url ?? report.thumbnail_url ?? null) ?? undefined;
 }
 
 // 코드 설명: getDownloadUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -53,8 +53,37 @@ function getDownloadUrl(report: Report, attachment?: ReportAttachment) {
 
 // 코드 설명: isImageType 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function isImageType(type: string) {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].some…
-  return type.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp"].some((ext) => type.toLowerCase().includes(ext));
+  const normalized = type.toLowerCase();
+
+  return (
+    normalized === "image"
+    || normalized.startsWith("image/")
+    || ["png", "jpg", "jpeg", "gif", "webp"].some(
+      (ext) => normalized.includes(ext),
+    )
+  );
+}
+
+function isVideoType(type: string) {
+  const normalized = type.toLowerCase();
+
+  return (
+    normalized === "video"
+    || normalized.startsWith("video/")
+    || ["mp4", "webm", "mov", "m4v"].some(
+      (ext) => normalized.includes(ext),
+    )
+  );
+}
+
+function isPdfType(type: string) {
+  const normalized = type.toLowerCase();
+
+  return (
+    normalized === "pdf"
+    || normalized === "application/pdf"
+    || normalized.includes("pdf")
+  );
 }
 
 // 코드 설명: ReportAttachmentPreview 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -76,7 +105,16 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
   // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
   // 코드 설명: attachmentType 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const attachmentType = getAttachmentType(firstAttachment, report) || blobType;
+  const declaredAttachmentType = getAttachmentType(firstAttachment, report);
+  const attachmentType = (
+    blobType
+    || (
+      declaredAttachmentType.toLowerCase() === "application/octet-stream"
+        ? ""
+        : declaredAttachmentType
+    )
+  );
+  const canLoadPreview = Boolean(attachmentId || previewUrl);
   // 코드 설명: hasAttachment 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const hasAttachment = Boolean(attachmentId || previewUrl || downloadUrl || (report.attachment_count ?? 0) > 0);
 
@@ -97,9 +135,9 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
       setBlobType("");
 
       // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !attachmentId && !previewUrl
-      if (!attachmentId && !previewUrl) {
+      if (!canLoadPreview) {
         // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: hasAttachment
-        if (hasAttachment) setErrorMessage("미리보기 URL이 없습니다.");
+        if (hasAttachment) setErrorMessage("이 파일 형식은 브라우저 미리보기를 지원하지 않습니다. 다운로드해서 확인하세요.");
         // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: 값 없음
         return;
       }
@@ -132,7 +170,7 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
       // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: nextObjectUrl
       if (nextObjectUrl) URL.revokeObjectURL(nextObjectUrl);
     };
-  }, [attachmentId, hasAttachment, previewUrl]);
+  }, [attachmentId, canLoadPreview, hasAttachment, previewUrl]);
 
   // 코드 설명: countLabel 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const countLabel = useMemo(() => {
@@ -202,9 +240,29 @@ export function ReportAttachmentPreview({ report, compact = false }: ReportAttac
     <div className="grid gap-3">
       <div className="grid aspect-video max-h-[520px] place-items-center overflow-hidden rounded-2xl bg-slate-950 text-white">
         {objectUrl && isImageType(attachmentType) ? (
-          <img src={objectUrl} alt={getAttachmentName(firstAttachment, report)} className="h-full max-h-[520px] w-full object-contain" />
+          <img
+            src={objectUrl}
+            alt={getAttachmentName(firstAttachment, report)}
+            className="h-full max-h-[520px] w-full object-contain"
+          />
+        ) : objectUrl && isPdfType(attachmentType) ? (
+          <iframe
+            src={objectUrl}
+            title={getAttachmentName(firstAttachment, report)}
+            className="h-full min-h-[320px] w-full bg-white"
+          />
+        ) : objectUrl && isVideoType(attachmentType) ? (
+          <video
+            src={objectUrl}
+            controls
+            className="h-full max-h-[520px] w-full bg-black object-contain"
+          />
         ) : objectUrl ? (
-          <video src={objectUrl} controls className="h-full max-h-[520px] w-full bg-black object-contain" />
+          <div className="px-6 text-center">
+            <FileVideo className="mx-auto h-12 w-12" aria-hidden="true" />
+            <p className="mt-3 text-sm font-black">브라우저 미리보기를 지원하지 않는 파일입니다.</p>
+            <p className="mt-1 text-xs font-semibold text-white/70">아래 다운로드 버튼으로 파일을 확인하세요.</p>
+          </div>
         ) : (
           <div className="text-center">
             <FileVideo className="mx-auto h-12 w-12" aria-hidden="true" />
