@@ -713,35 +713,96 @@ def delete_cctv(cctv_id: int):
 # 설명: `get_cctv_rois` 함수는 단일 값이나 리소스를 조회하는 함수다.
 @cctv_bp.get("/cctvs/<int:cctv_id>/rois")
 def get_cctv_rois(cctv_id: int):
-    # 설명: `item`에 `db.session.get` 호출 결과를 저장해 다음 처리에서 사용한다.
     item = db.session.get(Cctv, cctv_id)
-    # 설명: `item is None` 조건 결과에 따라 실행 경로를 분기한다.
     if item is None:
-        # 설명: 호출자에게 (jsonify({'success': False, 'error': 'CCTV not found.'}), 404) 값을 함수 결과로 반환한다.
-        return jsonify({
-            "success": False,
-            "error": "CCTV not found.",
-        }), 404
+        return jsonify({"success": False, "error": "CCTV not found."}), 404
 
-    # 설명: `query`에 `CctvRoi.query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
     query = CctvRoi.query.filter(CctvRoi.cctv_id == cctv_id)
-    # 설명: `is_active`에 `_parse_is_active` 호출 결과를 저장해 다음 처리에서 사용한다.
     is_active = _parse_is_active(request.args.get("is_active"))
-    # 설명: `is_active is not None` 조건 결과에 따라 실행 경로를 분기한다.
     if is_active is not None:
-        # 설명: `query`에 `query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
         query = query.filter(CctvRoi.is_active == is_active)
 
-    # 설명: `rois`에 `query.order_by(CctvRoi.id.asc()).all` 호출 결과를 저장해 다음 처리에서 사용한다.
     rois = query.order_by(CctvRoi.id.asc()).all()
 
-    # 설명: 호출자에게 (jsonify({'success': True, 'cctv_id': cctv_id, 'count': len(rois), 'items': [_s... 값을 함수 결과로 반환한다.
     return jsonify({
         "success": True,
         "cctv_id": cctv_id,
         "count": len(rois),
         "items": [_serialize_roi(roi) for roi in rois],
     }), 200
+
+
+@cctv_bp.put("/cctvs/<int:cctv_id>/rois")
+def put_cctv_rois(cctv_id: int):
+    """CCTV ROI 목록을 통째로 교체한다 (bulk replace).
+
+    items 배열의 각 항목으로 새 ROI를 생성하고, 기존 활성 ROI는 모두 is_active=0 처리한다.
+    items가 빈 배열이면 기존 ROI를 전부 비활성화한다.
+    """
+    cctv = db.session.get(Cctv, cctv_id)
+    if cctv is None:
+        return jsonify({"success": False, "error": "CCTV not found."}), 404
+
+    body = request.get_json(silent=True) or {}
+    items = body.get("items")
+    if not isinstance(items, list):
+        return jsonify({"success": False, "error": "items 필드(배열)가 필요합니다."}), 400
+
+    # 각 항목 유효성 검사
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            return jsonify({"success": False, "error": f"items[{idx}] 는 객체여야 합니다."}), 400
+        roi_type = str(item.get("roi_type") or "").strip()
+        roi_name = str(item.get("roi_name") or "").strip()
+        polygon = item.get("polygon_points") or item.get("polygon_json") or item.get("points")
+        if not roi_type:
+            return jsonify({"success": False, "error": f"items[{idx}].roi_type 이 없습니다."}), 400
+        if not roi_name:
+            return jsonify({"success": False, "error": f"items[{idx}].roi_name 이 없습니다."}), 400
+        if not isinstance(polygon, list) or len(polygon) < 3:
+            return jsonify({"success": False, "error": f"items[{idx}].polygon_points 는 3점 이상의 배열이어야 합니다."}), 400
+
+    now = datetime.utcnow()
+
+    try:
+        # 기존 활성 ROI 소프트 삭제
+        existing = CctvRoi.query.filter_by(cctv_id=cctv_id, is_active=1).all()
+        for roi in existing:
+            roi.is_active = 0
+            roi.updated_at = now
+
+        # 새 ROI 생성
+        new_rois = []
+        for item in items:
+            roi_type = str(item.get("roi_type") or "").strip().upper()
+            roi_name = str(item.get("roi_name") or "").strip()
+            polygon = item.get("polygon_points") or item.get("polygon_json") or item.get("points")
+            new_roi = CctvRoi(
+                cctv_id=cctv_id,
+                roi_type=roi_type,
+                roi_name=roi_name,
+                polygon_json=polygon,
+                is_active=1,
+                created_at=now,
+                updated_at=now,
+            )
+            db.session.add(new_roi)
+            new_rois.append(new_roi)
+
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "cctv_id": cctv_id,
+            "deactivated_count": len(existing),
+            "created_count": len(new_rois),
+            "items": [_serialize_roi(roi) for roi in new_rois],
+        }), 200
+
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("PUT /cctvs/%s/rois failed", cctv_id)
+        return jsonify({"success": False, "error": "ROI 저장에 실패했습니다."}), 500
 
 
 # 설명: `get_cctv_stream_status` 함수는 단일 값이나 리소스를 조회하는 함수다.
