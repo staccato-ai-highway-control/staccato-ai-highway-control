@@ -9,7 +9,7 @@ import requests
 
 
 # 설명: `AI_SERVER_URL`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
-AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:8001")
+AI_SERVER_URL = os.getenv("AI_SERVER_URL", "http://192.168.0.186:5001")
 # 설명: `INTERNAL_API_TOKEN`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
 INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")
 

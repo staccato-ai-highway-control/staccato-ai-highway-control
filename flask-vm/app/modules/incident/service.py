@@ -151,7 +151,18 @@ class IncidentService:
             # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
             try:
                 # 설명: `(success, res)`에 `AIGatewayService.request_analysis` 호출 결과를 저장해 다음 처리에서 사용한다.
-                success, res = AIGatewayService.request_analysis(report.id, file_path)
+                cctv_id = getattr(report, "cctv_id", None)
+                camera_id = (
+                    f"camera-{cctv_id}"
+                    if cctv_id
+                    else None
+                )
+                success, res = AIGatewayService.request_analysis(
+                    report.id,
+                    file_path,
+                    cctv_id=cctv_id,
+                    camera_id=camera_id,
+                )
 
                 # 설명: `success` 조건 결과에 따라 실행 경로를 분기한다.
                 if success:

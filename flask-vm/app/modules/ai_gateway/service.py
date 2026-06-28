@@ -39,7 +39,7 @@ class AIGatewayService:
         ai_server_url = (
             current_app.config.get("AI_SERVER_URL")
             or os.getenv("AI_SERVER_URL")
-            or "http://192.168.0.186:8001"
+            or "http://192.168.0.186:5001"
         )
 
         # 설명: `detect_url`에 f'{ai_server_url.rstrip('/')}/detect' 표현식의 계산 결과를 저장한다.

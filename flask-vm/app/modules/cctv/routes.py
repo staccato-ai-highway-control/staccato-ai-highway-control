@@ -275,7 +275,7 @@ def _ai_vm_base_url() -> str:
         current_app.config.get("AI_VM_BASE_URL")
         or os.environ.get("AI_VM_BASE_URL")
         or os.environ.get("ITS_SERVER_URL")
-        or "http://192.168.0.186:8001"
+        or "http://192.168.0.186:5001"
         or current_app.config.get("ITS_SERVER_URL")
     ).rstrip("/")
 
