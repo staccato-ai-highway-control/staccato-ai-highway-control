@@ -37,6 +37,7 @@ from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 # 설명: app.models에서 ProjectResource 이름을 가져와 아래 로직에서 재사용한다.
 from app.models import ProjectResource  # noqa: E402
+from app.models.auth_models import SecurityLog, User  # noqa: E402
 
 
 # 설명: `KST`에 `ZoneInfo` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -83,6 +84,7 @@ AI_HEALTH_URL = os.getenv(
     "AI_HEALTH_URL",
     "http://192.168.0.186:5001/health",
 ).strip()
+ITS_HEALTH_URL = os.getenv("ITS_HEALTH_URL", "").strip()
 
 # 설명: `WEEKDAY_KO`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
 WEEKDAY_KO = {
@@ -300,15 +302,15 @@ def check_its_configuration() -> str:
     ).strip()
 
     if not its_server_url:
-        return (
-            "ITS Server Health: NOT_CONFIGURED "
-            "/ ITS_SERVER_URL is empty"
-        )
+        return "ITS Server: NOT_CONFIGURED / ITS_SERVER_URL is empty"
+
+    if ITS_HEALTH_URL:
+        return check_http("ITS Server Health", ITS_HEALTH_URL)
 
     return (
-        "ITS Server Health: CONFIGURED "
+        "ITS Server: CONFIGURED "
         f"/ {its_server_url} "
-        "/ health endpoint is not configured"
+        "/ ITS_HEALTH_URL is not configured"
     )
 
 
@@ -428,48 +430,142 @@ def check_attachment_file_api() -> list[str]:
         ]
 
 
+def check_local_systemd_service(name: str, service_name: str) -> str:
+    status = run_command(["systemctl", "is-active", service_name]).strip()
+
+    if status == "active":
+        return f"{name}: OK / systemd {service_name}=active"
+
+    return f"{name}: ERROR / systemd {service_name}={status or '-'}"
+
+
+def get_recent_successful_logins(
+    generated_at: datetime,
+    hours: int = 3,
+    limit: int = 100,
+) -> list[str]:
+    """최근 지정 시간 동안의 로그인 성공 기록을 KST 기준으로 정리한다."""
+    window_start_utc = utc_naive_from_kst(
+        generated_at - timedelta(hours=hours)
+    )
+    generated_at_utc = utc_naive_from_kst(generated_at)
+
+    try:
+        rows = (
+            db.session.query(SecurityLog, User)
+            .outerjoin(User, User.id == SecurityLog.actor_user_id)
+            .filter(SecurityLog.action_type == "LOGIN_SUCCESS")
+            .filter(SecurityLog.created_at >= window_start_utc)
+            .filter(SecurityLog.created_at <= generated_at_utc)
+            .order_by(SecurityLog.created_at.asc(), SecurityLog.id.asc())
+            .limit(limit)
+            .all()
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return [f"- 로그인 기록 조회 오류: {type(exc).__name__}"]
+
+    if not rows:
+        return [f"- 최근 {hours}시간 로그인 성공 기록이 없습니다."]
+
+    lines: list[str] = []
+
+    for security_log, user in rows:
+        created_at = security_log.created_at
+        if created_at is None:
+            continue
+
+        logged_at_kst = (
+            created_at.replace(tzinfo=timezone.utc)
+            .astimezone(KST)
+        )
+        login_id = (
+            str(getattr(user, "login_id", "") or "").strip()
+            or "알 수 없음"
+        )
+        user_name = (
+            str(getattr(user, "name", "") or "").strip()
+            or "알 수 없음"
+        )
+        ip_address = (
+            str(getattr(security_log, "ip_address", "") or "").strip()
+            or "-"
+        )
+
+        lines.append(
+            f"- {logged_at_kst:%Y-%m-%d %H:%M} KST"
+            f" / ID: {login_id}"
+            f" / 이름: {user_name}"
+            f" / IP: {ip_address}"
+        )
+
+    return lines or [f"- 최근 {hours}시간 로그인 성공 기록이 없습니다."]
+
+
 def build_report(title: str, generated_at: datetime) -> str:
-    # 설명: `(load1, load5, load15)`에 `os.getloadavg` 호출 결과를 저장해 다음 처리에서 사용한다.
     load1, load5, load15 = os.getloadavg()
 
-    # 설명: `lines`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
+    recent_login_lines = get_recent_successful_logins(generated_at)
+    server_status_lines = [
+        check_frontend_https(),
+        check_local_systemd_service(
+            "Flask VM Service",
+            "staccato-flask",
+        ),
+        check_http("Flask API Health", FLASK_HEALTH_URL),
+        check_http("AI VM Health", AI_HEALTH_URL),
+        check_database_connection(),
+        check_its_configuration(),
+    ]
+    attachment_status_lines = check_attachment_file_api()
+
     lines = [
         title,
         "=" * len(title),
         "",
         "[생성 정보]",
-        f"- 생성 시각(KST): {generated_at.strftime('%Y-%m-%d %H:%M:%S')} ({WEEKDAY_KO[generated_at.weekday()]})",
+        (
+            "- 생성 시각(KST): "
+            f"{generated_at.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"({WEEKDAY_KO[generated_at.weekday()]})"
+        ),
         f"- Hostname: {socket.gethostname()}",
-        f"- Category: {CATEGORY}",
-        f"- Visibility: {VISIBILITY}",
+        "",
+        "[최근 3시간 로그인 성공]",
+        *recent_login_lines,
+        "",
+        "[서버 상태]",
+        *[f"- {line}" for line in server_status_lines],
         "",
         "[시스템 상태]",
         f"- Load Average: {load1:.2f}, {load5:.2f}, {load15:.2f}",
         f"- Memory: {read_meminfo()}",
-        f"- Flask 5000 connection count: {count_connections(5000)}",
-        "",
-        "[서비스 연결 상태]",
-        check_frontend_https(),
-        check_http("Flask Health", FLASK_HEALTH_URL),
-        check_http("AI Server Health", AI_HEALTH_URL),
-        check_database_connection(),
-        check_its_configuration(),
+        (
+            "- Flask 5000 connection count: "
+            f"{count_connections(5000)}"
+        ),
         "",
         "[파일 API 점검]",
-        *check_attachment_file_api(),
+        *[f"- {line}" for line in attachment_status_lines],
         "",
-        "[보안 주의]",
-        "- 본 리포트는 민감정보 보호를 위해 사용자 IP, 토큰, 원본 access log를 포함하지 않습니다.",
-        "- 자료실은 관리자 전용 API로 제한된 상태에서만 운영하는 것을 전제로 합니다.",
+        "[보안 안내]",
+        (
+            "- 최근 로그인 성공 기록은 관리자 전용 화면에서만 "
+            "ID, 이름, 한국시간, 접속 IP를 확인합니다."
+        ),
+        "- 비밀번호와 인증 토큰은 저장하거나 표시하지 않습니다.",
         "",
     ]
 
-    # 설명: 호출자에게 '\n'.join(lines) 값을 함수 결과로 반환한다.
     return "\n".join(lines)
 
 
 # 설명: `create_report_file` 함수는 새 데이터나 리소스를 생성하는 함수다.
-def create_report_file(upload_base_path: str, generated_at: datetime, title: str) -> tuple[str, str, int]:
+def create_report_file(
+    upload_base_path: str,
+    generated_at: datetime,
+    content: str,
+) -> tuple[str, str, int]:
     # 설명: `year`에 `generated_at.strftime` 호출 결과를 저장해 다음 처리에서 사용한다.
     year = generated_at.strftime("%Y")
     # 설명: `month`에 `generated_at.strftime` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -487,9 +583,7 @@ def create_report_file(upload_base_path: str, generated_at: datetime, title: str
     # 설명: `file_path`에 report_dir / stored_name 표현식의 계산 결과를 저장한다.
     file_path = report_dir / stored_name
 
-    # 설명: `content`에 `build_report` 호출 결과를 저장해 다음 처리에서 사용한다.
-    content = build_report(title, generated_at)
-    # 설명: `file_path.write_text`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
+    # 설명: 전달받은 리포트 내용을 파일에 저장합니다.
     file_path.write_text(content, encoding="utf-8")
     # 설명: `os.chmod`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     os.chmod(file_path, 0o640)
@@ -554,11 +648,13 @@ def main() -> None:
             # 설명: 현재 처리를 중단하고 RuntimeError('UPLOAD_BASE_PATH is not configured.')를 호출자에게 전달한다.
             raise RuntimeError("UPLOAD_BASE_PATH is not configured.")
 
+        report_content = build_report(title, generated_at)
+
         # 설명: `(file_name, file_path, file_size)`에 `create_report_file` 호출 결과를 저장해 다음 처리에서 사용한다.
         file_name, file_path, file_size = create_report_file(
             upload_base_path=upload_base_path,
             generated_at=generated_at,
-            title=title,
+            content=report_content,
         )
 
         # 설명: `now_utc_naive`에 `utc_naive_from_kst` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -567,10 +663,7 @@ def main() -> None:
         # 설명: `resource`에 `ProjectResource` 호출 결과를 저장해 다음 처리에서 사용한다.
         resource = ProjectResource(
             title=title,
-            description=(
-                "3시간 간격으로 자동 생성된 접속/서비스 상태 리포트입니다. "
-                "한국시간 기준으로 생성되며, 민감정보는 포함하지 않습니다."
-            ),
+            description=report_content,
             category=CATEGORY,
             author_id=None,
             author_name=AUTHOR_NAME,
