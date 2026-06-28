@@ -5,7 +5,7 @@
 "use client";
 
 // 코드 설명: react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 // 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { Download, RefreshCw, ShieldCheck } from "lucide-react";
 // 코드 설명: @/components/auth/RequireSuperAdmin 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -63,6 +63,7 @@ export default function SecurityLogsPage() {
   // 코드 설명: [errorMessage, setErrorMessage] 상태를 선언해 사용자 입력, 로딩 결과 또는 화면 표시 값을 렌더링 사이에 유지합니다.
   const [errorMessage, setErrorMessage] = useState("");
   const [page, setPage] = useState(1);
+  const [expandedLogId, setExpandedLogId] = useState<string | number | null>(null);
 
   // 코드 설명: loadLogs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const loadLogs = useCallback(async () => {
@@ -81,6 +82,7 @@ export default function SecurityLogsPage() {
 
       // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setLogs(response.items ?? []);
+      setExpandedLogId(null);
       setPage(1);
     } catch (error) {
       // 코드 설명: setLogs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
@@ -212,66 +214,109 @@ export default function SecurityLogsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleLogs.map((log) => (
-                      <tr
-                        key={log.id}
-                        className="border-b border-slate-100 text-sm last:border-b-0"
-                      >
-                        <td className="max-w-[360px] px-5 py-4">
-                          <p className="truncate font-black text-slate-950">
-                            {log.title}
-                          </p>
-                          {log.description ? (
-                            <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
-                              {log.description}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
-                            {log.category_label ?? "접속 로그"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-bold text-slate-700">
-                          {log.author_name ?? "-"}
-                        </td>
-                        <td className="px-5 py-4 font-bold text-slate-600">
-                          {formatDate(log.created_at)}
-                        </td>
-                        <td className="max-w-[240px] px-5 py-4">
-                          {log.file_name ? (
-                            <>
-                              <p className="truncate font-black text-slate-700">
-                                {log.file_name}
-                              </p>
-                              <p className="mt-1 text-xs font-bold text-slate-400">
-                                {formatFileSize(log.file_size)}
-                              </p>
-                            </>
-                          ) : (
-                            <span className="text-xs font-bold text-slate-400">
-                              첨부 없음
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          {log.file_name ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDownload(log)}
-                              className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-xs font-black text-sky-700 transition hover:bg-sky-50"
+                    {visibleLogs.map((log) => {
+                      const isExpanded = expandedLogId === log.id;
+
+                      return (
+                        <Fragment key={log.id}>
+                          <tr className="border-b border-slate-100 text-sm">
+                            <td className="max-w-[360px] px-5 py-4">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedLogId((current) =>
+                                    current === log.id ? null : log.id
+                                  )
+                                }
+                                aria-expanded={isExpanded}
+                                aria-controls={`security-log-detail-${log.id}`}
+                                className="flex w-full items-center justify-between gap-3 text-left"
+                              >
+                                <span className="truncate font-black text-slate-950 underline-offset-4 hover:text-sky-700 hover:underline">
+                                  {log.title}
+                                </span>
+                                <span className="shrink-0 text-xs font-black text-sky-700">
+                                  {isExpanded ? "접기" : "상세 보기"}
+                                </span>
+                              </button>
+
+                              {log.description ? (
+                                <p className="mt-1 line-clamp-1 text-xs font-semibold text-slate-500">
+                                  {log.description}
+                                </p>
+                              ) : null}
+                            </td>
+
+                            <td className="px-5 py-4">
+                              <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+                                {log.category_label ?? "접속 로그"}
+                              </span>
+                            </td>
+
+                            <td className="px-5 py-4 font-bold text-slate-700">
+                              {log.author_name ?? "-"}
+                            </td>
+
+                            <td className="px-5 py-4 font-bold text-slate-600">
+                              {formatDate(log.created_at)}
+                            </td>
+
+                            <td className="max-w-[240px] px-5 py-4">
+                              {log.file_name ? (
+                                <>
+                                  <p className="truncate font-black text-slate-700">
+                                    {log.file_name}
+                                  </p>
+                                  <p className="mt-1 text-xs font-bold text-slate-400">
+                                    {formatFileSize(log.file_size)}
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="text-xs font-bold text-slate-400">
+                                  첨부 없음
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4 text-right">
+                              {log.file_name ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownload(log)}
+                                  className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-sky-200 bg-white px-3 text-xs font-black text-sky-700 transition hover:bg-sky-50"
+                                >
+                                  <Download className="h-4 w-4" />
+                                  다운로드
+                                </button>
+                              ) : (
+                                <span className="text-xs font-bold text-slate-400">
+                                  -
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+
+                          {isExpanded ? (
+                            <tr
+                              id={`security-log-detail-${log.id}`}
+                              className="border-b border-slate-100 bg-sky-50/50 last:border-b-0"
                             >
-                              <Download className="h-4 w-4" />
-                              다운로드
-                            </button>
-                          ) : (
-                            <span className="text-xs font-bold text-slate-400">
-                              -
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                              <td colSpan={6} className="px-5 py-4">
+                                <div className="rounded-xl border border-sky-100 bg-white px-4 py-3">
+                                  <p className="text-xs font-black text-sky-700">
+                                    상세 내용
+                                  </p>
+                                  <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium leading-6 text-slate-700">
+                                    {log.description?.trim() ||
+                                      "등록된 상세 내용이 없습니다."}
+                                  </p>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
