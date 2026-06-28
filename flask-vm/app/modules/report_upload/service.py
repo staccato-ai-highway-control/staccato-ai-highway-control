@@ -377,9 +377,10 @@ class ReportUploadService:
 
         # 설명: 호출자에게 file_type in {'IMAGE', 'VIDEO'} or mime_type.startswith('image/') or mime_type.... 값을 함수 결과로 반환한다.
         return (
-            file_type in {"IMAGE", "VIDEO"}
+            file_type in {"IMAGE", "VIDEO", "PDF"}
             or mime_type.startswith("image/")
             or mime_type.startswith("video/")
+            or mime_type == "application/pdf"
         )
 
     # 설명: `_attachment_response` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
@@ -655,7 +656,24 @@ class ReportUploadService:
         download_name = secure_filename(original_filename or "") or stored_filename or f"attachment-{attachment.id}"
 
         # 설명: `mimetype`에 getattr(attachment, 'mime_type', None) or 'application/octet-stream' 표현식의 계산 결과를 저장한다.
-        mimetype = getattr(attachment, "mime_type", None) or "application/octet-stream"
+        mimetype = (
+            getattr(attachment, "mime_type", None) or ""
+        ).strip().lower()
+
+        if not mimetype or mimetype == "application/octet-stream":
+            import mimetypes
+
+            guessed_mimetype, _ = mimetypes.guess_type(download_name)
+            file_type = (
+                getattr(attachment, "file_type", None) or ""
+            ).upper()
+
+            if guessed_mimetype:
+                mimetype = guessed_mimetype
+            elif file_type == "PDF":
+                mimetype = "application/pdf"
+            else:
+                mimetype = "application/octet-stream"
 
         # 설명: `response`에 `send_file` 호출 결과를 저장해 다음 처리에서 사용한다.
         response = send_file(
@@ -670,6 +688,11 @@ class ReportUploadService:
         response.headers["X-Content-Type-Options"] = "nosniff"
         # 설명: `response.headers['Cache-Control']`의 기준값 또는 기본값을 'private, no-store'로 설정한다.
         response.headers["Cache-Control"] = "private, no-store"
+
+        if not as_download:
+            response.headers["Content-Disposition"] = (
+                f'inline; filename="{download_name}"'
+            )
 
         # 설명: 호출자에게 (response, 200) 값을 함수 결과로 반환한다.
         return response, 200
