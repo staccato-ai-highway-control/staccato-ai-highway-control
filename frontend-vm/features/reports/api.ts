@@ -712,6 +712,6 @@ export function startModelComparison(
 
 export function getModelComparisonBatch(batchId: string | number) {
   return apiClient<ModelComparisonBatchResult>(
-    `/api/report-model-comparisons/${batchId}`
+    `/api/report-model-comparisons/${batchId}?_=${Date.now()}`
   );
 }
