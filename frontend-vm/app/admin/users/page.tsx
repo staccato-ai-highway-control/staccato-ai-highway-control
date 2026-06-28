@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Download,
   Eye,
@@ -519,6 +519,7 @@ function LogsTab() {
   const [keyword, setKeyword]   = useState("");
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [expandedLogId, setExpandedLogId] = useState<ResourceItem["id"] | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -599,14 +600,36 @@ function LogsTab() {
                   {visible.length === 0 && (
                     <EmptyRow cols={6}>{keyword ? "검색 결과가 없습니다." : "표시할 보안 로그가 없습니다."}</EmptyRow>
                   )}
-                  {visible.map((log) => (
-                    <tr key={log.id} className="border-t border-slate-100 hover:bg-slate-50/50">
-                      <td className="max-w-[320px] px-4 py-3.5">
-                        <p className="truncate font-bold text-slate-950">{log.title}</p>
-                        {log.description && (
-                          <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-500">{log.description}</p>
-                        )}
-                      </td>
+                  {visible.map((log) => {
+                    const isExpanded = expandedLogId === log.id;
+
+                    return (
+                      <Fragment key={log.id}>
+                        <tr className="border-t border-slate-100 hover:bg-slate-50/50">
+                          <td className="max-w-[320px] px-4 py-3.5">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedLogId((current) =>
+                                  current === log.id ? null : log.id
+                                )
+                              }
+                              aria-expanded={isExpanded}
+                              aria-controls={`admin-security-log-detail-${log.id}`}
+                              className="flex w-full items-center justify-between gap-3 text-left"
+                            >
+                              <span className="truncate font-bold text-slate-950 underline-offset-4 hover:text-sky-700 hover:underline">
+                                {log.title}
+                              </span>
+                              <span className="shrink-0 text-xs font-bold text-sky-700">
+                                {isExpanded ? "접기" : "상세 보기"}
+                              </span>
+                            </button>
+
+                            {log.description && (
+                              <p className="mt-0.5 line-clamp-1 text-xs font-semibold text-slate-500">{log.description}</p>
+                            )}
+                          </td>
                       <td className="px-4 py-3.5">
                         <Badge tone="amber">{log.category_label ?? "접속 로그"}</Badge>
                       </td>
@@ -632,8 +655,26 @@ function LogsTab() {
                           <span className="text-xs font-semibold text-slate-400">-</span>
                         )}
                       </td>
-                    </tr>
-                  ))}
+                        </tr>
+
+                        {isExpanded && (
+                          <tr
+                            id={`admin-security-log-detail-${log.id}`}
+                            className="border-t border-slate-100 bg-sky-50/50"
+                          >
+                            <td colSpan={6} className="px-4 py-4">
+                              <div className="rounded-xl border border-sky-100 bg-white px-4 py-3">
+                                <p className="text-xs font-black text-sky-700">상세 내용</p>
+                                <p className="mt-2 whitespace-pre-wrap break-words text-sm font-medium leading-6 text-slate-700">
+                                  {log.description?.trim() || "등록된 상세 내용이 없습니다."}
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
