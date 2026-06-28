@@ -975,6 +975,16 @@ async def detect_legacy_report_file(
     total_frames = 1
     source_type = "video" if is_video else "image"
 
+    roi_camera_id = (
+        str(camera_id or cctv_id or "").strip()
+        or None
+    )
+    report_stop_analyzer = None
+    report_stop_snapshot_frame = None
+    report_stop_snapshot_events: list[dict] = []
+    report_stop_result = None
+    video_fps = None
+
     selected_model_id = str(model_id or "").strip().lower() or None
     comparison_run_id = str(comparison_run_id or "").strip() or None
 
@@ -1000,6 +1010,19 @@ async def detect_legacy_report_file(
 
         selected_model_name = selected_spec.model_name
         selected_model_version = selected_spec.model_version
+
+    if is_video:
+        from .report_stop_analyzer import ReportStopAnalyzer
+
+        report_stop_analyzer = ReportStopAnalyzer(
+            camera_id=roi_camera_id,
+            model_name=(
+                selected_model_name
+                or selected_model_id
+                or "default"
+            ),
+            model_version=selected_model_version,
+        )
 
     artifact_parts = [str(report_id or "unknown")]
     if selected_model_id:
@@ -1039,6 +1062,10 @@ async def detect_legacy_report_file(
                 raise HTTPException(status_code=400, detail="Failed to open video file.")
 
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            video_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            if video_fps <= 0:
+                video_fps = 30.0
+
             frame_index = 0
             while frames_processed < max_frames:
                 ok, frame = cap.read()
@@ -1047,6 +1074,25 @@ async def detect_legacy_report_file(
 
                 if frame_index % frame_stride == 0:
                     frame_detections = detect_with_metrics(frame)
+
+                    if report_stop_analyzer is not None:
+                        stop_events = report_stop_analyzer.update(
+                            frame_index=frame_index,
+                            video_timestamp_seconds=(
+                                float(frame_index)
+                                / float(video_fps or 30.0)
+                            ),
+                            detections=frame_detections,
+                            frame_shape=frame.shape,
+                        )
+
+                        if stop_events:
+                            report_stop_snapshot_frame = frame.copy()
+                            report_stop_snapshot_events = [
+                                dict(item)
+                                for item in stop_events
+                            ]
+
                     frame_detection_dicts = []
                     for item in frame_detections:
                         detection = item.to_dict()
@@ -1094,7 +1140,7 @@ async def detect_legacy_report_file(
         detections=detections_payload,
         frame_width=frame_width,
         frame_height=frame_height,
-        camera_id=camera_id or None,
+        camera_id=roi_camera_id,
         source_type=source_type,
     )
 
@@ -1102,9 +1148,36 @@ async def detect_legacy_report_file(
         detections=best_detections,
         frame_width=frame_width,
         frame_height=frame_height,
-        camera_id=camera_id or None,
+        camera_id=roi_camera_id,
         source_type=source_type,
     )
+
+    if report_stop_analyzer is not None:
+        report_stop_result = report_stop_analyzer.build_result()
+    else:
+        report_stop_result = {
+            "incident_candidates": [],
+            "detection_logs": [],
+            "debug": {
+                "raw_detections_count": len(raw_detections_payload),
+                "vehicle_detections_count": 0,
+                "roi_matched_count": 0,
+                "tracked_vehicle_count": 0,
+                "stop_candidate_count": 0,
+                "final_stop_event_count": 0,
+                "frame_width": frame_width,
+                "frame_height": frame_height,
+                "roi_base_width": None,
+                "roi_base_height": None,
+                "thresholds": {},
+                "failure_reason": None,
+            },
+        }
+
+    stop_events = list(
+        report_stop_result.get("incident_candidates", [])
+    )
+    primary_stop_event = stop_events[0] if stop_events else {}
 
     raw_count = len(raw_detections_payload)
 
@@ -1155,6 +1228,20 @@ async def detect_legacy_report_file(
         media_detections = raw_detections_payload
         media_best_detections = raw_best_detections
 
+    media_detections_for_render = list(media_detections)
+    media_detections_for_render.extend(stop_events)
+
+    stop_snapshot_url = None
+    if report_stop_snapshot_frame is not None and report_stop_snapshot_events:
+        stop_snapshot_url = _save_report_analysis_annotated_image(
+            report_id=f"{artifact_report_id}_stop",
+            frame=report_stop_snapshot_frame,
+            detections=report_stop_snapshot_events,
+        )
+
+        for event in stop_events:
+            event["snapshot_path"] = stop_snapshot_url
+
     annotated_image_url = None
     annotated_video_url = None
 
@@ -1162,14 +1249,17 @@ async def detect_legacy_report_file(
         annotated_video_url = _save_report_analysis_annotated_video(
             source_path=Path(tmp_path),
             report_id=artifact_report_id,
-            detections=media_detections,
+            detections=media_detections_for_render,
         )
 
         if not annotated_video_url:
-            annotated_image_url = _save_report_analysis_annotated_image(
-                report_id=artifact_report_id,
-                frame=best_frame,
-                detections=media_best_detections,
+            annotated_image_url = (
+                stop_snapshot_url
+                or _save_report_analysis_annotated_image(
+                    report_id=artifact_report_id,
+                    frame=best_frame,
+                    detections=media_best_detections,
+                )
             )
     else:
         annotated_image_url = _save_report_analysis_annotated_image(
@@ -1226,10 +1316,36 @@ async def detect_legacy_report_file(
         "max_confidence": max_confidence,
         "class_summary": class_summary,
         "filtered_count": postprocess_result.get("filtered_count"),
-        "incident_candidate_count": postprocess_result.get("incident_candidate_count"),
+        "incident_candidate_count": (
+            len(stop_events)
+            if is_video
+            else postprocess_result.get("incident_candidate_count")
+        ),
+        "detected": bool(stop_events),
+        "incident_type": primary_stop_event.get("incident_type"),
+        "risk_level": primary_stop_event.get("risk_level"),
+        "confidence": primary_stop_event.get("confidence"),
+        "stopped_seconds": primary_stop_event.get("stopped_seconds"),
+        "movement_delta": primary_stop_event.get("movement_delta"),
+        "roi_type": primary_stop_event.get("roi_type"),
+        "roi_id": primary_stop_event.get("roi_id"),
+        "snapshot_path": primary_stop_event.get("snapshot_path"),
         "detections": detections_payload,
         "raw_detections": raw_detections_payload,
-        "incident_candidates": postprocess_result.get("incident_candidates", []),
+        "incident_candidates": (
+            stop_events
+            if is_video
+            else postprocess_result.get("incident_candidates", [])
+        ),
+        "heuristic_incident_candidates": postprocess_result.get(
+            "incident_candidates",
+            [],
+        ),
+        "detection_logs": report_stop_result.get(
+            "detection_logs",
+            [],
+        ),
+        "debug": report_stop_result.get("debug", {}),
         "postprocess": {
             "enabled": postprocess_result.get("enabled"),
             "config": postprocess_result.get("config"),

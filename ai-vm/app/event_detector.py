@@ -355,7 +355,7 @@ class EventDetector:
     def _event_type_for_rois(roi_ids: list[str]) -> str:
         if "LEFT_SHOULDER" in roi_ids or "RIGHT_SHOULDER" in roi_ids:
             return "SHOULDER_STOP"
-        return "STOPPED_VEHICLE"
+        return "LANE_STOP"
 
     # _bottom_center 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod

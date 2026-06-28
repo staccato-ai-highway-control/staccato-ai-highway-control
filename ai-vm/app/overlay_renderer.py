@@ -11,7 +11,8 @@ from .roi_config import get_camera_rois
 
 
 EVENT_COLORS = {
-    "STOPPED_VEHICLE": (0, 0, 255),
+    "LANE_STOP": (0, 0, 255),
+    "STOPPED_VEHICLE": (0, 0, 255),  # legacy compatibility
     "SHOULDER_STOP": (0, 165, 255),
 }
 
