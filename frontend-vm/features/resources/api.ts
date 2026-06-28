@@ -2,9 +2,6 @@
  * 파일 역할: 자료실 기능이 사용하는 백엔드 API 호출을 한곳에 모아 제공합니다.
  * 유지보수 참고: 공통 API 클라이언트를 통해 인증과 오류 처리를 일관되게 적용하고, 응답 형태가 달라질 수 있는 경우 화면용 데이터로 정규화합니다.
  */
-import { getStoredAccessToken } from "@/lib/authStorage";
-// 코드 설명: @/lib/constants 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
-import { API_BASE_URL } from "@/lib/constants";
 // 코드 설명: @/lib/apiClient 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { apiClient, getEnvelopeData, type FlexibleApiResponse } from "@/lib/apiClient";
 // 코드 설명: ./types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -42,14 +39,6 @@ function buildQuery(params: GetResourcesParams = {}) {
   const queryString = query.toString();
   // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: queryString ? `?${queryString}` : ""
   return queryString ? `?${queryString}` : "";
-}
-
-// 코드 설명: joinUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-function joinUrl(path: string) {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: /^https?:\/\//.test(path)
-  if (/^https?:\/\//.test(path)) return path;
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
-  return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
 }
 
 // 코드 설명: buildResourceFormData 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -129,30 +118,24 @@ export function deleteResource(id: string | number) {
 
 // 코드 설명: downloadResourceFile 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export async function downloadResourceFile(id: string | number, fileName: string) {
-  // 코드 설명: headers 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const headers = new Headers();
-  // 코드 설명: token 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const token = getStoredAccessToken();
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: token
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const response = await fetch(joinUrl(`${RESOURCE_BASE_PATH}/${id}/download`), { headers });
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !response.ok
-  if (!response.ok) throw new Error(response.status === 404 ? "파일을 찾을 수 없습니다." : response.status === 403 ? "파일 다운로드 권한이 없습니다." : "파일 다운로드에 실패했습니다.");
-  // 코드 설명: blob 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const blob = await response.blob();
-  // 코드 설명: url 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
+  const blob = await getResourceDownloadBlob(id);
   const url = window.URL.createObjectURL(blob);
-  // 코드 설명: anchor 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const anchor = document.createElement("a");
-  // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: anchor.href = url;
   anchor.href = url;
-  // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: anchor.download = fileName;
   anchor.download = fileName;
-  // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: anchor.click();
   anchor.click();
-  // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.URL.revokeObjectURL(url);
   window.URL.revokeObjectURL(url);
+}
+
+export async function getResourceDownloadBlob(id: string | number) {
+  const blob = await apiClient<Blob>(`${RESOURCE_BASE_PATH}/${id}/download`, {
+    method: "GET",
+    responseType: "blob",
+  });
+  if (typeof Blob === "undefined" || !(blob instanceof Blob)) {
+    throw new Error("다운로드 응답이 Blob 형식이 아닙니다.");
+  }
+  return blob;
 }
 
 // 코드 설명: getSecurityLogResources 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
