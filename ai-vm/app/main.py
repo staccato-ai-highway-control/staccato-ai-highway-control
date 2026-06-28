@@ -786,6 +786,7 @@ def _save_report_analysis_annotated_video(
     source_path: Path,
     report_id: str,
     detections: list[dict],
+    persistent_annotation_hold_frames: int = 0,
 ) -> str | None:
     if not source_path.exists():
         print(f"[report-analysis-video] source file missing: {source_path}", flush=True)
@@ -795,6 +796,10 @@ def _save_report_analysis_annotated_video(
         return None
 
     import cv2
+
+    from .report_annotation_timeline import (
+        active_report_analysis_detections,
+    )
 
     REPORT_ANALYSIS_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -852,6 +857,13 @@ def _save_report_analysis_annotated_video(
     hold_frames = int(os.getenv("REPORT_ANALYSIS_ANNOTATION_HOLD_FRAMES", "3"))
     hold_frames = max(0, hold_frames)
 
+    # 일반 주행 차량의 초록 박스는 기존 짧은 표시 시간을 유지합니다.
+    # 정차 확정 차량의 빨간 박스는 다음 분석 샘플 시점 직전까지 유지합니다.
+    persistent_annotation_hold_frames = max(
+        0,
+        int(persistent_annotation_hold_frames),
+    )
+
     frame_index = 0
 
     while True:
@@ -859,11 +871,14 @@ def _save_report_analysis_annotated_video(
         if not ok:
             break
 
-        active_detections: list[dict] = []
-        for sampled_frame_index, frame_detections in detections_by_frame.items():
-            frame_age = frame_index - sampled_frame_index
-            if 0 <= frame_age <= hold_frames:
-                active_detections.extend(frame_detections)
+        active_detections = active_report_analysis_detections(
+            detections_by_frame,
+            frame_index,
+            hold_frames=hold_frames,
+            persistent_annotation_hold_frames=(
+                persistent_annotation_hold_frames
+            ),
+        )
 
         if active_detections:
             _draw_report_analysis_detections(frame, active_detections)
@@ -1158,6 +1173,7 @@ async def detect_legacy_report_file(
         report_stop_result = {
             "incident_candidates": [],
             "detection_logs": [],
+            "render_annotations": [],
             "debug": {
                 "raw_detections_count": len(raw_detections_payload),
                 "vehicle_detections_count": 0,
@@ -1176,6 +1192,9 @@ async def detect_legacy_report_file(
 
     stop_events = list(
         report_stop_result.get("incident_candidates", [])
+    )
+    stop_render_annotations = list(
+        report_stop_result.get("render_annotations", [])
     )
     primary_stop_event = stop_events[0] if stop_events else {}
 
@@ -1228,8 +1247,11 @@ async def detect_legacy_report_file(
         media_detections = raw_detections_payload
         media_best_detections = raw_best_detections
 
+    # 일반 탐지는 초록색으로 먼저 그리고,
+    # 실제 정차 확정 차량의 persistent annotation을 마지막에 덮어 그립니다.
+    # 따라서 같은 차량은 정차 확정 이후 빨간 박스만 보입니다.
     media_detections_for_render = list(media_detections)
-    media_detections_for_render.extend(stop_events)
+    media_detections_for_render.extend(stop_render_annotations)
 
     stop_snapshot_url = None
     if report_stop_snapshot_frame is not None and report_stop_snapshot_events:
@@ -1250,6 +1272,10 @@ async def detect_legacy_report_file(
             source_path=Path(tmp_path),
             report_id=artifact_report_id,
             detections=media_detections_for_render,
+            # 정차 확정 빨간 박스는 다음 분석 샘플 직전까지 유지합니다.
+            # 차량이 다시 움직인 분석 프레임부터는 새 빨간 annotation이 없으므로,
+            # 그 시점에 빨간 표시가 자연스럽게 사라집니다.
+            persistent_annotation_hold_frames=max(0, frame_stride - 1),
         )
 
         if not annotated_video_url:

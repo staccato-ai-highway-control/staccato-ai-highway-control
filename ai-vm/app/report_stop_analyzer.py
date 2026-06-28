@@ -35,6 +35,9 @@ class _Track:
     last_timestamp_seconds: float
     stopped_started_at_seconds: float | None = None
     emitted_stop_event: bool = False
+    # 마지막으로 정차가 확인된 렌더링 정보입니다.
+    # 다음 분석 샘플에서 탐지가 한 번 누락되어도 빨간 박스가 끊기지 않게 합니다.
+    last_stop_payload: dict[str, Any] | None = None
 
 
 class ReportStopAnalyzer:
@@ -66,6 +69,9 @@ class ReportStopAnalyzer:
 
         self._events: list[dict[str, Any]] = []
         self._detection_logs: list[dict[str, Any]] = []
+        # 영상 렌더링용: 정차가 확정된 차량은 이후 분석 프레임에도
+        # 빨간 박스로 유지할 수 있도록 별도 기록합니다.
+        self._render_annotations: list[dict[str, Any]] = []
 
         self._raw_detections_count = 0
         self._vehicle_detections_count = 0
@@ -184,6 +190,7 @@ class ReportStopAnalyzer:
                 self._movement_too_large_count += 1
                 track.stopped_started_at_seconds = None
                 track.emitted_stop_event = False
+                track.last_stop_payload = None
                 stopped_seconds = 0.0
 
             roi_ids = self._roi_ids_for_point(
@@ -236,9 +243,6 @@ class ReportStopAnalyzer:
             if stopped_seconds < REPORT_STOP_DANGER_SECONDS:
                 continue
 
-            if track.emitted_stop_event:
-                continue
-
             if roi_type == "SHOULDER":
                 incident_type = "SHOULDER_STOP"
             elif roi_ids:
@@ -246,8 +250,7 @@ class ReportStopAnalyzer:
             else:
                 incident_type = "STOPPED_VEHICLE"
 
-            event = {
-                "detected": True,
+            stop_payload = {
                 "incident_type": incident_type,
                 "risk_level": "HIGH",
                 "track_id": track_id,
@@ -270,7 +273,6 @@ class ReportStopAnalyzer:
                 ),
                 "model_name": self.model_name,
                 "model_version": self.model_version,
-                "snapshot_path": None,
                 "source_type": "video",
                 "box_color": "red",
                 "display_label": (
@@ -287,9 +289,79 @@ class ReportStopAnalyzer:
                 ),
             }
 
+            # 마지막으로 확정된 정차 정보를 track에 보관합니다.
+            # 다음 분석 샘플에서 모델이 차량을 잠깐 놓쳐도 이 bbox를 이어서 사용합니다.
+            track.last_stop_payload = dict(stop_payload)
+
+            # 정차가 확정된 차량은 같은 track_id가 계속 멈춰 있는 동안
+            # 분석 프레임마다 빨간 렌더링 정보도 남깁니다.
+            self._render_annotations.append(
+                {
+                    **stop_payload,
+                    "persistent_annotation": True,
+                    "inferred_from_last_seen": False,
+                }
+            )
+
+            # 사고 이벤트는 최초 한 번만 생성합니다.
+            # 이후 프레임은 위의 render annotation으로만 빨간 표시를 유지합니다.
+            if track.emitted_stop_event:
+                continue
+
+            event = {
+                "detected": True,
+                **stop_payload,
+                "snapshot_path": None,
+            }
+
             self._events.append(event)
             emitted_events.append(event)
             track.emitted_stop_event = True
+
+        # 이번 분석 샘플에서 탐지되지 않았더라도, stale 기준 안의 정차 track은
+        # 마지막 bbox를 이용해 빨간 박스를 한 구간 더 유지합니다.
+        # 차량이 다시 움직이면 위의 이동량 처리에서 last_stop_payload가 즉시 제거됩니다.
+        for track in self._tracks.values():
+            if track.track_id in used_track_ids:
+                continue
+
+            if track.last_stop_payload is None:
+                continue
+
+            carried_payload = dict(track.last_stop_payload)
+            stopped_started_at = track.stopped_started_at_seconds
+            carried_stopped_seconds = (
+                max(
+                    0.0,
+                    float(video_timestamp_seconds)
+                    - float(stopped_started_at),
+                )
+                if stopped_started_at is not None
+                else carried_payload.get("stopped_seconds", 0.0)
+            )
+
+            carried_payload.update(
+                {
+                    "bbox": [float(value) for value in track.bbox],
+                    "center": [
+                        round(float(track.center[0]), 2),
+                        round(float(track.center[1]), 2),
+                    ],
+                    "frame_index": int(frame_index),
+                    "video_timestamp_seconds": round(
+                        float(video_timestamp_seconds),
+                        3,
+                    ),
+                    "stopped_seconds": round(
+                        float(carried_stopped_seconds),
+                        3,
+                    ),
+                    "persistent_annotation": True,
+                    "inferred_from_last_seen": True,
+                }
+            )
+
+            self._render_annotations.append(carried_payload)
 
         return emitted_events
 
@@ -297,6 +369,7 @@ class ReportStopAnalyzer:
         return {
             "incident_candidates": self._events,
             "detection_logs": self._detection_logs,
+            "render_annotations": self._render_annotations,
             "debug": {
                 "raw_detections_count": self._raw_detections_count,
                 "vehicle_detections_count": self._vehicle_detections_count,

@@ -255,28 +255,26 @@ def postprocess_report_analysis_detections(
         is_shoulder_candidate = bool(SHOULDER_ROI_IDS.intersection(roi_ids))
         is_candidate = is_shoulder_candidate or is_heuristic_candidate
 
+        # 일반 탐지 차량은 항상 초록색으로 유지합니다.
+        # 갓길 ROI, bbox 크기, 신뢰도만으로는 정차를 확정하지 않습니다.
+        # 실제 빨간 정차 박스는 ReportStopAnalyzer가 이동량과 정차 시간을
+        # 모두 통과한 뒤 생성하는 최종 stop event만 사용합니다.
         if is_candidate:
-            normalized["box_color"] = "red"
-            normalized["risk_level"] = "HIGH"
-
-            if is_shoulder_candidate:
-                normalized["incident_type"] = "SHOULDER_STOP_CANDIDATE"
-                normalized["risk_reason"] = (
-                    "vehicle bbox bottom-center is inside a shoulder ROI"
-                )
-            else:
-                normalized["incident_type"] = "STOPPED_VEHICLE_CANDIDATE"
-                normalized["risk_reason"] = (
-                    "vehicle bbox is inside the road-risk area and satisfies "
+            candidate = dict(normalized)
+            candidate["candidate_type"] = (
+                "SHOULDER_STOP_CANDIDATE"
+                if is_shoulder_candidate
+                else "STOPPED_VEHICLE_CANDIDATE"
+            )
+            candidate["candidate_reason"] = (
+                "vehicle bbox bottom-center is inside a shoulder ROI"
+                if is_shoulder_candidate
+                else (
+                    "vehicle is inside the road-risk area and satisfies "
                     "confidence/size thresholds"
                 )
-
-            normalized["source_type"] = source_type or "unknown"
-
-            if filtered:
-                filtered[-1] = normalized
-
-            candidate = dict(normalized)
+            )
+            candidate["source_type"] = source_type or "unknown"
             candidates.append(candidate)
 
     if display_mode == "filtered":
