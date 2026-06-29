@@ -2395,6 +2395,131 @@ class ReportUploadService:
         }, 200
 
 
+    @staticmethod
+    def _create_incidents_from_analysis(db, job, report, result_summary, completed_at, attachment=None):
+        """AI 분석 완료 결과에서 Incident, DetectionLog, IncidentSnapshot, Notification을 생성한다.
+
+        job.created_incident_id를 업데이트하며, DB commit은 호출자가 책임진다.
+        생성할 감지 항목이 없으면 아무것도 하지 않는다.
+        """
+        import uuid
+        from app.models import DetectionLog, Incident, IncidentSnapshot, Notification, User
+
+        detections = result_summary.get("detections") or []
+        if not isinstance(detections, list):
+            detections = []
+
+        # report_stop.incident_candidates 구조 지원
+        candidates = (result_summary.get("report_stop") or {}).get("incident_candidates") or []
+        if not isinstance(candidates, list):
+            candidates = []
+
+        # 감지 결과가 전혀 없으면 사고 생성 생략
+        has_detections = bool(detections) or bool(candidates) or result_summary.get("detected")
+        if not has_detections:
+            return
+
+        now = completed_at
+
+        # 주요 감지 유형 결정
+        incident_type = "SHOULDER_STOP"
+        confidence = None
+        if detections:
+            first = detections[0]
+            incident_type = str(first.get("class") or first.get("label") or "SHOULDER_STOP").upper()
+            try:
+                confidence = float(first.get("confidence") or 0) or None
+            except (TypeError, ValueError):
+                confidence = None
+        elif candidates:
+            first = candidates[0]
+            incident_type = str(
+                first.get("type") or first.get("incident_type") or "SHOULDER_STOP"
+            ).upper()
+            try:
+                confidence = float(first.get("confidence") or 0) or None
+            except (TypeError, ValueError):
+                confidence = None
+
+        incident_code = (
+            f"REP-INC-{now.strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:8].upper()}"
+        )
+
+        incident = Incident(
+            incident_code=incident_code,
+            report_id=report.id,
+            cctv_id=getattr(report, "cctv_id", None),
+            incident_type=incident_type,
+            incident_status="DETECTED",
+            risk_level="HIGH",
+            confidence=confidence,
+            detected_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+        db.session.add(incident)
+        db.session.flush()
+
+        # 개별 감지 항목마다 DetectionLog + IncidentSnapshot 생성
+        is_image_attachment = attachment and getattr(attachment, "file_type", None) == "IMAGE"
+        for det in detections:
+            try:
+                det_confidence = float(det.get("confidence") or 0) or None
+            except (TypeError, ValueError):
+                det_confidence = None
+
+            log = DetectionLog(
+                incident_id=incident.id,
+                report_analysis_job_id=job.id,
+                model_name=job.primary_model_name or "YOLO11",
+                model_version=job.primary_model_version or "current.pt",
+                detected_class=str(det.get("class") or det.get("label") or "UNKNOWN").upper(),
+                confidence=det_confidence,
+                bbox_json=det.get("bbox") or det.get("bbox_json"),
+                roi_type=str(det.get("roi_type") or "UNKNOWN").upper(),
+                stopped_duration_seconds=det.get("stopped_duration_seconds"),
+                frame_timestamp_ms=det.get("frame_timestamp_ms"),
+                raw_result_json=det,
+                detected_at=now,
+                created_at=now,
+            )
+            db.session.add(log)
+            db.session.flush()
+
+            if is_image_attachment:
+                snap = IncidentSnapshot(
+                    incident_id=incident.id,
+                    detection_log_id=log.id,
+                    file_path=attachment.file_path,
+                    bbox_json=det.get("bbox") or det.get("bbox_json"),
+                    captured_at=now,
+                    created_at=now,
+                )
+                db.session.add(snap)
+
+        job.created_incident_id = incident.id
+
+        # 관리자 알림 생성
+        type_label = "갓길 정차" if incident_type == "SHOULDER_STOP" else incident_type
+        admins = User.query.filter(
+            User.role.in_(["SUPER_ADMIN", "CONTROL_ADMIN"])
+        ).all()
+        for admin in admins:
+            notification = Notification(
+                user_id=admin.id,
+                incident_id=incident.id,
+                notification_type="INCIDENT_DETECTED",
+                title=f"AI 분석 사고 감지: {type_label}",
+                message=(
+                    f"신고 #{report.id} 분석 결과 {type_label}이(가) 감지되었습니다. "
+                    f"(사고코드: {incident_code})"
+                ),
+                priority="HIGH",
+                is_read=0,
+                created_at=now,
+            )
+            db.session.add(notification)
+
     # 설명: `_extract_analysis_metrics` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
     @staticmethod
     def _extract_analysis_metrics(result_summary):
@@ -3168,63 +3293,70 @@ class ReportUploadService:
         # 설명: `emit_report_analysis_updated`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         emit_report_analysis_updated(job)
 
-        # 설명: `camera_id`에 f'camera-{report.cctv_id}' if getattr(report, 'cctv_id', None) else None 표현식의 계산 결과를 저장한다.
         camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
-        # 설명: `(success, response)`에 `AIGatewayService.request_analysis` 호출 결과를 저장해 다음 처리에서 사용한다.
+
+        # DB에서 활성 ROI를 읽어 AI 요청에 포함한다
+        from app.models import CctvRoi
+        rois_payload = []
+        if getattr(report, "cctv_id", None):
+            active_rois = CctvRoi.query.filter_by(
+                cctv_id=report.cctv_id, is_active=1
+            ).all()
+            rois_payload = [
+                {
+                    "roi_id": roi.id,
+                    "roi_type": roi.roi_type,
+                    "roi_name": roi.roi_name,
+                    "polygon_points": roi.polygon_json,
+                }
+                for roi in active_rois
+            ]
+
         success, response = AIGatewayService.request_analysis(
             report.id,
             attachment.file_path,
             cctv_id=getattr(report, "cctv_id", None),
             camera_id=camera_id,
+            rois=rois_payload or None,
         )
-        # 설명: `completed_at`에 `ReportUploadService._now` 호출 결과를 저장해 다음 처리에서 사용한다.
         completed_at = ReportUploadService._now()
 
-        # 설명: `success` 조건 결과에 따라 실행 경로를 분기한다.
         if success:
-            # 설명: `result_summary`에 response if isinstance(response, dict) else {'raw_response': str(resp... 표현식의 계산 결과를 저장한다.
             result_summary = response if isinstance(response, dict) else {
                 "raw_response": str(response)
             }
 
-            # 설명: `response_status`에 `str(result_summary.get('status', '')).upper` 호출 결과를 저장해 다음 처리에서 사용한다.
             response_status = str(result_summary.get("status", "")).upper()
-            # 설명: `response_job_status`에 `str(result_summary.get('job_status', '')).upper` 호출 결과를 저장해 다음 처리에서 사용한다.
             response_job_status = str(result_summary.get("job_status", "")).upper()
 
-            # 설명: `is_completed_result`에 response_status == 'OK' or 'detections' in result_summary or 'count' ... 표현식의 계산 결과를 저장한다.
             is_completed_result = (
                 response_status == "OK"
                 or "detections" in result_summary
                 or "count" in result_summary
             )
 
-            # 설명: `is_completed_result` 조건 결과에 따라 실행 경로를 분기한다.
             if is_completed_result:
-                # 설명: `job.job_status`의 기준값 또는 기본값을 'COMPLETED'로 설정한다.
                 job.job_status = "COMPLETED"
-                # 설명: `job.completed_at`에 completed_at 표현식의 계산 결과를 저장한다.
                 job.completed_at = completed_at
-                # 설명: `job.updated_at`에 completed_at 표현식의 계산 결과를 저장한다.
                 job.updated_at = completed_at
-                # 설명: `job.progress_percent`의 기준값 또는 기본값을 100로 설정한다.
                 job.progress_percent = 100
-                # 설명: `job.total_frames`에 job.total_frames or 1 표현식의 계산 결과를 저장한다.
                 job.total_frames = job.total_frames or 1
-                # 설명: `job.processed_frames`에 job.processed_frames or 1 표현식의 계산 결과를 저장한다.
                 job.processed_frames = job.processed_frames or 1
-                # 설명: `job.result_summary`에 result_summary 표현식의 계산 결과를 저장한다.
                 job.result_summary = result_summary
-                # 설명: `job.raw_result_path`의 기준값 또는 기본값을 None로 설정한다.
                 job.raw_result_path = None
-                # 설명: `job.error_message`의 기준값 또는 기본값을 None로 설정한다.
                 job.error_message = None
-                # 설명: `job.failed_reason_code`의 기준값 또는 기본값을 None로 설정한다.
                 job.failed_reason_code = None
-                # 설명: `job.primary_model_name`에 job.primary_model_name or 'YOLO11' 표현식의 계산 결과를 저장한다.
                 job.primary_model_name = job.primary_model_name or "YOLO11"
-                # 설명: `job.primary_model_version`에 job.primary_model_version or 'current.pt' 표현식의 계산 결과를 저장한다.
                 job.primary_model_version = job.primary_model_version or "current.pt"
+
+                try:
+                    ReportUploadService._create_incidents_from_analysis(
+                        db, job, report, result_summary, completed_at, attachment
+                    )
+                except Exception:
+                    current_app.logger.exception(
+                        "[ReportAnalysis] retry incident 생성 실패 job_id=%s", job.id
+                    )
             else:
                 # 설명: `job.job_status`에 response_job_status if response_job_status in ReportUploadService.ACT... 표현식의 계산 결과를 저장한다.
                 job.job_status = (
@@ -3791,57 +3923,65 @@ class ReportUploadService:
         # 설명: `emit_report_analysis_updated`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         emit_report_analysis_updated(job)
 
-        # 설명: `camera_id`에 f'camera-{report.cctv_id}' if getattr(report, 'cctv_id', None) else None 표현식의 계산 결과를 저장한다.
         camera_id = f"camera-{report.cctv_id}" if getattr(report, "cctv_id", None) else None
-        # 설명: `(success, response)`에 `AIGatewayService.request_analysis` 호출 결과를 저장해 다음 처리에서 사용한다.
+
+        # DB에서 활성 ROI를 읽어 AI 요청에 포함한다
+        from app.models import CctvRoi
+        rois_payload = []
+        if getattr(report, "cctv_id", None):
+            active_rois = CctvRoi.query.filter_by(
+                cctv_id=report.cctv_id, is_active=1
+            ).all()
+            rois_payload = [
+                {
+                    "roi_id": roi.id,
+                    "roi_type": roi.roi_type,
+                    "roi_name": roi.roi_name,
+                    "polygon_points": roi.polygon_json,
+                }
+                for roi in active_rois
+            ]
+
         success, response = AIGatewayService.request_analysis(
             report.id,
             attachment.file_path,
             cctv_id=getattr(report, "cctv_id", None),
             camera_id=camera_id,
+            rois=rois_payload or None,
         )
-        # 설명: `completed_at`에 `ReportUploadService._now` 호출 결과를 저장해 다음 처리에서 사용한다.
         completed_at = ReportUploadService._now()
 
-        # 설명: `success` 조건 결과에 따라 실행 경로를 분기한다.
         if success:
-            # AI JSON은 스키마 확장에 유연하도록 result_summary JSON 컬럼에 원형에 가깝게 저장한다.
             result_summary = response if isinstance(response, dict) else {"raw_response": str(response)}
-            # 설명: `is_completed`에 str(result_summary.get('status', '')).upper() == 'OK' or 'detections'... 표현식의 계산 결과를 저장한다.
             is_completed = (
                 str(result_summary.get("status", "")).upper() == "OK"
                 or "detections" in result_summary
                 or "count" in result_summary
             )
 
-            # 설명: `is_completed` 조건 결과에 따라 실행 경로를 분기한다.
             if is_completed:
-                # 설명: `job.job_status`의 기준값 또는 기본값을 'COMPLETED'로 설정한다.
                 job.job_status = "COMPLETED"
-                # 설명: `job.completed_at`에 completed_at 표현식의 계산 결과를 저장한다.
                 job.completed_at = completed_at
-                # 설명: `job.progress_percent`의 기준값 또는 기본값을 100로 설정한다.
                 job.progress_percent = 100
-                # 설명: `job.total_frames`의 기준값 또는 기본값을 1로 설정한다.
                 job.total_frames = 1
-                # 설명: `job.processed_frames`의 기준값 또는 기본값을 1로 설정한다.
                 job.processed_frames = 1
-                # 설명: `job.result_summary`에 result_summary 표현식의 계산 결과를 저장한다.
                 job.result_summary = result_summary
-                # 설명: `job.primary_model_name`의 기준값 또는 기본값을 'YOLO11'로 설정한다.
                 job.primary_model_name = "YOLO11"
-                # 설명: `job.primary_model_version`의 기준값 또는 기본값을 'current.pt'로 설정한다.
                 job.primary_model_version = "current.pt"
-                # 설명: `job.error_message`의 기준값 또는 기본값을 None로 설정한다.
                 job.error_message = None
-                # 설명: `job.failed_reason_code`의 기준값 또는 기본값을 None로 설정한다.
                 job.failed_reason_code = None
+
+                try:
+                    ReportUploadService._create_incidents_from_analysis(
+                        db, job, report, result_summary, completed_at, attachment
+                    )
+                except Exception:
+                    current_app.logger.exception(
+                        "[ReportAnalysis] incident 생성 실패 job_id=%s", job.id
+                    )
             else:
-                # 설명: `job.job_status`의 기준값 또는 기본값을 'QUEUED'로 설정한다.
                 job.job_status = "QUEUED"
-                # 설명: `job.result_summary`에 result_summary 표현식의 계산 결과를 저장한다.
                 job.result_summary = result_summary
-                # 설명: `job.progress_percent`에 job.progress_percent or 10 표현식의 계산 결과를 저장한다.
                 job.progress_percent = job.progress_percent or 10
         else:
             # 설명: `job.job_status`의 기준값 또는 기본값을 'FAILED'로 설정한다.
