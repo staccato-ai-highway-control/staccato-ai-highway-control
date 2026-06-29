@@ -714,44 +714,38 @@ def delete_cctv(cctv_id: int):
 
 
 # 설명: `get_cctv_rois` 함수는 단일 값이나 리소스를 조회하는 함수다.
-@cctv_bp.get("/cctvs/<int:cctv_id>/rois")
-def get_cctv_rois(cctv_id: int):
-    # 설명: `item`에 `db.session.get` 호출 결과를 저장해 다음 처리에서 사용한다.
-    item = db.session.get(Cctv, cctv_id)
-    # 설명: `item is None` 조건 결과에 따라 실행 경로를 분기한다.
+@cctv_bp.get("/cctvs/<cctv_identifier>/rois")
+def get_cctv_rois(cctv_identifier: str):
+    # 숫자 PK와 CCTV 코드(CCTV-001)를 모두 지원합니다.
+    item = _get_cctv_by_id_or_code(cctv_identifier)
     if item is None:
-        # 설명: 호출자에게 (jsonify({'success': False, 'error': 'CCTV not found.'}), 404) 값을 함수 결과로 반환한다.
         return jsonify({
             "success": False,
             "error": "CCTV not found.",
         }), 404
 
-    # 설명: `query`에 `CctvRoi.query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
+    cctv_id = item.id
     query = CctvRoi.query.filter(CctvRoi.cctv_id == cctv_id)
-    # 설명: `is_active`에 `_parse_is_active` 호출 결과를 저장해 다음 처리에서 사용한다.
     is_active = _parse_is_active(request.args.get("is_active"))
-    # 설명: `is_active is not None` 조건 결과에 따라 실행 경로를 분기한다.
     if is_active is not None:
-        # 설명: `query`에 `query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
         query = query.filter(CctvRoi.is_active == is_active)
 
-    # 설명: `rois`에 `query.order_by(CctvRoi.id.asc()).all` 호출 결과를 저장해 다음 처리에서 사용한다.
     rois = query.order_by(CctvRoi.id.asc()).all()
 
-    # 설명: 호출자에게 (jsonify({'success': True, 'cctv_id': cctv_id, 'count': len(rois), 'items': [_s... 값을 함수 결과로 반환한다.
     return jsonify({
         "success": True,
         "cctv_id": cctv_id,
         "count": len(rois),
         "items": [_serialize_roi(roi) for roi in rois],
     }), 200
-
-
-@cctv_bp.put("/cctvs/<int:cctv_id>/rois")
-def put_cctv_rois(cctv_id: int):
-    item = db.session.get(Cctv, cctv_id)
+@cctv_bp.put("/cctvs/<cctv_identifier>/rois")
+def put_cctv_rois(cctv_identifier: str):
+    # 숫자 PK와 CCTV 코드(CCTV-001)를 모두 지원합니다.
+    item = _get_cctv_by_id_or_code(cctv_identifier)
     if item is None:
         return jsonify({"success": False, "error": "CCTV not found."}), 404
+
+    cctv_id = item.id
 
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
