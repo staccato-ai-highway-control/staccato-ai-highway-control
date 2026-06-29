@@ -1405,6 +1405,7 @@ async def detect_legacy_report_file(
         "roi_id": primary_stop_event.get("roi_id"),
         "roi_overlap_ratio": primary_stop_event.get("roi_overlap_ratio"),
         "decision_reason": primary_stop_event.get("decision_reason"),
+        "review_required": primary_stop_event.get("review_required"),
         "frame_index": primary_stop_event.get("frame_index"),
         "bbox": primary_stop_event.get("bbox"),
         "center": primary_stop_event.get("center"),
