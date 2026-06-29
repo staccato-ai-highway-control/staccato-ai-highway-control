@@ -6,10 +6,12 @@
 
 // 코드 설명: lucide-react 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { X } from "lucide-react";
+import { useState } from "react";
 // 코드 설명: @/types/cctv 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Cctv } from "@/types/cctv";
 // 코드 설명: @/components/cctv/CctvCard 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import { CctvFrame, statusLabels } from "@/components/cctv/CctvCard";
+import { createManualCctvEvent } from "@/features/cctvs/api";
 
 // 코드 설명: formatConfidence 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function formatConfidence(confidence?: number) {
@@ -29,6 +31,21 @@ export function CctvDetailModal({
   cctvIndex: number;
   onClose: () => void;
 }) {
+  const [manualEventStatus, setManualEventStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [manualEventError, setManualEventError] = useState<string | null>(null);
+
+  async function handleCreateManualEvent() {
+    setManualEventStatus("loading");
+    setManualEventError(null);
+    try {
+      await createManualCctvEvent(cctv.id);
+      setManualEventStatus("success");
+    } catch (error) {
+      setManualEventStatus("error");
+      setManualEventError(error instanceof Error ? error.message : "이벤트 생성에 실패했습니다.");
+    }
+  }
+
   // 코드 설명: detailRows 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const detailRows = [
     ["CCTV 코드", cctv.cctvCode],
@@ -73,16 +90,21 @@ export function CctvDetailModal({
                 ))}
               </dl>
             </div>
-            <button type="button" disabled className="h-11 cursor-not-allowed rounded-lg bg-slate-300 px-4 font-bold text-white">수동 이벤트 API 미연결</button>
-            <p className="text-xs font-semibold leading-5 text-amber-700">실제 이벤트 생성 API가 연결되기 전에는 수동 이벤트를 생성하지 않습니다.</p>
+            <button
+              type="button"
+              onClick={handleCreateManualEvent}
+              disabled={manualEventStatus === "loading"}
+              className="h-11 rounded-lg bg-staccato px-4 font-bold text-white transition hover:bg-staccato-dark disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {manualEventStatus === "loading" ? "이벤트 생성 중..." : "수동 이벤트 생성"}
+            </button>
+            {manualEventStatus === "success" && (
+              <p className="text-xs font-semibold leading-5 text-green-700">수동 이벤트가 생성되었습니다.</p>
+            )}
+            {manualEventStatus === "error" && (
+              <p className="text-xs font-semibold leading-5 text-red-600">{manualEventError}</p>
+            )}
           </aside>
-        </div>
-
-        <div className="border-t border-slate-200 p-5">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 text-sm font-semibold leading-6 text-amber-800">
-            <b className="block text-amber-950">수동 이벤트 생성 API가 아직 연결되지 않았습니다.</b>
-            로컬 시연 이벤트나 임의 이력은 표시하지 않습니다. <code>POST /api/cctvs/{"{camera_id}"}/manual-events</code> 연결 후 활성화됩니다.
-          </div>
         </div>
       </section>
     </div>
