@@ -204,7 +204,7 @@ class ReportStopAnalyzerTest(unittest.TestCase):
             "stale 기준을 넘겨 차량이 사라진 뒤에는 빨간 박스를 더 유지하면 안 됩니다.",
         )
 
-    def test_unmatched_roi_boundary_does_not_emit_stopped_vehicle(self) -> None:
+    def test_unmatched_roi_boundary_emits_review_stopped_vehicle(self) -> None:
         analyzer = ReportStopAnalyzer(
             camera_id=None,
             model_name="test-model",
@@ -215,14 +215,17 @@ class ReportStopAnalyzerTest(unittest.TestCase):
             ),
         )
 
-        events = self._run_stop_sequence(analyzer)
+        event = self._emit_stop_event(analyzer)
         result = analyzer.build_result()
         last_log = result["detection_logs"][-1]
 
-        self.assertEqual(events, [])
-        self.assertEqual(result["incident_candidates"], [])
+        self.assertEqual(event["incident_type"], "STOPPED_VEHICLE")
+        self.assertEqual(event["box_color"], "red")
+        self.assertTrue(event["review_required"])
         self.assertEqual(last_log["roi_type"], "UNKNOWN")
-        self.assertTrue(last_log["roi_excluded"])
+        self.assertFalse(last_log["roi_excluded"])
+        self.assertTrue(last_log["review_required"])
+        self.assertEqual(result["incident_candidates"], [event])
 
     def test_driving_lane_roi_emits_lane_stop(self) -> None:
         analyzer = ReportStopAnalyzer(
@@ -308,7 +311,7 @@ class ReportStopAnalyzerTest(unittest.TestCase):
         self.assertEqual(last_log["roi_type"], "IGNORE_ZONE")
         self.assertTrue(last_log["roi_excluded"])
 
-    def test_unsupported_roi_type_excludes_stop_event(self) -> None:
+    def test_unsupported_roi_type_emits_review_stopped_vehicle(self) -> None:
         analyzer = ReportStopAnalyzer(
             camera_id="camera-1",
             model_name="test-model",
@@ -319,16 +322,19 @@ class ReportStopAnalyzerTest(unittest.TestCase):
             ),
         )
 
-        events = self._run_stop_sequence(analyzer)
+        event = self._emit_stop_event(analyzer)
         result = analyzer.build_result()
         last_log = result["detection_logs"][-1]
 
-        self.assertEqual(events, [])
-        self.assertEqual(result["incident_candidates"], [])
+        self.assertEqual(event["incident_type"], "STOPPED_VEHICLE")
+        self.assertEqual(event["box_color"], "red")
+        self.assertTrue(event["review_required"])
         self.assertEqual(last_log["roi_type"], "UNCERTAIN_ROI_BOUNDARY")
-        self.assertTrue(last_log["roi_excluded"])
+        self.assertFalse(last_log["roi_excluded"])
+        self.assertTrue(last_log["review_required"])
+        self.assertEqual(result["incident_candidates"], [event])
 
-    def test_boundary_overlap_below_threshold_excludes_stop_event(self) -> None:
+    def test_boundary_overlap_below_threshold_emits_review_stopped_vehicle(self) -> None:
         analyzer = ReportStopAnalyzer(
             camera_id="camera-1",
             model_name="test-model",
@@ -340,15 +346,18 @@ class ReportStopAnalyzerTest(unittest.TestCase):
             ),
         )
 
-        events = self._run_stop_sequence(analyzer)
+        event = self._emit_stop_event(analyzer)
         result = analyzer.build_result()
         last_log = result["detection_logs"][-1]
 
-        self.assertEqual(events, [])
-        self.assertEqual(result["incident_candidates"], [])
+        self.assertEqual(event["incident_type"], "STOPPED_VEHICLE")
+        self.assertEqual(event["box_color"], "red")
+        self.assertTrue(event["review_required"])
         self.assertEqual(last_log["roi_type"], "UNCERTAIN_ROI_BOUNDARY")
         self.assertLess(last_log["roi_overlap_ratio"], 0.35)
-        self.assertTrue(last_log["roi_excluded"])
+        self.assertFalse(last_log["roi_excluded"])
+        self.assertTrue(last_log["review_required"])
+        self.assertEqual(result["incident_candidates"], [event])
 
     def test_default_median_roi_excludes_stop_event(self) -> None:
         analyzer = ReportStopAnalyzer(

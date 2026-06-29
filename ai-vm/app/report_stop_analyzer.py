@@ -258,6 +258,7 @@ class ReportStopAnalyzer:
                     ),
                     "decision_reason": decision_reason,
                     "roi_excluded": bool(roi_context.get("excluded")),
+                    "review_required": bool(roi_context.get("review_required")),
                     "is_new_track": is_new_track,
                 }
             )
@@ -310,6 +311,7 @@ class ReportStopAnalyzer:
                     else None
                 ),
                 "decision_reason": decision_reason,
+                "review_required": bool(roi_context.get("review_required")),
                 "frame_index": int(frame_index),
                 "video_timestamp_seconds": round(
                     float(video_timestamp_seconds),
@@ -553,10 +555,11 @@ class ReportStopAnalyzer:
                 "roi_id": best.get("roi_id"),
                 "roi_type": "UNCERTAIN_ROI_BOUNDARY",
                 "roi_overlap_ratio": overlap,
-                "excluded": True,
-                "incident_type": None,
+                "excluded": False,
+                "incident_type": "STOPPED_VEHICLE",
+                "review_required": True,
                 "decision_reason": (
-                    f"best ROI overlap {overlap:.2f} is below classification threshold; excluded"
+                    f"best ROI overlap {overlap:.2f} is below classification threshold; review required"
                 ),
             }
 
@@ -565,9 +568,10 @@ class ReportStopAnalyzer:
             "roi_id": None,
             "roi_type": "UNKNOWN",
             "roi_overlap_ratio": 0.0,
-            "excluded": True,
-            "incident_type": None,
-            "decision_reason": "no ROI overlap from provided rois; excluded",
+            "excluded": False,
+            "incident_type": "STOPPED_VEHICLE",
+            "review_required": True,
+            "decision_reason": "no ROI overlap from provided rois; review required",
         }
 
     def _match_track(
