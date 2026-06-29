@@ -1026,6 +1026,11 @@ async def detect_legacy_report_file(
         selected_model_name = selected_spec.model_name
         selected_model_version = selected_spec.model_version
 
+    # Keras 비교 모델은 CPU worker와 모델 재로딩 비용이 크므로 영상당 1개 샘플만 처리한다.
+    # 목적: Flask 요청 timeout 전에 분석 이력을 정상 생성한다.
+    if is_video and selected_model_id == "keras_yolov8":
+        max_frames = max(1, int(os.getenv("KERAS_REPORT_DETECT_MAX_FRAMES", "1")))
+
     if is_video:
         from .report_stop_analyzer import ReportStopAnalyzer
 
