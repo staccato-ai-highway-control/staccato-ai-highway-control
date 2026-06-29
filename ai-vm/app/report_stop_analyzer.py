@@ -19,10 +19,14 @@ from .config import (
     ROI_BASE_WIDTH,
 )
 from .detector import Detection
-from .roi_config import get_camera_rois
+from .roi_config import calculate_bbox_roi_overlaps
 
 
 SHOULDER_ROI_IDS = {"LEFT_SHOULDER", "RIGHT_SHOULDER"}
+ROI_EXCLUDE_TYPES = {"IGNORE_ZONE", "MEDIAN"}
+ROI_SHOULDER_TYPES = {"SHOULDER", "EMERGENCY_BAY"}
+ROI_EXCLUDE_OVERLAP_THRESHOLD = 0.30
+ROI_EVENT_OVERLAP_THRESHOLD = 0.35
 
 
 @dataclass
@@ -52,10 +56,12 @@ class ReportStopAnalyzer:
         camera_id: str | None,
         model_name: str | None,
         model_version: str | None,
+        rois: Any | None = None,
     ) -> None:
         self.camera_id = str(camera_id or "").strip() or None
         self.model_name = model_name or "unknown"
         self.model_version = model_version
+        self._override_rois = rois
 
         self.vehicle_classes = {
             str(item).strip().lower()
@@ -162,6 +168,12 @@ class ReportStopAnalyzer:
                 if previous_center is not None
                 else None
             )
+            bbox_height = self._bbox_height(detection.bbox)
+            movement_delta_norm = (
+                float(movement_delta) / bbox_height
+                if movement_delta is not None and bbox_height > 0
+                else None
+            )
 
             if movement_delta is None:
                 stopped_seconds = 0.0
@@ -193,16 +205,20 @@ class ReportStopAnalyzer:
                 track.last_stop_payload = None
                 stopped_seconds = 0.0
 
-            roi_ids = self._roi_ids_for_point(
+            roi_context = self._roi_context_for_detection(
+                bbox=detection.bbox,
                 center=center,
                 frame_shape=frame_shape,
             )
+            roi_ids = list(roi_context.get("roi_ids") or [])
 
             if roi_ids:
                 self._roi_matched_count += 1
 
-            roi_id = roi_ids[0] if roi_ids else None
-            roi_type = self._roi_type(roi_ids)
+            roi_id = roi_context.get("roi_id")
+            roi_type = str(roi_context.get("roi_type") or "UNKNOWN")
+            roi_overlap_ratio = roi_context.get("roi_overlap_ratio")
+            decision_reason = str(roi_context.get("decision_reason") or "")
 
             self._detection_logs.append(
                 {
@@ -219,6 +235,11 @@ class ReportStopAnalyzer:
                         if movement_delta is not None
                         else None
                     ),
+                    "movement_delta_norm": (
+                        round(float(movement_delta_norm), 5)
+                        if movement_delta_norm is not None
+                        else None
+                    ),
                     "stopped_seconds": round(float(stopped_seconds), 3),
                     "frame_index": int(frame_index),
                     "video_timestamp_seconds": round(
@@ -230,6 +251,13 @@ class ReportStopAnalyzer:
                     "roi_type": roi_type,
                     "roi_id": roi_id,
                     "roi_ids": roi_ids,
+                    "roi_overlap_ratio": (
+                        round(float(roi_overlap_ratio), 5)
+                        if roi_overlap_ratio is not None
+                        else None
+                    ),
+                    "decision_reason": decision_reason,
+                    "roi_excluded": bool(roi_context.get("excluded")),
                     "is_new_track": is_new_track,
                 }
             )
@@ -243,12 +271,17 @@ class ReportStopAnalyzer:
             if stopped_seconds < REPORT_STOP_DANGER_SECONDS:
                 continue
 
-            if roi_type == "SHOULDER":
-                incident_type = "SHOULDER_STOP"
-            elif roi_ids:
-                incident_type = "LANE_STOP"
-            else:
-                incident_type = "STOPPED_VEHICLE"
+            if roi_context.get("excluded"):
+                continue
+
+            incident_type = roi_context.get("incident_type")
+            if not incident_type:
+                if roi_type == "SHOULDER":
+                    incident_type = "SHOULDER_STOP"
+                elif roi_ids:
+                    incident_type = "LANE_STOP"
+                else:
+                    incident_type = "STOPPED_VEHICLE"
 
             stop_payload = {
                 "incident_type": incident_type,
@@ -262,10 +295,21 @@ class ReportStopAnalyzer:
                 ],
                 "confidence": round(confidence, 5),
                 "movement_delta": round(float(movement_delta), 3),
+                "movement_delta_norm": (
+                    round(float(movement_delta_norm), 5)
+                    if movement_delta_norm is not None
+                    else None
+                ),
                 "stopped_seconds": round(float(stopped_seconds), 3),
                 "roi_type": roi_type,
                 "roi_id": roi_id,
                 "roi_ids": roi_ids,
+                "roi_overlap_ratio": (
+                    round(float(roi_overlap_ratio), 5)
+                    if roi_overlap_ratio is not None
+                    else None
+                ),
+                "decision_reason": decision_reason,
                 "frame_index": int(frame_index),
                 "video_timestamp_seconds": round(
                     float(video_timestamp_seconds),
@@ -279,12 +323,15 @@ class ReportStopAnalyzer:
                     f"{incident_type} {stopped_seconds:.1f}s"
                 ),
                 "risk_reason": (
-                    "vehicle stayed below the movement threshold "
-                    f"for {stopped_seconds:.1f}s inside {roi_type}"
-                    if roi_ids
-                    else (
+                    decision_reason
+                    or (
                         "vehicle stayed below the movement threshold "
-                        f"for {stopped_seconds:.1f}s without a matched ROI"
+                        f"for {stopped_seconds:.1f}s inside {roi_type}"
+                        if roi_ids
+                        else (
+                            "vehicle stayed below the movement threshold "
+                            f"for {stopped_seconds:.1f}s without a matched ROI"
+                        )
                     )
                 ),
             }
@@ -387,6 +434,10 @@ class ReportStopAnalyzer:
                         REPORT_STOPPED_MIN_CONFIDENCE
                     ),
                     "movement_threshold_px": REPORT_STOPPED_MOVE_PX,
+                    "movement_delta_norm_enabled": True,
+                    "roi_overlap_enabled": True,
+                    "roi_exclude_overlap_threshold": ROI_EXCLUDE_OVERLAP_THRESHOLD,
+                    "roi_event_overlap_threshold": ROI_EVENT_OVERLAP_THRESHOLD,
                     "danger_seconds": REPORT_STOP_DANGER_SECONDS,
                     "track_match_distance_px": (
                         EVENT_TRACK_MATCH_DISTANCE
@@ -422,6 +473,102 @@ class ReportStopAnalyzer:
             return "MOVEMENT_TOO_LARGE"
 
         return "TRACKING_FAILED"
+
+
+    def _roi_context_for_detection(
+        self,
+        *,
+        bbox: list[float],
+        center: tuple[float, float],
+        frame_shape: tuple[int, ...],
+    ) -> dict[str, Any]:
+        matches = calculate_bbox_roi_overlaps(
+            bbox=bbox,
+            frame_shape=frame_shape,
+            camera_id=self.camera_id,
+            override_rois=self._override_rois,
+        )
+        return self._roi_context_for_overlaps(matches)
+
+    @staticmethod
+    def _roi_context_for_overlaps(matches: list[dict[str, Any]]) -> dict[str, Any]:
+        roi_ids = [str(item.get("roi_id")) for item in matches if item.get("roi_id")]
+        best = matches[0] if matches else None
+
+        for item in matches:
+            roi_type = str(item.get("roi_type") or "UNKNOWN")
+            overlap = float(item.get("roi_overlap_ratio") or 0.0)
+            if roi_type in ROI_EXCLUDE_TYPES and overlap >= ROI_EXCLUDE_OVERLAP_THRESHOLD:
+                return {
+                    "roi_ids": roi_ids,
+                    "roi_id": item.get("roi_id"),
+                    "roi_type": roi_type,
+                    "roi_overlap_ratio": overlap,
+                    "excluded": True,
+                    "incident_type": None,
+                    "decision_reason": (
+                        f"{roi_type} overlap {overlap:.2f} >= "
+                        f"{ROI_EXCLUDE_OVERLAP_THRESHOLD:.2f}; excluded"
+                    ),
+                }
+
+        for item in matches:
+            roi_type = str(item.get("roi_type") or "UNKNOWN")
+            overlap = float(item.get("roi_overlap_ratio") or 0.0)
+            if roi_type in ROI_SHOULDER_TYPES and overlap >= ROI_EVENT_OVERLAP_THRESHOLD:
+                return {
+                    "roi_ids": roi_ids,
+                    "roi_id": item.get("roi_id"),
+                    "roi_type": roi_type,
+                    "roi_overlap_ratio": overlap,
+                    "excluded": False,
+                    "incident_type": "SHOULDER_STOP",
+                    "decision_reason": (
+                        f"{roi_type} overlap {overlap:.2f} >= "
+                        f"{ROI_EVENT_OVERLAP_THRESHOLD:.2f}; SHOULDER_STOP"
+                    ),
+                }
+
+        for item in matches:
+            roi_type = str(item.get("roi_type") or "UNKNOWN")
+            overlap = float(item.get("roi_overlap_ratio") or 0.0)
+            if roi_type == "DRIVING_LANE" and overlap >= ROI_EVENT_OVERLAP_THRESHOLD:
+                return {
+                    "roi_ids": roi_ids,
+                    "roi_id": item.get("roi_id"),
+                    "roi_type": roi_type,
+                    "roi_overlap_ratio": overlap,
+                    "excluded": False,
+                    "incident_type": "LANE_STOP",
+                    "decision_reason": (
+                        f"{roi_type} overlap {overlap:.2f} >= "
+                        f"{ROI_EVENT_OVERLAP_THRESHOLD:.2f}; LANE_STOP"
+                    ),
+                }
+
+        if best is not None:
+            overlap = float(best.get("roi_overlap_ratio") or 0.0)
+            return {
+                "roi_ids": roi_ids,
+                "roi_id": best.get("roi_id"),
+                "roi_type": "UNCERTAIN_ROI_BOUNDARY",
+                "roi_overlap_ratio": overlap,
+                "excluded": True,
+                "incident_type": None,
+                "decision_reason": (
+                    f"best ROI overlap {overlap:.2f} is below classification threshold; excluded"
+                ),
+            }
+
+        return {
+            "roi_ids": [],
+            "roi_id": None,
+            "roi_type": "UNKNOWN",
+            "roi_overlap_ratio": 0.0,
+            "excluded": True,
+            "incident_type": None,
+            "decision_reason": "no ROI overlap from provided rois; excluded",
+        }
 
     def _match_track(
         self,
@@ -493,69 +640,9 @@ class ReportStopAnalyzer:
         for track_id in stale_ids:
             self._tracks.pop(track_id, None)
 
-    def _roi_ids_for_point(
-        self,
-        *,
-        center: tuple[float, float],
-        frame_shape: tuple[int, ...],
-    ) -> list[str]:
-        if not self.camera_id:
-            return []
-
-        height, width = frame_shape[:2]
-
-        if width <= 0 or height <= 0:
-            return []
-
-        try:
-            rois = get_camera_rois(self.camera_id)
-        except Exception:
-            return []
-
-        x_scale = width / float(ROI_BASE_WIDTH or width)
-        y_scale = height / float(ROI_BASE_HEIGHT or height)
-
-        point = (float(center[0]), float(center[1]))
-        roi_ids: list[str] = []
-
-        for roi_id, points in rois.items():
-            scaled_points = []
-
-            for item in points:
-                try:
-                    x, y = item
-                    scaled_points.append(
-                        [
-                            int(float(x) * x_scale),
-                            int(float(y) * y_scale),
-                        ]
-                    )
-                except (TypeError, ValueError):
-                    continue
-
-            if len(scaled_points) < 3:
-                continue
-
-            polygon = np.array(scaled_points, dtype=np.int32)
-
-            if cv2.pointPolygonTest(polygon, point, False) >= 0:
-                roi_ids.append(str(roi_id))
-
-        return roi_ids
-
     @staticmethod
     def _class_name(detection: Detection) -> str:
         return str(detection.class_name or "").strip().lower()
-
-    @staticmethod
-    def _roi_type(roi_ids: list[str]) -> str:
-        if SHOULDER_ROI_IDS.intersection(roi_ids):
-            return "SHOULDER"
-
-        if roi_ids:
-            return "DRIVING_LANE"
-
-        return "UNKNOWN"
 
     @staticmethod
     def _bottom_center(
@@ -563,6 +650,14 @@ class ReportStopAnalyzer:
     ) -> tuple[float, float]:
         x1, _y1, x2, y2 = [float(value) for value in bbox]
         return ((x1 + x2) / 2.0, y2)
+
+    @staticmethod
+    def _bbox_height(bbox: list[float]) -> float:
+        try:
+            _x1, y1, _x2, y2 = [float(value) for value in bbox]
+        except (TypeError, ValueError):
+            return 0.0
+        return abs(y2 - y1)
 
     @staticmethod
     def _distance(

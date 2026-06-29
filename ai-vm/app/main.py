@@ -940,6 +940,7 @@ async def detect_legacy_report_file(
     report_id: str = Form(default=""),
     cctv_id: str = Form(default=""),
     camera_id: str = Form(default=""),
+    rois: str = Form(default=""),
     model_id: str = Form(default=""),
     comparison_run_id: str = Form(default=""),
     _auth: None = Depends(require_internal_token),
@@ -955,6 +956,7 @@ async def detect_legacy_report_file(
     Flask marks a report analysis job as completed when this response includes
     either "detections" or "count".
     """
+    import json
     import os
     import tempfile
     import time
@@ -994,6 +996,27 @@ async def detect_legacy_report_file(
         str(camera_id or cctv_id or "").strip()
         or None
     )
+    parsed_rois = None
+    rois_source = "stored_or_default"
+    raw_rois = str(rois or "").strip()
+    if raw_rois:
+        try:
+            parsed_rois = json.loads(raw_rois)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid ROI payload") from exc
+
+        if not isinstance(parsed_rois, (dict, list)):
+            raise HTTPException(status_code=400, detail="Invalid ROI payload")
+
+        from .roi_config import resolve_camera_roi_regions
+
+        try:
+            resolve_camera_roi_regions(roi_camera_id, override_rois=parsed_rois)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid ROI payload") from exc
+
+        rois_source = "form"
+
     report_stop_analyzer = None
     report_stop_snapshot_frame = None
     report_stop_snapshot_events: list[dict] = []
@@ -1042,6 +1065,7 @@ async def detect_legacy_report_file(
                 or "default"
             ),
             model_version=selected_model_version,
+            rois=parsed_rois,
         )
 
     artifact_parts = [str(report_id or "unknown")]
@@ -1190,6 +1214,7 @@ async def detect_legacy_report_file(
 
     if report_stop_analyzer is not None:
         report_stop_result = report_stop_analyzer.build_result()
+        report_stop_result.setdefault("debug", {})["roi_source"] = rois_source
     else:
         report_stop_result = {
             "incident_candidates": [],
@@ -1206,6 +1231,7 @@ async def detect_legacy_report_file(
                 "frame_height": frame_height,
                 "roi_base_width": None,
                 "roi_base_height": None,
+                "roi_source": rois_source,
                 "thresholds": {},
                 "failure_reason": None,
             },
@@ -1374,8 +1400,15 @@ async def detect_legacy_report_file(
         "confidence": primary_stop_event.get("confidence"),
         "stopped_seconds": primary_stop_event.get("stopped_seconds"),
         "movement_delta": primary_stop_event.get("movement_delta"),
+        "movement_delta_norm": primary_stop_event.get("movement_delta_norm"),
         "roi_type": primary_stop_event.get("roi_type"),
         "roi_id": primary_stop_event.get("roi_id"),
+        "roi_overlap_ratio": primary_stop_event.get("roi_overlap_ratio"),
+        "decision_reason": primary_stop_event.get("decision_reason"),
+        "frame_index": primary_stop_event.get("frame_index"),
+        "bbox": primary_stop_event.get("bbox"),
+        "center": primary_stop_event.get("center"),
+        "roi_source": rois_source,
         "snapshot_path": primary_stop_event.get("snapshot_path"),
         "detections": detections_payload,
         "raw_detections": raw_detections_payload,
