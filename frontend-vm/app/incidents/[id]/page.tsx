@@ -137,11 +137,12 @@ export default function IncidentDetailPage() {
               </main>
               <aside className="grid content-start gap-5 xl:sticky xl:top-24 xl:self-start">
                 <DetailCard title="상태 변경"><IncidentStatusChanger incidentId={incident.id} initialStatus={incident.status} /></DetailCard>
-                <DetailCard title="ITS 정보">
+                <DetailCard title="AI 판단 근거">
                   <InfoGrid className="sm:grid-cols-1">
-                    <InfoItem label="날씨" value={incident.its?.weather} />
-                    <InfoItem label="교통량" value={incident.its?.trafficVolume} />
-                    <InfoItem label="순찰 예상" value={incident.its?.nearestPatrolEta} />
+                    <InfoItem label="ROI 유형" value={incident.roiType} />
+                    <InfoItem label="이동량" value={incident.movementDeltaPx != null ? `${incident.movementDeltaPx}px` : undefined} />
+                    <InfoItem label="정차 지속 시간" value={incident.stoppedDurationSec != null ? `${incident.stoppedDurationSec}초` : undefined} />
+                    <InfoItem label="AI 신뢰도" value={formatConfidence(incident.confidence)} />
                   </InfoGrid>
                 </DetailCard>
                 <DetailCard title="관리자 메모"><IncidentMemoBox memo={incident.memo} /></DetailCard>
