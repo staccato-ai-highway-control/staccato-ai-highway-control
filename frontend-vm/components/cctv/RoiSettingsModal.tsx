@@ -12,10 +12,11 @@ import { MouseEvent, useEffect, useMemo, useState } from "react";
 import type { Cctv } from "@/types/cctv";
 // 코드 설명: @/features/cctvs/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import {
-  getCameraRoiConfig,
+  createDefaultCameraRoiConfig,
+  getCctvRois,
   ORIGINAL_HEIGHT,
   ORIGINAL_WIDTH,
-  saveCameraRoiConfig,
+  saveCctvRois,
   type CameraRoiConfig,
   type CameraSlotConfig,
   type RoiPolygon,
@@ -80,7 +81,9 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
   // 코드 설명: activeCctv 값을 의존성이 바뀔 때만 다시 계산해 불필요한 연산을 줄입니다.
   const activeCctv = useMemo(() => getSlotCctv(activeSlotNumber, slotConfig, cctvs), [activeSlotNumber, cctvs, slotConfig]);
   // 코드 설명: [roiConfig, setRoiConfig] 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const [roiConfig, setRoiConfig] = useState<CameraRoiConfig>(() => getCameraRoiConfig(initialSlotNumber, activeCctv.id));
+  const [roiConfig, setRoiConfig] = useState<CameraRoiConfig>(() => createDefaultCameraRoiConfig(initialSlotNumber, activeCctv.id));
+  const [isLoadingRoi, setIsLoadingRoi] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   // 코드 설명: activePolygon 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const activePolygon = roiConfig.polygons.find((polygon) => polygon.roiIndex === activeRoiIndex) ?? roiConfig.polygons[0];
 
@@ -95,10 +98,18 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
 
   // 코드 설명: 컴포넌트 생명주기 또는 의존성 변경에 맞춰 데이터 조회와 부수 효과를 실행합니다.
   useEffect(() => {
-    // 코드 설명: setRoiConfig 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
-    setRoiConfig(getCameraRoiConfig(activeSlotNumber, activeCctv.id));
-    // 코드 설명: setActiveRoiIndex 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
+    let cancelled = false;
+    setIsLoadingRoi(true);
     setActiveRoiIndex(1);
+    getCctvRois(activeCctv.id, activeSlotNumber).then((config) => {
+      if (!cancelled) {
+        setRoiConfig(config);
+        setIsLoadingRoi(false);
+      }
+    }).catch(() => {
+      if (!cancelled) setIsLoadingRoi(false);
+    });
+    return () => { cancelled = true; };
   }, [activeCctv.id, activeSlotNumber]);
 
   // 코드 설명: updatePolygon 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -156,18 +167,33 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
     updatePolygon((polygon) => ({ ...polygon, points: [] }));
   }
 
-  // 코드 설명: handleSave 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-  function handleSave() {
-    // 코드 설명: saved 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-    const saved = saveCameraRoiConfig(activeSlotNumber, {
-      ...roiConfig,
-      cameraSlotNumber: activeSlotNumber,
-      cctvId: activeCctv.id,
-    });
-    // 코드 설명: setRoiConfig 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
-    setRoiConfig(saved);
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: window.alert(`${activeSlotNumber}번 카메라 ROI가 이 브라우저에 임시 저장되었습니다. 서버에는 반영…
-    window.alert(`${activeSlotNumber}번 카메라 ROI가 이 브라우저에 임시 저장되었습니다. 서버에는 반영되지 않습니다.`);
+  async function handleSave() {
+    setIsSaving(true);
+    try {
+      const normalized: CameraRoiConfig = {
+        ...roiConfig,
+        cameraSlotNumber: activeSlotNumber,
+        cctvId: activeCctv.id,
+        originalWidth: ORIGINAL_WIDTH,
+        originalHeight: ORIGINAL_HEIGHT,
+        polygons: roiConfig.polygons.map((polygon) => ({
+          ...polygon,
+          cameraSlotNumber: activeSlotNumber,
+          cctvId: activeCctv.id,
+          points: polygon.points.map((p) => ({
+            x: Math.max(0, Math.min(ORIGINAL_WIDTH, Math.round(p.x))),
+            y: Math.max(0, Math.min(ORIGINAL_HEIGHT, Math.round(p.y))),
+          })),
+        })),
+      };
+      await saveCctvRois(activeCctv.id, normalized);
+      setRoiConfig(normalized);
+      window.alert(`${activeSlotNumber}번 카메라 ROI가 서버에 저장되었습니다.`);
+    } catch (error) {
+      window.alert(`저장 실패: ${error instanceof Error ? error.message : "서버 오류가 발생했습니다."}`);
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   // 코드 설명: 현재 상태와 권한 조건을 반영한 JSX 화면 구조를 호출한 React 렌더러에 반환합니다.
@@ -177,7 +203,7 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
         <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-xl font-black text-slate-950">ROI 설정</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">ROI API 미연결: 좌표는 이 브라우저에만 임시 보관됩니다. 원본 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-500">ROI 좌표를 서버에 저장합니다. 원본 기준 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT}</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" aria-label="닫기">
             <X className="h-5 w-5" aria-hidden="true" />
@@ -248,10 +274,13 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
           </div>
 
           <aside className="grid content-start gap-4">
-            <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm font-semibold leading-6 text-blue-800">
-              <b className="block text-blue-950">ROI API 미연결 · 브라우저 임시 저장</b>
-              서버나 다른 기기에는 반영되지 않습니다. 클릭한 점은 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환해 localStorage에만 보관합니다.
+            <div className="rounded-lg border border-green-100 bg-green-50 p-4 text-sm font-semibold leading-6 text-green-800">
+              <b className="block text-green-950">서버 저장 · DB 반영</b>
+              저장 시 Flask DB에 기록되며 AI 분석에 즉시 적용됩니다. 클릭한 점은 {ORIGINAL_WIDTH} x {ORIGINAL_HEIGHT} 원본 기준 좌표로 변환합니다.
             </div>
+            {isLoadingRoi && (
+              <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-500">서버에서 ROI 정보를 불러오는 중...</p>
+            )}
 
             <div className="grid grid-cols-3 gap-2">
               {roiConfig.polygons.map((polygon) => (
@@ -301,9 +330,9 @@ export function RoiSettingsModal({ initialSlotNumber, slotConfig, cctvs, onClose
 
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={handleResetPolygon} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">Polygon 초기화</button>
-              <button type="button" onClick={handleSave} className="inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark">
+              <button type="button" onClick={handleSave} disabled={isSaving || isLoadingRoi} className="inline-flex h-10 items-center gap-2 rounded-lg bg-staccato px-4 text-sm font-bold text-white transition hover:bg-staccato-dark disabled:opacity-50 disabled:cursor-not-allowed">
                 <Save className="h-4 w-4" aria-hidden="true" />
-                브라우저에 임시 저장
+                {isSaving ? "저장 중..." : "서버에 ROI 저장"}
               </button>
             </div>
           </aside>
