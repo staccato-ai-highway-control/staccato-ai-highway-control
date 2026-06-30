@@ -145,17 +145,19 @@ function BatchRow({ batch }: { batch: ModelComparisonBatchListItem }) {
       <td className="whitespace-nowrap px-3 py-3.5 text-xs font-semibold text-slate-500">
         {formatDate(batch.completed_at)}
       </td>
-      <td className="px-3 py-3.5">
+      <td className="whitespace-nowrap px-3 py-3.5 align-middle">
+        <div className="flex items-center pl-2">
         {reportId ? (
           <Link
             href={`/reports/${reportId}/model-comparison?batchId=${batch.id}`}
-            className="inline-flex h-8 items-center rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
+            className="inline-flex h-8 items-center whitespace-nowrap rounded-lg border border-sky-200 px-3 text-xs font-bold text-sky-700 no-underline transition hover:bg-sky-50"
           >
             결과 보기
           </Link>
         ) : (
           <span className="text-xs font-semibold text-slate-400">-</span>
         )}
+        </div>
       </td>
     </tr>
   );

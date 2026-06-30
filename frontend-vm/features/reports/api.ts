@@ -548,7 +548,7 @@ export async function createAnalysisComparison(jobIds: Array<string | number>) {
 // 코드 설명: getReportAnalysisStatus 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export async function getReportAnalysisStatus(reportId: string | number) {
   // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const response = await apiClient<FlexibleApiResponse<ReportAnalysisStatus> | { report?: ReportAnalysisStatus }>(`/api/reports/${reportId}/analysis-status`);
+  const response = await apiClient<FlexibleApiResponse<ReportAnalysisStatus> | { report?: ReportAnalysisStatus }>(`/api/reports/${reportId}/analysis-status`, { cache: "no-store" });
   // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: typeof response === "object" && response !== null && "report" in respon…
   if (typeof response === "object" && response !== null && "report" in response && (response as { report?: ReportAnalysisStatus }).report) {
     // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: (response as { report: ReportAnalysisStatus }).report
@@ -712,6 +712,6 @@ export function startModelComparison(
 
 export function getModelComparisonBatch(batchId: string | number) {
   return apiClient<ModelComparisonBatchResult>(
-    `/api/report-model-comparisons/${batchId}`
+    `/api/report-model-comparisons/${batchId}?_=${Date.now()}`
   );
 }

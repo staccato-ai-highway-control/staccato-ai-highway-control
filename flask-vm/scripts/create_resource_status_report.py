@@ -37,6 +37,7 @@ from app import create_app  # noqa: E402
 from app.extensions import db  # noqa: E402
 # 설명: app.models에서 ProjectResource 이름을 가져와 아래 로직에서 재사용한다.
 from app.models import ProjectResource  # noqa: E402
+from app.models.auth_models import SecurityLog, User  # noqa: E402
 
 
 # 설명: `KST`에 `ZoneInfo` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -51,6 +52,39 @@ VISIBILITY = "SUPER_ADMIN_ONLY"
 FILE_TYPE = "txt"
 # 설명: `KEEP_DAYS`의 기준값 또는 기본값을 14로 설정한다.
 KEEP_DAYS = 14
+
+# 운영 서비스 상태 점검 설정
+FRONTEND_HEALTH_URL = os.getenv(
+    "FRONTEND_HEALTH_URL",
+    "https://mbc-sw.iptime.org:3001/api/health",
+).strip()
+FRONTEND_HEALTH_HOST = os.getenv(
+    "FRONTEND_HEALTH_HOST",
+    "mbc-sw.iptime.org",
+).strip()
+FRONTEND_HEALTH_PORT = os.getenv(
+    "FRONTEND_HEALTH_PORT",
+    "3001",
+).strip()
+FRONTEND_RESOLVE_IP = os.getenv(
+    "FRONTEND_RESOLVE_IP",
+    "192.168.0.188",
+).strip()
+FRONTEND_CA_CERT_PATH = Path(
+    os.getenv(
+        "FRONTEND_CA_CERT_PATH",
+        str(BASE_DIR / "deploy" / "certs" / "mbc-sw.iptime.org.pem"),
+    )
+)
+FLASK_HEALTH_URL = os.getenv(
+    "FLASK_HEALTH_URL",
+    "http://127.0.0.1:5000/health",
+).strip()
+AI_HEALTH_URL = os.getenv(
+    "AI_HEALTH_URL",
+    "http://192.168.0.186:5001/health",
+).strip()
+ITS_HEALTH_URL = os.getenv("ITS_HEALTH_URL", "").strip()
 
 # 설명: `WEEKDAY_KO`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
 WEEKDAY_KO = {
@@ -174,47 +208,364 @@ def count_connections(port: int) -> str:
 
 
 # 설명: `build_report` 함수는 후속 처리에 사용할 구조를 조립하는 함수다.
+
+def check_frontend_https(timeout: int = 10) -> str:
+    started = datetime.now(timezone.utc)
+
+    if not FRONTEND_CA_CERT_PATH.is_file():
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return (
+            "Frontend HTTPS Health: ERROR trusted certificate file missing "
+            f"/ {elapsed:.3f}s / {FRONTEND_CA_CERT_PATH}"
+        )
+
+    try:
+        result = subprocess.run(
+            [
+                "curl",
+                "--silent",
+                "--show-error",
+                "--output",
+                "/dev/null",
+                "--write-out",
+                "%{http_code}",
+                "--max-time",
+                str(timeout),
+                "--cacert",
+                str(FRONTEND_CA_CERT_PATH),
+                "--resolve",
+                (
+                    f"{FRONTEND_HEALTH_HOST}:"
+                    f"{FRONTEND_HEALTH_PORT}:"
+                    f"{FRONTEND_RESOLVE_IP}"
+                ),
+                FRONTEND_HEALTH_URL,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout + 2,
+            check=False,
+        )
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        status = (result.stdout or "").strip() or "-"
+
+        if result.returncode == 0 and status == "200":
+            return (
+                "Frontend HTTPS Health: OK / HTTP 200 "
+                f"/ {elapsed:.3f}s / {FRONTEND_HEALTH_URL} "
+                f"/ resolved={FRONTEND_RESOLVE_IP} / TLS=verified"
+            )
+
+        detail = (result.stderr or result.stdout or "curl failed").strip()
+        detail = detail.replace("\n", " ")
+        return (
+            f"Frontend HTTPS Health: ERROR curl exit {result.returncode} "
+            f"/ HTTP {status} / {detail} / {elapsed:.3f}s "
+            f"/ {FRONTEND_HEALTH_URL}"
+        )
+    except Exception as exc:
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return (
+            f"Frontend HTTPS Health: ERROR {type(exc).__name__}: {exc} "
+            f"/ {elapsed:.3f}s / {FRONTEND_HEALTH_URL}"
+        )
+
+
+def check_database_connection() -> str:
+    started = datetime.now(timezone.utc)
+
+    try:
+        value = db.session.connection().exec_driver_sql("SELECT 1").scalar_one()
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+
+        if value == 1:
+            return f"Database Connection: OK / SELECT 1 / {elapsed:.3f}s"
+
+        return (
+            "Database Connection: ERROR unexpected SELECT 1 result="
+            f"{value!r} / {elapsed:.3f}s"
+        )
+    except Exception as exc:
+        db.session.rollback()
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        return (
+            f"Database Connection: ERROR {type(exc).__name__} "
+            f"/ {elapsed:.3f}s"
+        )
+
+
+def check_its_configuration() -> str:
+    from flask import current_app
+
+    its_server_url = str(
+        current_app.config.get("ITS_SERVER_URL") or ""
+    ).strip()
+
+    if not its_server_url:
+        return "ITS Server: NOT_CONFIGURED / ITS_SERVER_URL is empty"
+
+    if ITS_HEALTH_URL:
+        return check_http("ITS Server Health", ITS_HEALTH_URL)
+
+    return (
+        "ITS Server: CONFIGURED "
+        f"/ {its_server_url} "
+        "/ ITS_HEALTH_URL is not configured"
+    )
+
+
+def check_attachment_file_api() -> list[str]:
+    """최신 미리보기 가능 첨부파일의 preview/download 응답 헤더를 점검한다."""
+    from flask import current_app
+
+    from app.models import IncidentReport, ReportAttachment, User
+    from app.modules.report_upload.service import ReportUploadService
+
+    try:
+        attachment = None
+
+        candidates = (
+            ReportAttachment.query
+            .order_by(ReportAttachment.id.desc())
+            .limit(100)
+            .all()
+        )
+
+        for candidate in candidates:
+            if getattr(candidate, "deleted_at", None):
+                continue
+
+            if ReportUploadService._is_previewable_attachment(candidate):
+                attachment = candidate
+                break
+
+        if attachment is None:
+            return [
+                "첨부파일 미리보기: NOT_AVAILABLE / image, video, PDF 첨부파일 없음",
+                "첨부파일 다운로드: NOT_AVAILABLE / 점검 대상 첨부파일 없음",
+            ]
+
+        report = db.session.get(IncidentReport, attachment.report_id)
+        if report is None:
+            return [
+                "첨부파일 미리보기: ERROR / 연결된 신고서를 찾지 못했습니다.",
+                "첨부파일 다운로드: ERROR / 연결된 신고서를 찾지 못했습니다.",
+            ]
+
+        current_user = db.session.get(User, report.reporter_id)
+        if current_user is None:
+            return [
+                "첨부파일 미리보기: ERROR / 첨부파일 소유 사용자를 찾지 못했습니다.",
+                "첨부파일 다운로드: ERROR / 첨부파일 소유 사용자를 찾지 못했습니다.",
+            ]
+
+        with current_app.test_request_context("/internal/resource-status-report"):
+            preview_response, preview_status = (
+                ReportUploadService.get_attachment_file(
+                    attachment_id=attachment.id,
+                    current_user=current_user,
+                    as_download=False,
+                )
+            )
+
+            download_response, download_status = (
+                ReportUploadService.get_attachment_file(
+                    attachment_id=attachment.id,
+                    current_user=current_user,
+                    as_download=True,
+                )
+            )
+
+        if preview_status != 200 or download_status != 200:
+            return [
+                f"첨부파일 미리보기: ERROR / HTTP {preview_status}",
+                f"첨부파일 다운로드: ERROR / HTTP {download_status}",
+            ]
+
+        preview_type = (
+            preview_response.headers.get("Content-Type") or "-"
+        ).split(";", 1)[0].lower()
+
+        preview_disposition = (
+            preview_response.headers.get("Content-Disposition") or "-"
+        ).split(";", 1)[0].lower()
+
+        download_disposition = (
+            download_response.headers.get("Content-Disposition") or "-"
+        ).split(";", 1)[0].lower()
+
+        preview_ok = (
+            preview_type != "application/octet-stream"
+            and preview_disposition == "inline"
+        )
+
+        download_ok = download_disposition == "attachment"
+
+        return [
+            (
+                "첨부파일 미리보기: "
+                f"{'OK' if preview_ok else 'ERROR'} / HTTP {preview_status}"
+            ),
+            (
+                "Content-Type: "
+                f"{'OK' if preview_type != 'application/octet-stream' else 'ERROR'} "
+                f"/ {preview_type}"
+            ),
+            (
+                "Content-Disposition: "
+                f"{'inline' if preview_disposition == 'inline' else preview_disposition}"
+            ),
+            (
+                "첨부파일 다운로드: "
+                f"{'OK' if download_ok else 'ERROR'} / HTTP {download_status} "
+                f"/ Content-Disposition: {download_disposition}"
+            ),
+        ]
+
+    except Exception as exc:
+        db.session.rollback()
+        return [
+            f"첨부파일 미리보기: ERROR / {type(exc).__name__}",
+            f"첨부파일 다운로드: ERROR / {type(exc).__name__}",
+        ]
+
+
+def check_local_systemd_service(name: str, service_name: str) -> str:
+    status = run_command(["systemctl", "is-active", service_name]).strip()
+
+    if status == "active":
+        return f"{name}: OK / systemd {service_name}=active"
+
+    return f"{name}: ERROR / systemd {service_name}={status or '-'}"
+
+
+def get_recent_successful_logins(
+    generated_at: datetime,
+    hours: int = 3,
+    limit: int = 100,
+) -> list[str]:
+    """최근 지정 시간 동안의 로그인 성공 기록을 KST 기준으로 정리한다."""
+    window_start_utc = utc_naive_from_kst(
+        generated_at - timedelta(hours=hours)
+    )
+    generated_at_utc = utc_naive_from_kst(generated_at)
+
+    try:
+        rows = (
+            db.session.query(SecurityLog, User)
+            .outerjoin(User, User.id == SecurityLog.actor_user_id)
+            .filter(SecurityLog.action_type == "LOGIN_SUCCESS")
+            .filter(SecurityLog.created_at >= window_start_utc)
+            .filter(SecurityLog.created_at <= generated_at_utc)
+            .order_by(SecurityLog.created_at.asc(), SecurityLog.id.asc())
+            .limit(limit)
+            .all()
+        )
+    except Exception as exc:
+        db.session.rollback()
+        return [f"- 로그인 기록 조회 오류: {type(exc).__name__}"]
+
+    if not rows:
+        return [f"- 최근 {hours}시간 로그인 성공 기록이 없습니다."]
+
+    lines: list[str] = []
+
+    for security_log, user in rows:
+        created_at = security_log.created_at
+        if created_at is None:
+            continue
+
+        logged_at_kst = (
+            created_at.replace(tzinfo=timezone.utc)
+            .astimezone(KST)
+        )
+        login_id = (
+            str(getattr(user, "login_id", "") or "").strip()
+            or "알 수 없음"
+        )
+        user_name = (
+            str(getattr(user, "name", "") or "").strip()
+            or "알 수 없음"
+        )
+        ip_address = (
+            str(getattr(security_log, "ip_address", "") or "").strip()
+            or "-"
+        )
+
+        lines.append(
+            f"- {logged_at_kst:%Y-%m-%d %H:%M} KST"
+            f" / ID: {login_id}"
+            f" / 이름: {user_name}"
+            f" / IP: {ip_address}"
+        )
+
+    return lines or [f"- 최근 {hours}시간 로그인 성공 기록이 없습니다."]
+
+
 def build_report(title: str, generated_at: datetime) -> str:
-    # 설명: `(load1, load5, load15)`에 `os.getloadavg` 호출 결과를 저장해 다음 처리에서 사용한다.
     load1, load5, load15 = os.getloadavg()
 
-    # 설명: `lines`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
+    recent_login_lines = get_recent_successful_logins(generated_at)
+    server_status_lines = [
+        check_frontend_https(),
+        check_local_systemd_service(
+            "Flask VM Service",
+            "staccato-flask",
+        ),
+        check_http("Flask API Health", FLASK_HEALTH_URL),
+        check_http("AI VM Health", AI_HEALTH_URL),
+        check_database_connection(),
+        check_its_configuration(),
+    ]
+    attachment_status_lines = check_attachment_file_api()
+
     lines = [
         title,
         "=" * len(title),
         "",
         "[생성 정보]",
-        f"- 생성 시각(KST): {generated_at.strftime('%Y-%m-%d %H:%M:%S')} ({WEEKDAY_KO[generated_at.weekday()]})",
+        (
+            "- 생성 시각(KST): "
+            f"{generated_at.strftime('%Y-%m-%d %H:%M:%S')} "
+            f"({WEEKDAY_KO[generated_at.weekday()]})"
+        ),
         f"- Hostname: {socket.gethostname()}",
-        f"- Category: {CATEGORY}",
-        f"- Visibility: {VISIBILITY}",
+        "",
+        "[최근 3시간 로그인 성공]",
+        *recent_login_lines,
+        "",
+        "[서버 상태]",
+        *[f"- {line}" for line in server_status_lines],
         "",
         "[시스템 상태]",
         f"- Load Average: {load1:.2f}, {load5:.2f}, {load15:.2f}",
         f"- Memory: {read_meminfo()}",
-        f"- Flask 5000 connection count: {count_connections(5000)}",
+        (
+            "- Flask 5000 connection count: "
+            f"{count_connections(5000)}"
+        ),
         "",
-        "[서비스 HTTP 점검]",
-        check_http("Frontend root", "http://192.168.0.188:3001/"),
-        check_http("Frontend dashboard", "http://192.168.0.188:3001/dashboard"),
-        check_http("Frontend resources page", "http://192.168.0.188:3001/resources"),
-        check_http("Frontend notifications", "http://192.168.0.188:3001/notifications"),
-        check_http("Frontend reports", "http://192.168.0.188:3001/reports"),
-        check_http("Flask events API", "http://127.0.0.1:5000/api/events"),
-        check_http("Flask resources API, auth expected", "http://127.0.0.1:5000/api/resources"),
+        "[파일 API 점검]",
+        *[f"- {line}" for line in attachment_status_lines],
         "",
-        "[보안 주의]",
-        "- 본 리포트는 민감정보 보호를 위해 사용자 IP, 토큰, 원본 access log를 포함하지 않습니다.",
-        "- 자료실은 관리자 전용 API로 제한된 상태에서만 운영하는 것을 전제로 합니다.",
+        "[보안 안내]",
+        (
+            "- 최근 로그인 성공 기록은 관리자 전용 화면에서만 "
+            "ID, 이름, 한국시간, 접속 IP를 확인합니다."
+        ),
+        "- 비밀번호와 인증 토큰은 저장하거나 표시하지 않습니다.",
         "",
     ]
 
-    # 설명: 호출자에게 '\n'.join(lines) 값을 함수 결과로 반환한다.
     return "\n".join(lines)
 
 
 # 설명: `create_report_file` 함수는 새 데이터나 리소스를 생성하는 함수다.
-def create_report_file(upload_base_path: str, generated_at: datetime, title: str) -> tuple[str, str, int]:
+def create_report_file(
+    upload_base_path: str,
+    generated_at: datetime,
+    content: str,
+) -> tuple[str, str, int]:
     # 설명: `year`에 `generated_at.strftime` 호출 결과를 저장해 다음 처리에서 사용한다.
     year = generated_at.strftime("%Y")
     # 설명: `month`에 `generated_at.strftime` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -232,9 +583,7 @@ def create_report_file(upload_base_path: str, generated_at: datetime, title: str
     # 설명: `file_path`에 report_dir / stored_name 표현식의 계산 결과를 저장한다.
     file_path = report_dir / stored_name
 
-    # 설명: `content`에 `build_report` 호출 결과를 저장해 다음 처리에서 사용한다.
-    content = build_report(title, generated_at)
-    # 설명: `file_path.write_text`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
+    # 설명: 전달받은 리포트 내용을 파일에 저장합니다.
     file_path.write_text(content, encoding="utf-8")
     # 설명: `os.chmod`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     os.chmod(file_path, 0o640)
@@ -299,11 +648,13 @@ def main() -> None:
             # 설명: 현재 처리를 중단하고 RuntimeError('UPLOAD_BASE_PATH is not configured.')를 호출자에게 전달한다.
             raise RuntimeError("UPLOAD_BASE_PATH is not configured.")
 
+        report_content = build_report(title, generated_at)
+
         # 설명: `(file_name, file_path, file_size)`에 `create_report_file` 호출 결과를 저장해 다음 처리에서 사용한다.
         file_name, file_path, file_size = create_report_file(
             upload_base_path=upload_base_path,
             generated_at=generated_at,
-            title=title,
+            content=report_content,
         )
 
         # 설명: `now_utc_naive`에 `utc_naive_from_kst` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -312,10 +663,7 @@ def main() -> None:
         # 설명: `resource`에 `ProjectResource` 호출 결과를 저장해 다음 처리에서 사용한다.
         resource = ProjectResource(
             title=title,
-            description=(
-                "3시간 간격으로 자동 생성된 접속/서비스 상태 리포트입니다. "
-                "한국시간 기준으로 생성되며, 민감정보는 포함하지 않습니다."
-            ),
+            description=report_content,
             category=CATEGORY,
             author_id=None,
             author_name=AUTHOR_NAME,

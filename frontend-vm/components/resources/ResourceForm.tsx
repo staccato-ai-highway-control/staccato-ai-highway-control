@@ -20,6 +20,7 @@ import { Button } from "@/components/common/Button";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/common/PageHeader";
 import { Card } from "@/components/common/Card";
+import { MarkdownEditor } from "@/components/common/MarkdownEditor";
 // 코드 설명: @/features/auth/types 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { AuthUser } from "@/features/auth/types";
 // 코드 설명: @/features/resources/api 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
@@ -263,10 +264,10 @@ export function ResourceForm({ resourceId }: { resourceId?: string }) {
                   </label>
                 </div>
 
-                <label className="grid gap-2">
+                <div className="grid gap-2">
                   <span className="text-xs font-black text-slate-500">설명</span>
-                  <textarea rows={6} value={description} onChange={(event) => setDescription(event.target.value)} className="ui-field" />
-                </label>
+                  <MarkdownEditor value={description} onChange={setDescription} minRows={8} />
+                </div>
 
                 <label className="grid gap-2">
                   <span className="text-xs font-black text-slate-500">첨부파일 {isEditMode ? "교체" : "업로드"} <span className="font-semibold text-slate-400">(선택)</span></span>

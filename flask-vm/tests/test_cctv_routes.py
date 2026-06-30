@@ -477,3 +477,40 @@ def test_cctv_code_database_unique_constraint(app):
 
         # 설명: 현재 DB 트랜잭션에서 아직 확정되지 않은 변경을 모두 취소한다.
         db.session.rollback()
+
+
+def test_cctv_rois_accept_code_identifier(client, app):
+    """ROI API는 숫자 PK와 CCTV 코드 식별자를 모두 허용해야 합니다."""
+    with app.app_context():
+        cctv = _create_cctv(
+            code="CCTV-ROI-CODE",
+            name="ROI Code Camera",
+            is_active=1,
+        )
+        db.session.commit()
+        cctv_id = cctv.id
+
+    payload = {
+        "items": [
+            {
+                "roi_type": "SHOULDER",
+                "roi_name": "Shoulder ROI",
+                "polygon_json": [[10, 20], [100, 20], [100, 120]],
+                "is_active": True,
+            }
+        ]
+    }
+
+    put_response = client.put("/api/cctvs/CCTV-ROI-CODE/rois", json=payload)
+    assert put_response.status_code == 200
+    assert put_response.get_json()["cctv_id"] == cctv_id
+    assert put_response.get_json()["count"] == 1
+
+    code_get_response = client.get("/api/cctvs/CCTV-ROI-CODE/rois")
+    assert code_get_response.status_code == 200
+    assert code_get_response.get_json()["cctv_id"] == cctv_id
+    assert code_get_response.get_json()["items"][0]["roi_type"] == "SHOULDER"
+
+    id_get_response = client.get(f"/api/cctvs/{cctv_id}/rois")
+    assert id_get_response.status_code == 200
+    assert id_get_response.get_json()["count"] == 1

@@ -15,6 +15,7 @@ type ApiOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   formData?: FormData;
   auth?: boolean;
+  responseType?: "json" | "blob";
 };
 
 // 코드 설명: ApiErrorPayload 타입으로 데이터 구조와 허용 가능한 값의 범위를 고정합니다.
@@ -172,17 +173,18 @@ function getErrorMessage(response: Response, payload: unknown) {
 
 // 코드 설명: apiClient 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 export async function apiClient<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { responseType = "json", body, formData, auth = true, ...requestOptions } = options;
   // 코드 설명: headers 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const headers = new Headers(options.headers);
+  const headers = new Headers(requestOptions.headers);
   // 코드 설명: shouldAttachAuth 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-  const shouldAttachAuth = options.auth !== false;
+  const shouldAttachAuth = auth;
   // 저장한 accessToken을 Bearer 헤더에 넣고 공개 API만 auth:false로 제외합니다.
   const token = shouldAttachAuth ? getStoredAccessToken() : null;
 
   // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: token
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: options.body !== undefined && !options.formData
-  if (options.body !== undefined && !options.formData) {
+  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: body !== undefined && !formData
+  if (body !== undefined && !formData) {
     // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: headers.set("Content-Type", "application/json");
     headers.set("Content-Type", "application/json");
   }
@@ -192,15 +194,24 @@ export async function apiClient<T>(path: string, options: ApiOptions = {}): Prom
 
   // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
   try {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: response = await fetch(joinUrl(path), { ...options, headers, body: opti…
+    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: response = await fetch(joinUrl(path), { ...requestOptions, headers, body: opti…
     response = await fetch(joinUrl(path), {
-      ...options,
+      ...requestOptions,
       headers,
-      body: options.formData ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
+      body: formData ?? (body !== undefined ? JSON.stringify(body) : undefined),
     });
   } catch {
     // 코드 설명: 현재 처리를 중단하고 호출부의 오류 처리 흐름으로 예외를 전달합니다: new Error("Flask 서버에 연결할 수 없습니다.")
     throw new Error("Flask 서버에 연결할 수 없습니다.");
+  }
+
+  if (responseType === "blob") {
+    if (!response.ok) {
+      if (response.status === 401) redirectToLogin();
+      const details = getErrorDetails(response, null);
+      throw new ApiError(details.message, details.statusCode, details.errorCode, details.payload);
+    }
+    return await response.blob() as T;
   }
 
   // 코드 설명: payload 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.

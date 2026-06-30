@@ -35,6 +35,10 @@ import type {
 
 const TERMINAL_STATUSES = ["COMPLETED", "PARTIAL_FAILED", "FAILED"];
 const POLL_INTERVAL_MS = 3000;
+const TERMINAL_MEDIA_RETRY_INTERVAL_MS = 1000;
+const MAX_TERMINAL_MEDIA_RETRIES = 10;
+const VIDEO_MEDIA_RETRY_INTERVAL_MS = 1000;
+const MAX_VIDEO_MEDIA_RETRIES = 10;
 const MAX_MODELS = 3;
 const MODEL_COLORS = ["#0ea5e9", "#8b5cf6", "#10b981"];
 
@@ -170,6 +174,42 @@ function ResultCard({
   const isVideo = mediaUrl ? isVideoUrl(mediaUrl) : false;
   const color = MODEL_COLORS[colorIndex % MODEL_COLORS.length];
   const [lightbox, setLightbox] = useState(false);
+  const [videoRetryCount, setVideoRetryCount] = useState(0);
+  const videoRetryTimerRef = useRef<number | undefined>(undefined);
+
+  const displayMediaUrl =
+    isVideo && mediaUrl && videoRetryCount > 0
+      ? `${mediaUrl}${mediaUrl.includes("?") ? "&" : "?"}media_retry=${videoRetryCount}`
+      : mediaUrl;
+
+  useEffect(() => {
+    setVideoRetryCount(0);
+
+    if (videoRetryTimerRef.current !== undefined) {
+      window.clearTimeout(videoRetryTimerRef.current);
+      videoRetryTimerRef.current = undefined;
+    }
+
+    return () => {
+      if (videoRetryTimerRef.current !== undefined) {
+        window.clearTimeout(videoRetryTimerRef.current);
+      }
+    };
+  }, [mediaUrl]);
+
+  function retryVideoLoad() {
+    if (
+      videoRetryTimerRef.current !== undefined ||
+      videoRetryCount >= MAX_VIDEO_MEDIA_RETRIES
+    ) {
+      return;
+    }
+
+    videoRetryTimerRef.current = window.setTimeout(() => {
+      videoRetryTimerRef.current = undefined;
+      setVideoRetryCount((count) => count + 1);
+    }, VIDEO_MEDIA_RETRY_INTERVAL_MS);
+  }
 
   return (
     <div className="flex flex-col gap-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -240,9 +280,12 @@ function ResultCard({
               >
                 {isVideo ? (
                   <video
-                    src={mediaUrl}
+                    key={displayMediaUrl}
+                    src={displayMediaUrl ?? undefined}
                     className="w-full rounded-lg"
                     style={{ maxHeight: "220px" }}
+                    preload="metadata"
+                    onError={retryVideoLoad}
                   />
                 ) : (
                   <img
@@ -261,7 +304,7 @@ function ResultCard({
 
             {lightbox && mediaUrl ? (
               <MediaLightbox
-                src={mediaUrl}
+                src={displayMediaUrl ?? mediaUrl}
                 isVideo={isVideo}
                 alt={`${item.model_name} 탐지 결과`}
                 onClose={() => setLightbox(false)}
@@ -296,6 +339,7 @@ export default function ModelComparisonPage({
 
   useEffect(() => {
     let disposed = false;
+    let terminalMediaRetryCount = 0;
 
     async function poll(batchId: string | number) {
       if (disposed) return;
@@ -309,7 +353,26 @@ export default function ModelComparisonPage({
         setBatchStatus(status);
         setResults(newResults);
 
+        const hasPendingCompletedMedia = newResults.some(
+          (result) =>
+            result.run_status === "COMPLETED" &&
+            !normalizeMediaUrl(result.annotated_media_url)
+        );
+
         if (TERMINAL_STATUSES.includes(status)) {
+          if (
+            hasPendingCompletedMedia &&
+            terminalMediaRetryCount < MAX_TERMINAL_MEDIA_RETRIES
+          ) {
+            terminalMediaRetryCount += 1;
+            timerRef.current = window.setTimeout(
+              () => poll(batchId),
+              TERMINAL_MEDIA_RETRY_INTERVAL_MS
+            );
+            return;
+          }
+
+          console.log("[STACCATO-DEBUG] polling 종료 — 최종 상태:", status, "최종 runs:", newResults);
           setPhase("done");
         } else {
           timerRef.current = window.setTimeout(() => poll(batchId), POLL_INTERVAL_MS);

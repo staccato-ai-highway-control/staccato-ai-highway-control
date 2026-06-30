@@ -4,6 +4,7 @@
 
 # app/modules/ai_gateway/service.py
 
+import json
 import os
 # 설명: requests 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import requests
@@ -23,12 +24,14 @@ class AIGatewayService:
         model_id=None,
         comparison_run_id=None,
         timeout_seconds=None,
+        rois=None,
     ):
         """
         신고 첨부파일을 AI-vm /detect API로 multipart/form-data 전송합니다.
 
         ``file`` 파트에는 바이너리 스트림, 일반 form 필드에는 report_id/cctv_id/camera_id를
-        문자열로 넣는다. AI 서버의 JSON 본문은 dict로 파싱해 서비스의 result_summary에
+        문자열로 넣는다. rois가 주어지면 JSON 문자열로 직렬화해 form field로 포함한다.
+        AI 서버의 JSON 본문은 dict로 파싱해 서비스의 result_summary에
         저장할 수 있도록 반환하며, HTTP/JSON 오류도 예외 대신 구조화된 dict로 바꾼다.
         반환값:
             (True, result_json)  - AI 분석 요청 성공
@@ -61,12 +64,13 @@ class AIGatewayService:
 
         # 설명: `current_app.logger.info`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         current_app.logger.info(
-            "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s cctv_id=%s camera_id=%s",
+            "[AI-Gateway] request_analysis report_id=%s file_path=%s detect_url=%s cctv_id=%s camera_id=%s rois_count=%s",
             report_id,
             file_path,
             detect_url,
             cctv_id,
             camera_id,
+            len(rois) if rois else 0,
         )
 
         # 설명: `not file_path or not os.path.exists(file_path)` 조건 결과에 따라 실행 경로를 분기한다.
@@ -105,9 +109,7 @@ class AIGatewayService:
                     # 설명: `data['cctv_id']`에 `str` 호출 결과를 저장해 다음 처리에서 사용한다.
                     data["cctv_id"] = str(cctv_id)
 
-                # 설명: `camera_id` 조건 결과에 따라 실행 경로를 분기한다.
                 if camera_id:
-                    # 설명: `data['camera_id']`에 `str` 호출 결과를 저장해 다음 처리에서 사용한다.
                     data["camera_id"] = str(camera_id)
 
                 if model_id:
@@ -115,6 +117,8 @@ class AIGatewayService:
 
                 if comparison_run_id:
                     data["comparison_run_id"] = str(comparison_run_id)
+                if rois:
+                    data["rois"] = json.dumps(rois, ensure_ascii=False)
 
                 # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
                 try:
