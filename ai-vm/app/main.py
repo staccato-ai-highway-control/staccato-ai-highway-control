@@ -3,11 +3,13 @@ import asyncio
 import os
 import uuid
 from pathlib import Path
+from threading import BoundedSemaphore, Lock
+from typing import Any
 
 import requests
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi import File, Form, UploadFile
 
 from .bbox_store import (
@@ -20,7 +22,9 @@ from .config import (
     ANALYZED_CAMERA_IDS,
     BBOX_WS_INTERVAL_SECONDS,
     CORS_ORIGINS,
+    DEV_AUTH_ENABLED,
     EVENT_MEDIA_DIR,
+    FASTAPI_DOCS_ENABLED,
     ITS_CCTV_DEFAULT_MAX_X,
     ITS_CCTV_DEFAULT_MAX_Y,
     ITS_CCTV_DEFAULT_MIN_X,
@@ -31,6 +35,7 @@ from .config import (
     MANUAL_EVENT_CLIP_PRE_SECONDS,
 
     INTERNAL_API_TOKEN,
+    REPORT_DETECT_MAX_CONCURRENT,
     REPORT_DETECT_MAX_UPLOAD_BYTES,
 )
 from .dev_auth import (
@@ -40,13 +45,45 @@ from .dev_auth import (
 )
 from .detector import detector
 from .realtime_detection_filter import filter_realtime_display_detections
-from .its_openapi import get_its_cctv_list_response
+from .its_openapi import find_its_cctv_by_name, get_its_cctv_list_response
 from .roi_config import get_camera_rois, save_camera_rois
 from .schemas import CameraStartPayload, LoginPayload, ManualEventPayload, RoiSettingsPayload
-from .stream_server import BOUNDARY, active_stream_counts, claim_stream_slot, mjpeg_generator
+from .stream_server import (
+    BOUNDARY,
+    StreamSlotStreamingResponse,
+    active_stream_counts,
+    claim_stream_slot,
+    mjpeg_generator,
+    register_stream_slot_cleanup,
+)
 
 
-app = FastAPI(title="AI VM", version="0.1.0")
+app = FastAPI(
+    title="AI VM",
+    version="0.1.0",
+    docs_url="/docs" if FASTAPI_DOCS_ENABLED else None,
+    redoc_url="/redoc" if FASTAPI_DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if FASTAPI_DOCS_ENABLED else None,
+)
+
+_detect_inference_semaphore = BoundedSemaphore(max(1, REPORT_DETECT_MAX_CONCURRENT))
+SENSITIVE_PAYLOAD_KEYS = {
+    "source_url",
+    "media_dir",
+    "events_url",
+    "relay",
+    "relay_url",
+    "stream_url",
+    "file_path",
+    "path",
+    "snapshot_path",
+    "video_path",
+}
+CONFIGURED_ITS_CAMERA_TARGET_FPS = 10.0
+CONFIGURED_ITS_CAMERA_ANALYSIS_FPS = 2.0
+PUBLIC_CCTV_SOURCE_URL_KEYS = {"url", "cctvurl", "source_url"}
+_configured_its_camera_locks: dict[str, Lock] = {}
+_configured_its_camera_locks_lock = Lock()
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,41 +97,39 @@ app.add_middleware(
 # 서비스 기본 정보와 사용 가능한 엔드포인트 목록을 반환합니다.
 @app.get("/")
 def index():
+    endpoints = [
+        "/traffic/api/cctv",
+        "/streams/{camera_id}.mjpeg",
+        "/ws/cameras/{camera_id}/bbox",
+        "/snapshots/{camera_id}/latest.jpg",
+        "/internal/health",
+        "/internal/cameras",
+        "/internal/cameras/{camera_id}/start",
+        "/internal/cameras/{camera_id}/stop",
+        "/internal/cameras/{camera_id}/manual-event",
+        "/internal/cameras/{camera_id}/detections",
+        "/internal/cameras/{camera_id}/rois",
+        "/events/{event_id}.jpg",
+        "/events/{event_id}.mp4",
+        "/health",
+    ]
+    if DEV_AUTH_ENABLED:
+        endpoints.extend(["/auth/login", "/auth/me"])
+
     return {
         "success": True,
         "service": "ai-vm",
         "runtime": "FastAPI",
         "message": "AI VM CCTV analysis server is running",
-        "endpoints": [
-            "/traffic/api/cctv",
-            "/streams/{camera_id}.mjpeg",
-            "/ws/cameras/{camera_id}/bbox",
-            "/snapshots/{camera_id}/latest.jpg",
-            "/internal/cameras",
-            "/internal/cameras/{camera_id}/start",
-            "/internal/cameras/{camera_id}/stop",
-            "/internal/cameras/{camera_id}/manual-event",
-            "/internal/cameras/{camera_id}/detections",
-            "/internal/cameras/{camera_id}/rois",
-            "/events/{event_id}.jpg",
-            "/events/{event_id}.mp4",
-            "/auth/login",
-            "/auth/me",
-            "/health",
-        ],
+        "endpoints": endpoints,
     }
 
 
-# 서버, 카메라, 스트림 상태를 확인하는 health check 응답을 반환합니다.
+# 외부 상태 점검용 최소 health check 응답을 반환합니다.
 @app.get("/health")
 def health():
     return {
-        "success": True,
-        "service": "ai-vm",
         "status": "ok",
-        "analyzed_camera_ids": sorted(ANALYZED_CAMERA_IDS),
-        "cameras": camera_registry.list_statuses(),
-        "streams": active_stream_counts(),
     }
 
 
@@ -171,6 +206,22 @@ def _filter_cctv_sources(
     return selected[:limit]
 
 
+# 외부 CCTV 목록 응답에서 원본 stream URL 키를 제거합니다.
+def _sanitize_public_cctv_item(item: dict) -> dict:
+    return {
+        key: value
+        for key, value in item.items()
+        if str(key).lower() not in PUBLIC_CCTV_SOURCE_URL_KEYS
+    }
+
+
+
+# 내부 API 호출에 필요한 Bearer 토큰을 검증합니다.
+def require_internal_token(authorization: str = Header(default="")) -> None:
+    expected = f"Bearer {INTERNAL_API_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
 
 # ITS CCTV 목록을 조회한 뒤 설정된 소스명 목록으로 필터링해 반환합니다.
 @app.get("/traffic/api/cctv")
@@ -183,6 +234,7 @@ def traffic_cctv_api(
     road_type: str = Query(ITS_CCTV_DEFAULT_ROAD_TYPE, alias="roadType"),
     limit: int = Query(8, ge=1, le=100),
     source_names: str | None = Query(default=None, alias="sourceNames"),
+    _auth: None = Depends(require_internal_token),
 ):
     try:
         cctv_response = get_its_cctv_list_response(
@@ -202,6 +254,11 @@ def traffic_cctv_api(
             limit=limit,
         )
 
+        selected_public_cctvs = [
+            _sanitize_public_cctv_item(item)
+            for item in selected_cctvs
+        ]
+
         from_cache = bool(cctv_response.get("fromCache"))
         return {
             "success": True,
@@ -215,68 +272,76 @@ def traffic_cctv_api(
             "limit": limit,
             "source_names": selected_names,
             "selection_mode": "allowlist",
-            "data": selected_cctvs,
-            "items": selected_cctvs,
-            "cameras": selected_cctvs,
+            "data": selected_public_cctvs,
+            "items": selected_public_cctvs,
+            "cameras": selected_public_cctvs,
         }
-    except ValueError as error:
+    except ValueError:
         return JSONResponse(
             status_code=500,
-            content={"success": False, "message": str(error), "data": []},
+            content={"success": False, "message": "CCTV list fetch failed.", "data": []},
         )
-    except requests.RequestException as error:
+    except requests.RequestException:
         return JSONResponse(
             status_code=502,
             content={
                 "success": False,
-                "message": f"ITS API request failed: {error}",
+                "message": "ITS API request failed.",
                 "data": [],
             },
         )
-    except Exception as error:
+    except Exception:
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
-                "message": f"CCTV list fetch failed: {error}",
+                "message": "CCTV list fetch failed.",
                 "data": [],
             },
         )
 
 
 
-# 내부 API 호출에 필요한 Bearer 토큰을 검증합니다.
-def require_internal_token(authorization: str = Header(default="")) -> None:
-    expected = f"Bearer {INTERNAL_API_TOKEN}"
-    if authorization != expected:
-        raise HTTPException(status_code=403, detail="Forbidden")
+
+if DEV_AUTH_ENABLED:
+    # 개발용 로그인 요청을 검증하고 액세스 토큰을 반환합니다.
+    @app.post("/auth/login")
+    def auth_login(payload: LoginPayload):
+        login_id = payload.login_id.strip()
+        password = payload.password.strip()
+
+        if not is_valid_dev_login(login_id, password):
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "message": "Invalid login_id or password"},
+            )
+
+        return get_dev_auth_response()
 
 
-# 개발용 로그인 요청을 검증하고 액세스 토큰을 반환합니다.
-@app.post("/auth/login")
-def auth_login(payload: LoginPayload):
-    login_id = payload.login_id.strip()
-    password = payload.password.strip()
+    # 현재 Bearer 토큰이 유효한지 확인하고 사용자 정보를 반환합니다.
+    @app.get("/auth/me")
+    def auth_me(authorization: str = Header(default="")):
+        if authorization != expected_authorization_header():
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "message": "Unauthorized"},
+            )
 
-    if not is_valid_dev_login(login_id, password):
-        return JSONResponse(
-            status_code=401,
-            content={"success": False, "message": "Invalid login_id or password"},
-        )
-
-    return get_dev_auth_response()
+        return get_dev_auth_response()
 
 
-# 현재 Bearer 토큰이 유효한지 확인하고 사용자 정보를 반환합니다.
-@app.get("/auth/me")
-def auth_me(authorization: str = Header(default="")):
-    if authorization != expected_authorization_header():
-        return JSONResponse(
-            status_code=401,
-            content={"success": False, "message": "Unauthorized"},
-        )
-
-    return get_dev_auth_response()
+# 내부 상태 점검용 상세 health check 응답을 반환합니다.
+@app.get("/internal/health")
+def internal_health(_auth: None = Depends(require_internal_token)):
+    return {
+        "success": True,
+        "service": "ai-vm",
+        "status": "ok",
+        "analyzed_camera_ids": sorted(ANALYZED_CAMERA_IDS),
+        "cameras": _mask_sensitive_payload(camera_registry.list_statuses()),
+        "streams": active_stream_counts(),
+    }
 
 
 # 실행 중인 카메라 워커 상태 목록을 반환합니다.
@@ -414,6 +479,85 @@ def internal_camera_manual_event(
     }
 
 
+# 설정된 ITS source name에 대응되는 camera-N worker를 필요 시 생성합니다.
+def _configured_its_source_name_for_camera(camera_id: str) -> str | None:
+    prefix = "camera-"
+    if not camera_id.startswith(prefix):
+        return None
+
+    suffix = camera_id[len(prefix):]
+    if not suffix.isdigit():
+        return None
+
+    camera_number = int(suffix)
+    if camera_number <= 0 or str(camera_number) != suffix:
+        return None
+
+    source_names = _selected_cctv_source_names()
+    source_index = camera_number - 1
+    if source_index >= len(source_names):
+        return None
+
+    return source_names[source_index]
+
+
+def _configured_its_camera_lock(camera_id: str) -> Lock:
+    with _configured_its_camera_locks_lock:
+        lock = _configured_its_camera_locks.get(camera_id)
+        if lock is None:
+            lock = Lock()
+            _configured_its_camera_locks[camera_id] = lock
+        return lock
+
+
+def _ensure_configured_its_camera_worker(camera_id: str):
+    worker = camera_registry.get_camera(camera_id)
+    if worker is not None and worker.is_running():
+        return worker
+
+    source_name = _configured_its_source_name_for_camera(camera_id)
+    if source_name is None:
+        return None
+
+    with _configured_its_camera_lock(camera_id):
+        worker = camera_registry.get_camera(camera_id)
+        if worker is not None and worker.is_running():
+            return worker
+
+        try:
+            cctv = find_its_cctv_by_name(source_name)
+        except requests.RequestException as error:
+            raise HTTPException(
+                status_code=502,
+                detail="Configured CCTV source lookup failed.",
+            ) from error
+
+        if not cctv:
+            raise HTTPException(
+                status_code=404,
+                detail="Configured CCTV source not found.",
+            )
+
+        source_url = str(cctv.get("url") or cctv.get("cctvurl") or "").strip()
+        if not source_url:
+            raise HTTPException(
+                status_code=502,
+                detail="Configured CCTV source URL is unavailable.",
+            )
+
+        return camera_registry.start_camera(
+            camera_id=camera_id,
+            source_url=source_url,
+            name=source_name,
+            target_fps=CONFIGURED_ITS_CAMERA_TARGET_FPS,
+            analysis_fps=_effective_analysis_fps(
+                camera_id,
+                CONFIGURED_ITS_CAMERA_ANALYSIS_FPS,
+            ),
+            analysis_queue_size=4,
+        )
+
+
 # 최신 프레임 또는 캐시된 결과로 탐지 결과를 반환합니다.
 @app.get("/internal/cameras/{camera_id}/detections")
 def internal_camera_detections(
@@ -421,11 +565,12 @@ def internal_camera_detections(
     refresh: bool = Query(default=False),
     confidence: float | None = Query(default=None, gt=0, le=1),
     imgsz: int | None = Query(default=None, ge=128, le=1920),
+    _auth: None = Depends(require_internal_token),
 ):
     if not is_analyzed_camera(camera_id):
         raise HTTPException(status_code=403, detail=STREAM_ONLY_BBOX_MESSAGE)
 
-    worker = camera_registry.get_camera(camera_id)
+    worker = _ensure_configured_its_camera_worker(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Camera worker not found.")
 
@@ -434,7 +579,7 @@ def internal_camera_detections(
         if result is not None:
             return {
                 "success": True,
-                "data": result,
+                "data": _mask_sensitive_payload(result),
             }
 
     frame = worker.get_latest_frame()
@@ -492,42 +637,26 @@ async def camera_bbox_websocket(camera_id: str, websocket: WebSocket):
         return
 
 
-# 카메라를 필요 시 시작하고 MJPEG 스트림 응답을 반환합니다.
+# 등록된 카메라 워커의 MJPEG 스트림 응답을 반환합니다.
 @app.get("/streams/{camera_id}.mjpeg")
 def camera_mjpeg_stream(
     camera_id: str,
+    request: Request,
     source_url: str | None = Query(default=None),
-    name: str | None = Query(default=None),
-    target_fps: float = Query(default=10.0, gt=0, le=60),
-    analysis_fps: float = Query(default=5.0, ge=0, le=30),
     quality: int = Query(default=80, ge=1, le=100),
+    _auth: None = Depends(require_internal_token),
 ):
-    worker = camera_registry.get_camera(camera_id)
-    clean_source_url = source_url.strip() if source_url else None
-    clean_name = name.strip() if name else None
-    source_changed = bool(
-        clean_source_url
-        and worker is not None
-        and worker.source_url != clean_source_url
-        and not worker.matches_source_identity(name=clean_name, source_url=clean_source_url)
-    )
-
-    if clean_source_url and (worker is None or not worker.is_running() or source_changed):
-        if not clean_source_url:
-            raise HTTPException(status_code=400, detail="source_url is required.")
-
-        worker = camera_registry.start_camera(
-            camera_id=camera_id,
-            source_url=clean_source_url,
-            name=clean_name,
-            target_fps=target_fps,
-            analysis_fps=_effective_analysis_fps(camera_id, analysis_fps),
+    if source_url:
+        raise HTTPException(
+            status_code=400,
+            detail="source_url query is disabled. Start cameras through the internal API.",
         )
 
-    if worker is None:
+    worker = _ensure_configured_its_camera_worker(camera_id)
+    if worker is None or not worker.is_running():
         raise HTTPException(
             status_code=404,
-            detail="Camera worker not found. Start it first or pass source_url.",
+            detail="Camera worker not found. Start it through the internal API first.",
         )
 
     slot = claim_stream_slot(camera_id)
@@ -537,24 +666,32 @@ def camera_mjpeg_stream(
             detail="Too many MJPEG stream clients. Close another viewer and retry.",
         )
 
-    return StreamingResponse(
-        mjpeg_generator(worker, quality=quality, slot=slot),
-        media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
-        headers={
-            "Cache-Control": "no-store",
-            "Cross-Origin-Resource-Policy": "cross-origin",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    try:
+        register_stream_slot_cleanup(request, slot)
+        return StreamSlotStreamingResponse(
+            mjpeg_generator(worker, quality=quality, slot=slot),
+            slot=slot,
+            media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
+            headers={
+                "Cache-Control": "no-store",
+                "Cross-Origin-Resource-Policy": "cross-origin",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+    except Exception:
+        slot.release()
+        raise
 
 
 # 카메라의 최신 프레임을 JPEG 스냅샷으로 반환합니다.
+@app.get("/internal/cameras/{camera_id}/snapshot/latest.jpg")
 @app.get("/snapshots/{camera_id}/latest.jpg")
 def camera_latest_snapshot(
     camera_id: str,
     quality: int = Query(default=90, ge=1, le=100),
+    _auth: None = Depends(require_internal_token),
 ):
-    worker = camera_registry.get_camera(camera_id)
+    worker = _ensure_configured_its_camera_worker(camera_id)
     if worker is None:
         raise HTTPException(status_code=404, detail="Camera worker not found.")
 
@@ -933,6 +1070,23 @@ def _latest_empty_bbox_metadata(camera_id: str) -> dict | None:
     return worker.get_latest_empty_bbox_metadata()
 
 
+# 응답 payload에서 내부 URL, 파일 경로, relay 설정 등 민감한 값을 마스킹합니다.
+def _mask_sensitive_payload(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_mask_sensitive_payload(item) for item in value]
+
+    if not isinstance(value, dict):
+        return value
+
+    masked: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in SENSITIVE_PAYLOAD_KEYS:
+            masked[key] = "[redacted]"
+        else:
+            masked[key] = _mask_sensitive_payload(item)
+    return masked
+
+
 # Flask 리포트 분석 연동을 위해 업로드 이미지/영상에서 YOLO 탐지를 수행합니다.
 @app.post("/detect")
 async def detect_legacy_report_file(
@@ -940,6 +1094,7 @@ async def detect_legacy_report_file(
     report_id: str = Form(default=""),
     cctv_id: str = Form(default=""),
     camera_id: str = Form(default=""),
+    rois: str = Form(default=""),
     model_id: str = Form(default=""),
     comparison_run_id: str = Form(default=""),
     _auth: None = Depends(require_internal_token),
@@ -955,6 +1110,7 @@ async def detect_legacy_report_file(
     Flask marks a report analysis job as completed when this response includes
     either "detections" or "count".
     """
+    import json
     import os
     import tempfile
     import time
@@ -994,6 +1150,27 @@ async def detect_legacy_report_file(
         str(camera_id or cctv_id or "").strip()
         or None
     )
+    parsed_rois = None
+    rois_source = "stored_or_default"
+    raw_rois = str(rois or "").strip()
+    if raw_rois:
+        try:
+            parsed_rois = json.loads(raw_rois)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid ROI payload") from exc
+
+        if not isinstance(parsed_rois, (dict, list)):
+            raise HTTPException(status_code=400, detail="Invalid ROI payload")
+
+        from .roi_config import resolve_camera_roi_regions
+
+        try:
+            resolve_camera_roi_regions(roi_camera_id, override_rois=parsed_rois)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid ROI payload") from exc
+
+        rois_source = "form"
+
     report_stop_analyzer = None
     report_stop_snapshot_frame = None
     report_stop_snapshot_events: list[dict] = []
@@ -1042,6 +1219,7 @@ async def detect_legacy_report_file(
                 or "default"
             ),
             model_version=selected_model_version,
+            rois=parsed_rois,
         )
 
     artifact_parts = [str(report_id or "unknown")]
@@ -1070,19 +1248,32 @@ async def detect_legacy_report_file(
 
         inference_started_at = time.perf_counter()
 
-        try:
-            if report_foreground_crop_enabled:
-                detections = selected_detector.detect(
-                    frame,
-                    report_foreground_crop=True,
-                )
-            else:
-                detections = selected_detector.detect(frame)
-        except RuntimeError as exc:
+        if not _detect_inference_semaphore.acquire(blocking=False):
+            print(
+                f"[detect] rejected report_id={report_id or '-'} reason=concurrency_limit",
+                flush=True,
+            )
             raise HTTPException(
-                status_code=503,
-                detail=f"YOLO model inference failed: {exc}",
-            ) from exc
+                status_code=429,
+                detail="Too many AI analysis requests. Retry later.",
+            )
+
+        try:
+            try:
+                if report_foreground_crop_enabled:
+                    detections = selected_detector.detect(
+                        frame,
+                        report_foreground_crop=True,
+                    )
+                else:
+                    detections = selected_detector.detect(frame)
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"YOLO model inference failed: {exc}",
+                ) from exc
+        finally:
+            _detect_inference_semaphore.release()
 
         inference_seconds += time.perf_counter() - inference_started_at
         return detections
@@ -1190,6 +1381,7 @@ async def detect_legacy_report_file(
 
     if report_stop_analyzer is not None:
         report_stop_result = report_stop_analyzer.build_result()
+        report_stop_result.setdefault("debug", {})["roi_source"] = rois_source
     else:
         report_stop_result = {
             "incident_candidates": [],
@@ -1206,6 +1398,7 @@ async def detect_legacy_report_file(
                 "frame_height": frame_height,
                 "roi_base_width": None,
                 "roi_base_height": None,
+                "roi_source": rois_source,
                 "thresholds": {},
                 "failure_reason": None,
             },
@@ -1338,6 +1531,12 @@ async def detect_legacy_report_file(
         else None
     )
 
+    print(
+        f"[detect] completed report_id={report_id or '-'} source_type={source_type} "
+        f"bytes={len(payload)} frames={frames_processed} elapsed_ms={total_elapsed_ms}",
+        flush=True,
+    )
+
     return {
         "success": True,
         "status": "OK",
@@ -1374,8 +1573,16 @@ async def detect_legacy_report_file(
         "confidence": primary_stop_event.get("confidence"),
         "stopped_seconds": primary_stop_event.get("stopped_seconds"),
         "movement_delta": primary_stop_event.get("movement_delta"),
+        "movement_delta_norm": primary_stop_event.get("movement_delta_norm"),
         "roi_type": primary_stop_event.get("roi_type"),
         "roi_id": primary_stop_event.get("roi_id"),
+        "roi_overlap_ratio": primary_stop_event.get("roi_overlap_ratio"),
+        "decision_reason": primary_stop_event.get("decision_reason"),
+        "review_required": primary_stop_event.get("review_required"),
+        "frame_index": primary_stop_event.get("frame_index"),
+        "bbox": primary_stop_event.get("bbox"),
+        "center": primary_stop_event.get("center"),
+        "roi_source": rois_source,
         "snapshot_path": primary_stop_event.get("snapshot_path"),
         "detections": detections_payload,
         "raw_detections": raw_detections_payload,
