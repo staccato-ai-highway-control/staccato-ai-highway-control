@@ -371,8 +371,6 @@ export default function ModelComparisonPage({
             );
             return;
           }
-
-          console.log("[STACCATO-DEBUG] polling 종료 — 최종 상태:", status, "최종 runs:", newResults);
           setPhase("done");
         } else {
           timerRef.current = window.setTimeout(() => poll(batchId), POLL_INTERVAL_MS);

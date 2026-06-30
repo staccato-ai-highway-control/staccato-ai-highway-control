@@ -211,7 +211,6 @@ export function ModelComparisonSection({ reportId, attachmentId }: ModelComparis
       try {
         const data = await getModelComparisonModels();
         // [1] 모델 목록 조회
-        console.log("[STACCATO-DEBUG] [Section] 모델 목록 조회 완료:", data);
         if (!disposed) setModels(data);
       } catch {
         if (!disposed) setModels([]);
@@ -240,23 +239,15 @@ export function ModelComparisonSection({ reportId, attachmentId }: ModelComparis
         if (disposed) return;
 
         // [3] polling 매 회차
-        console.log("[STACCATO-DEBUG] [Section] polling 회차 — batchId:", batchIdRef.current, "응답 전체:", data);
 
         const newStatus = (data.batch?.status ?? data.batch?.batch_status ?? data.status ?? "UNKNOWN") as string;
         const newResults = (data.batch?.runs ?? data.batch?.results ?? data.runs ?? data.results ?? []) as ModelComparisonItem[];
-
-        console.log("[STACCATO-DEBUG] [Section] polling runs:", newResults.map((r) => ({
-          model_name: r.model_name,
-          run_status: r.run_status,
-          detection_count: r.detection_count,
-        })));
 
         setBatchStatus(newStatus);
         setResults(newResults);
 
         if (TERMINAL_STATUSES.includes(newStatus)) {
           // [4] polling 종료
-          console.log("[STACCATO-DEBUG] [Section] polling 종료 — 최종 상태:", newStatus, "최종 runs:", newResults);
           setIsPolling(false);
         } else {
           timer = window.setTimeout(poll, POLL_INTERVAL_MS);
@@ -281,15 +272,6 @@ export function ModelComparisonSection({ reportId, attachmentId }: ModelComparis
   // [5] 결과 렌더링 시
   useEffect(() => {
     if (results.length > 0) {
-      console.log("[STACCATO-DEBUG] [Section] 결과 렌더링 데이터:", results.map((r) => ({
-        model_name: r.model_name,
-        run_status: r.run_status,
-        detection_count: r.detection_count,
-        avg_confidence: r.avg_confidence,
-        inference_ms: r.inference_ms,
-        inference_fps: r.inference_fps,
-        total_elapsed_ms: r.total_elapsed_ms,
-      })));
     }
   }, [results]);
 
@@ -314,7 +296,6 @@ export function ModelComparisonSection({ reportId, attachmentId }: ModelComparis
     setResults([]);
 
     // [2] 분석 시작 POST 요청 body
-    console.log("[STACCATO-DEBUG] [Section] 분석 시작 요청 body:", { attachment_id: Number(attachmentId), model_ids: selectedModelIds });
 
     try {
       const response = await startModelComparison(reportId, {
@@ -324,7 +305,6 @@ export function ModelComparisonSection({ reportId, attachmentId }: ModelComparis
       const newBatchId = response.batch?.id;
       if (newBatchId == null) throw new Error("서버에서 batchId를 반환하지 않았습니다.");
       // [2] 분석 시작 응답
-      console.log("[STACCATO-DEBUG] [Section] 분석 시작 응답 batchId:", newBatchId);
       setBatchId(newBatchId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "분석 시작에 실패했습니다.");

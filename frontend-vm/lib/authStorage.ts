@@ -9,6 +9,8 @@ import type { AuthResponse, AuthUser } from "@/features/auth/types";
 
 // 코드 설명: ACCESS_TOKEN_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const ACCESS_TOKEN_KEY = "accessToken";
+const ACCESS_TOKEN_COOKIE = "staccato_access_token";
+const ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS = 60 * 60;
 // 코드 설명: AUTH_USER_KEY 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const AUTH_USER_KEY = "authUser";
 
@@ -16,6 +18,17 @@ const AUTH_USER_KEY = "authUser";
 function canUseStorage() {
   // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: typeof window !== "undefined"
   return typeof window !== "undefined";
+}
+
+function setAccessTokenCookie(accessToken: string) {
+  if (!canUseStorage()) return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${ACCESS_TOKEN_COOKIE}=${encodeURIComponent(accessToken)}; Path=/; Max-Age=${ACCESS_TOKEN_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax${secure}`;
+}
+
+function clearAccessTokenCookie() {
+  if (!canUseStorage()) return;
+  document.cookie = `${ACCESS_TOKEN_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 // 코드 설명: getStoredAccessToken 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -32,6 +45,7 @@ export function setStoredAccessToken(accessToken: string) {
   if (!canUseStorage()) return;
   // 코드 설명: 브라우저 localStorage의 인증 또는 사용자 설정 값을 읽거나 갱신합니다.
   localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  setAccessTokenCookie(accessToken);
 }
 
 // 코드 설명: getUserFromAuthResponse 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
@@ -78,4 +92,5 @@ export function clearStoredAuth() {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   // 코드 설명: 브라우저 localStorage의 인증 또는 사용자 설정 값을 읽거나 갱신합니다.
   localStorage.removeItem(AUTH_USER_KEY);
+  clearAccessTokenCookie();
 }

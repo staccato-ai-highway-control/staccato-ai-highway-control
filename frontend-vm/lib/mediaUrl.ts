@@ -4,80 +4,61 @@
  */
 import { API_BASE_URL } from "@/lib/constants";
 
-// 코드 설명: AI_MEDIA_PROXY_PREFIXES 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-const AI_MEDIA_PROXY_PREFIXES = ["/events/", "/streams/", "/snapshots/"];
-// 코드 설명: FLASK_MEDIA_PREFIXES 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 const FLASK_MEDIA_PREFIXES = ["/api/", "/backend-api/", "/event_media/", "/uploads/", "/static/", "/media/"];
+const EVENT_MEDIA_TYPES = new Set(["snapshot", "video", "stream"]);
+const REPORT_ANALYSIS_MEDIA_TYPES = new Set(["snapshot", "video"]);
 
-// 코드 설명: isAiProxyPath 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
-function isAiProxyPath(pathname: string) {
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: AI_MEDIA_PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix))
-  return AI_MEDIA_PROXY_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
-// 코드 설명: isPrivateAiOrigin 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function isPrivateAiOrigin(url: URL) {
-  // 코드 설명: 여러 검사 조건을 논리 연산으로 결합해 최종 boolean 판정 결과를 반환합니다.
-  return (
-    url.port === "5001" &&
-    ["192.168.0.186", "localhost", "127.0.0.1"].includes(url.hostname)
-  );
+  if (url.port !== "5001") return false;
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1") return true;
+  return /^192\.168\.\d{1,3}\.\d{1,3}$/.test(url.hostname);
 }
 
-// 코드 설명: normalizeMediaUrl 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
+function normalizeAiMediaPath(pathname: string) {
+  const eventMatch = pathname.match(/^\/(?:api\/)?(?:ai-media\/)?events\/([^/]+)\/([^/]+)\/?$/);
+  if (eventMatch && EVENT_MEDIA_TYPES.has(eventMatch[2])) {
+    return `/api/ai-media/events/${encodeURIComponent(eventMatch[1])}/${encodeURIComponent(eventMatch[2])}`;
+  }
+
+  const reportMatch = pathname.match(/^\/(?:api\/)?(?:ai-media\/)?report-analysis\/jobs\/(\d+)\/([^/]+)\/?$/);
+  if (reportMatch && REPORT_ANALYSIS_MEDIA_TYPES.has(reportMatch[2])) {
+    return `/api/ai-media/report-analysis/jobs/${encodeURIComponent(reportMatch[1])}/${encodeURIComponent(reportMatch[2])}`;
+  }
+
+  return null;
+}
+
 export function normalizeMediaUrl(rawUrl?: string | null) {
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !rawUrl || rawUrl === "null" || rawUrl === "undefined"
   if (!rawUrl || rawUrl === "null" || rawUrl === "undefined") return null;
 
-  // 코드 설명: trimmed 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const trimmed = rawUrl.trim();
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: !trimmed
   if (!trimmed) return null;
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: /^https?:\/\//i.test(trimmed)
   if (/^https?:\/\//i.test(trimmed)) {
-    // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
     try {
-      // 코드 설명: url 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const url = new URL(trimmed);
+      const proxyPath = normalizeAiMediaPath(url.pathname);
 
-      // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isPrivateAiOrigin(url)
-      if (isPrivateAiOrigin(url)) {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isAiProxyPath(url.pathname)
-        if (isAiProxyPath(url.pathname)) {
-          // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${url.pathname}${url.search}${url.hash}`
-          return `${url.pathname}${url.search}${url.hash}`;
-        }
+      if (proxyPath) return proxyPath;
+      if (isPrivateAiOrigin(url)) return null;
 
-        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `/ai-vm${url.pathname}${url.search}${url.hash}`
-        return `/ai-vm${url.pathname}${url.search}${url.hash}`;
-      }
-
-      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: trimmed
       return trimmed;
     } catch {
-      // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: trimmed
       return trimmed;
     }
   }
 
-  // 코드 설명: normalizedPath 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: isAiProxyPath(normalizedPath)
-  if (isAiProxyPath(normalizedPath)) {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalizedPath
-    return normalizedPath;
-  }
+  const aiMediaPath = normalizeAiMediaPath(normalizedPath);
+  if (aiMediaPath) return aiMediaPath;
 
-  // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: FLASK_MEDIA_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix))
+  if (normalizedPath.startsWith("/ai-media/")) return null;
+
   if (FLASK_MEDIA_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix))) {
-    // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: normalizedPath.startsWith("/backend-api/")
-    if (normalizedPath.startsWith("/backend-api/")) return normalizedPath;
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: `${API_BASE_URL.replace(/\/$/, "")}${normalizedPath}`
+    if (normalizedPath.startsWith("/backend-api/") || normalizedPath.startsWith("/api/")) return normalizedPath;
     return `${API_BASE_URL.replace(/\/$/, "")}${normalizedPath}`;
   }
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: normalizedPath
   return normalizedPath;
 }
