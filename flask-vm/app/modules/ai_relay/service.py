@@ -5,8 +5,6 @@
 # 설명: __future__에서 annotations 이름을 가져와 아래 로직에서 재사용한다.
 from __future__ import annotations
 
-# 설명: os 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
-import os
 # 설명: copy에서 deepcopy 이름을 가져와 아래 로직에서 재사용한다.
 from copy import deepcopy
 # 설명: datetime에서 datetime, timezone 이름을 가져와 아래 로직에서 재사용한다.
@@ -20,6 +18,7 @@ from app.extensions import db
 from app.models import AiEvent, RealtimeEvent
 # 설명: app.utils.bbox에서 build_bbox_metadata 이름을 가져와 아래 로직에서 재사용한다.
 from app.utils.bbox import build_bbox_metadata
+from app.modules.ai_media.service import gateway_event_media_url
 
 
 # 설명: `DEFAULT_EVENT_LIMIT`의 기준값 또는 기본값을 100로 설정한다.
@@ -33,8 +32,6 @@ EVENT_ID_MAX_LENGTH = 191
 RECENT_INCIDENT_EVENT_NAME = "incident.created"
 # 설명: `AI_RELAY_SOURCE`의 기준값 또는 기본값을 'ai_relay'로 설정한다.
 AI_RELAY_SOURCE = "ai_relay"
-# 설명: `AI_VM_PUBLIC_BASE_URL`에 `os.getenv('AI_VM_PUBLIC_BASE_URL', 'http://192.168.0.186:5001').rstrip` 호출 결과를 저장해 다음 처리에서 사용한다.
-AI_VM_PUBLIC_BASE_URL = os.getenv("AI_VM_PUBLIC_BASE_URL", "http://192.168.0.186:5001").rstrip("/")
 # 설명: `AI_VM_INTERNAL_BASE_URLS`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
 AI_VM_INTERNAL_BASE_URLS = (
     "http://127.0.0.1:5001",
@@ -55,11 +52,12 @@ def store_event(payload: dict[str, Any], *, commit: bool = True) -> tuple[AiEven
         # 설명: 현재 처리를 중단하고 RelayValidationError('event payload must be a JSON object')를 호출자에게 전달한다.
         raise RelayValidationError("event payload must be a JSON object")
 
-    # 설명: `payload`에 `_normalize_payload_urls` 호출 결과를 저장해 다음 처리에서 사용한다.
-    payload = _normalize_payload_urls(payload)
+    raw_payload = deepcopy(payload)
 
     # 설명: `event_id`에 `_required_string` 호출 결과를 저장해 다음 처리에서 사용한다.
     event_id = _required_string(payload, "event_id")
+    # 설명: `payload`에 `_normalize_payload_urls` 호출 결과를 저장해 다음 처리에서 사용한다.
+    payload = _normalize_payload_urls(payload, event_id=event_id)
     # 설명: `camera_id`에 `_required_string` 호출 결과를 저장해 다음 처리에서 사용한다.
     camera_id = _required_string(payload, "camera_id")
     # 설명: `event_type`에 `_required_string` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -229,28 +227,56 @@ def _build_realtime_payload(event: AiEvent) -> dict[str, Any]:
         "snapshot_url": _normalize_media_url(event.snapshot_url),
         "video_url": _normalize_media_url(event.video_url),
         "stream_url": _normalize_media_url(event.stream_url),
-        "raw_event": _normalize_payload_urls(event.raw_event_json or {}),
+        "raw_event": _normalize_payload_urls(event.raw_event_json or {}, event_id=event.event_id),
     }
 
 
 # 설명: `_normalize_payload_urls` 함수는 입력 값을 일관된 형식으로 정규화하는 함수다.
-def _normalize_payload_urls(payload: dict[str, Any]) -> dict[str, Any]:
+def _normalize_payload_urls(payload: dict[str, Any], *, event_id: str | None = None) -> dict[str, Any]:
     # 설명: `normalized`에 `deepcopy` 호출 결과를 저장해 다음 처리에서 사용한다.
     normalized = deepcopy(payload)
 
-    # 설명: `('snapshot_url', 'video_url', 'stream_url')`의 각 항목을 `key`로 받아 반복 처리한다.
-    for key in ("snapshot_url", "video_url", "stream_url"):
-        # 설명: `key in normalized` 조건 결과에 따라 실행 경로를 분기한다.
-        if key in normalized:
-            # 설명: `normalized[key]`에 `_normalize_media_url` 호출 결과를 저장해 다음 처리에서 사용한다.
-            normalized[key] = _normalize_media_url(normalized.get(key))
+    normalized = _normalize_nested_media_values(normalized, event_id=event_id)
 
     # 설명: 호출자에게 normalized 값을 함수 결과로 반환한다.
     return normalized
 
 
 # 설명: `_normalize_media_url` 함수는 입력 값을 일관된 형식으로 정규화하는 함수다.
-def _normalize_media_url(value: Any) -> str | None:
+def _normalize_nested_media_values(value: Any, *, event_id: str | None = None, key_name: str | None = None):
+    if isinstance(value, dict):
+        return {
+            key: _normalize_nested_media_values(child, event_id=event_id, key_name=key)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _normalize_nested_media_values(child, event_id=event_id, key_name=key_name)
+            for child in value
+        ]
+
+    media_type = {
+        "snapshot_url": "snapshot",
+        "snapshot_path": "snapshot",
+        "image_url": "snapshot",
+        "preview_url": "snapshot",
+        "video_url": "video",
+        "clip_url": "video",
+        "clip_path": "video",
+        "stream_url": "stream",
+    }.get(key_name)
+    if media_type:
+        return _normalize_media_url(value, event_id=event_id, media_type=media_type)
+    if isinstance(value, str) and value.startswith((
+        "http://127.0.0.1:5001",
+        "http://localhost:5001",
+        "http://192.168.0.186:5001",
+    )):
+        return None
+    return value
+
+
+def _normalize_media_url(value: Any, *, event_id: str | None = None, media_type: str | None = None) -> str | None:
     # 설명: `text`에 `_clean_string` 호출 결과를 저장해 다음 처리에서 사용한다.
     text = _clean_string(value)
     # 설명: `not text` 조건 결과에 따라 실행 경로를 분기한다.
@@ -258,14 +284,13 @@ def _normalize_media_url(value: Any) -> str | None:
         # 설명: 호출자에게 None 값을 함수 결과로 반환한다.
         return None
 
-    # 설명: `AI_VM_INTERNAL_BASE_URLS`의 각 항목을 `internal_base_url`로 받아 반복 처리한다.
-    for internal_base_url in AI_VM_INTERNAL_BASE_URLS:
-        # 설명: `text.startswith(internal_base_url)` 조건 결과에 따라 실행 경로를 분기한다.
-        if text.startswith(internal_base_url):
-            # 설명: 호출자에게 f'{AI_VM_PUBLIC_BASE_URL}{text[len(internal_base_url):]}' 값을 함수 결과로 반환한다.
-            return f"{AI_VM_PUBLIC_BASE_URL}{text[len(internal_base_url):]}"
+    if event_id and media_type and text.startswith(("http://", "https://")):
+        return gateway_event_media_url(event_id, media_type)
 
-    # 설명: 호출자에게 text 값을 함수 결과로 반환한다.
+    for internal_base_url in AI_VM_INTERNAL_BASE_URLS:
+        if text.startswith(internal_base_url) and event_id and media_type:
+            return gateway_event_media_url(event_id, media_type)
+
     return text
 
 

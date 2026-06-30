@@ -21,7 +21,8 @@ from app import create_app
 # 설명: app.extensions에서 db 이름을 가져와 아래 로직에서 재사용한다.
 from app.extensions import db
 # 설명: app.models에서 EmailVerification, User 이름을 가져와 아래 로직에서 재사용한다.
-from app.models import EmailVerification, User
+from app.models import EmailVerification, SignupRequest, User
+from app.modules.auth.service import AuthService
 # 설명: app.utils.security에서 hash_password 이름을 가져와 아래 로직에서 재사용한다.
 from app.utils.security import hash_password
 
@@ -393,3 +394,71 @@ def test_signup_rejects_unsupported_identity_method(client):
     assert response.status_code == 400
     # 설명: 테스트 전제 또는 결과인 `response.get_json()['code'] == 'UNSUPPORTED_IDENTITY_METHOD'` 조건이 참인지 검증한다.
     assert response.get_json()["code"] == "UNSUPPORTED_IDENTITY_METHOD"
+
+
+def test_signup_ignores_requested_admin_role(client):
+    email = unique_email()
+    response = client.post(
+        "/auth/signup",
+        json={
+            "login_id": f"role_{uuid4().hex[:8]}",
+            "password": "Password123!",
+            "name": "Role Escalation Test",
+            "email": email,
+            "phone": "01012345678",
+            "role": "ADMIN",
+            "requested_role": "ADMIN",
+        },
+    )
+
+    assert response.status_code in (200, 201), response.get_json()
+
+    user = User.query.filter_by(email=email).first()
+    assert user is not None
+    assert user.role == "VIEWER"
+
+    signup_request = SignupRequest.query.filter_by(user_id=user.id).first()
+    assert signup_request is not None
+    assert signup_request.requested_role == "VIEWER"
+
+
+def test_signup_approval_forces_viewer_role_even_if_request_has_admin_role(app_context):
+    now = datetime.utcnow()
+    suffix = uuid4().hex[:8]
+    user = User(
+        login_id=f"approve_{suffix}",
+        email=f"approve_{suffix}@example.com",
+        password_hash=hash_password("Password123!"),
+        name="Approve Target",
+        role="ADMIN",
+        account_status="PENDING",
+        is_email_verified=True,
+        created_at=now,
+    )
+    reviewer = User(
+        login_id=f"reviewer_{suffix}",
+        email=f"reviewer_{suffix}@example.com",
+        password_hash=hash_password("Password123!"),
+        name="Reviewer",
+        role="SUPER_ADMIN",
+        account_status="ACTIVE",
+        is_email_verified=True,
+        created_at=now,
+    )
+    db.session.add_all([user, reviewer])
+    db.session.flush()
+
+    signup_request = SignupRequest(
+        user_id=user.id,
+        request_status="REQUESTED",
+        requested_role="ADMIN",
+        created_at=now,
+    )
+    db.session.add(signup_request)
+    db.session.commit()
+
+    result = AuthService.approve_signup_request(signup_request.id, reviewer)
+
+    assert result["user"]["role"] == "VIEWER"
+    assert user.role == "VIEWER"
+    assert signup_request.requested_role == "VIEWER"

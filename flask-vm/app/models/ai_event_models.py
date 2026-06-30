@@ -8,6 +8,44 @@ from app.extensions import db
 from app.utils.bbox import build_bbox_metadata
 
 
+def _gateway_event_media_url(event_id, media_type):
+    return f"/api/ai-media/events/{event_id}/{media_type}"
+
+
+def _sanitize_raw_event_json(raw_event, event_id):
+    if not isinstance(raw_event, dict):
+        return {}
+    return _sanitize_media_value(raw_event, event_id)
+
+
+def _sanitize_media_value(value, event_id, key_name=None):
+    if isinstance(value, dict):
+        return {
+            key: _sanitize_media_value(child, event_id, key)
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_media_value(child, event_id, key_name) for child in value]
+    if not isinstance(value, str):
+        return value
+
+    media_type = {
+        "snapshot_url": "snapshot",
+        "snapshot_path": "snapshot",
+        "image_url": "snapshot",
+        "preview_url": "snapshot",
+        "video_url": "video",
+        "clip_url": "video",
+        "clip_path": "video",
+        "stream_url": "stream",
+    }.get(key_name)
+    if media_type:
+        return _gateway_event_media_url(event_id, media_type)
+    if value.startswith(("http://127.0.0.1:5001", "http://localhost:5001", "http://192.168.0.186:5001")):
+        return None
+    return value
+
+
 # 설명: `AiEvent` 클래스를 정의하고 db.Model의 동작 또는 계약을 확장한다.
 class AiEvent(db.Model):
     # 설명: `__tablename__`의 기준값 또는 기본값을 'ai_events'로 설정한다.
@@ -56,7 +94,7 @@ class AiEvent(db.Model):
     # 설명: `to_dict` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
     def to_dict(self):
         # 설명: `raw_event`에 self.raw_event_json if isinstance(self.raw_event_json, dict) else {} 표현식의 계산 결과를 저장한다.
-        raw_event = self.raw_event_json if isinstance(self.raw_event_json, dict) else {}
+        raw_event = _sanitize_raw_event_json(self.raw_event_json, self.event_id)
 
         # 설명: `detections`에 `raw_event.get` 호출 결과를 저장해 다음 처리에서 사용한다.
         detections = raw_event.get("detections")

@@ -305,8 +305,8 @@ class AuthService:
         name = (data.get("name") or "").strip()
         # 설명: `phone`에 (data.get('phone') or '').strip() or None 표현식의 계산 결과를 저장한다.
         phone = (data.get("phone") or "").strip() or None
-        # 설명: `requested_role`에 data.get('requested_role') or 'VIEWER' 표현식의 계산 결과를 저장한다.
-        requested_role = data.get("requested_role") or "VIEWER"
+        # 회원가입 요청의 role 값은 권한 상승에 사용하지 않고 서버 기본 역할로 고정한다.
+        requested_role = "VIEWER"
 
         # 설명: `not login_id` 조건 결과에 따라 실행 경로를 분기한다.
         if not login_id:
@@ -1405,8 +1405,9 @@ class AuthService:
         user.approved_by = reviewer_user.id
         # 설명: `user.approved_at`에 now 표현식의 계산 결과를 저장한다.
         user.approved_at = now
-        # 설명: `user.role`에 signup_request.requested_role 표현식의 계산 결과를 저장한다.
-        user.role = signup_request.requested_role
+        # 승인 단계에서도 기존 요청 role을 반영하지 않고 일반 사용자 역할로 고정한다.
+        signup_request.requested_role = "VIEWER"
+        user.role = "VIEWER"
 
         # 설명: `AuthService.create_security_log`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
         AuthService.create_security_log(

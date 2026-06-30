@@ -65,12 +65,16 @@ export async function GET(
     });
   }
 
-  // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: new Response(response.body, { status: response.status, headers: { "Cont…
+  const responseHeaders = new Headers();
+  responseHeaders.set(
+    "Content-Type",
+    response.headers.get("content-type") || "multipart/x-mixed-replace"
+  );
+  responseHeaders.set("Cache-Control", "no-store, no-transform");
+  responseHeaders.set("X-Accel-Buffering", "no");
+
   return new Response(response.body, {
     status: response.status,
-    headers: {
-      "Content-Type": response.headers.get("content-type") || "multipart/x-mixed-replace",
-      "Cache-Control": "no-store",
-    },
+    headers: responseHeaders,
   });
 }
