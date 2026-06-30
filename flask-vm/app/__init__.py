@@ -28,6 +28,7 @@ from app.utils.api_errors import register_api_error_handlers
 from app.modules.health.routes import health_bp
 # 설명: app.modules.ai_relay.routes에서 ai_relay_bp 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.ai_relay.routes import ai_relay_bp
+from app.modules.ai_media.routes import ai_media_bp
 
 
 
@@ -129,6 +130,7 @@ def register_blueprints(app):
     app.register_blueprint(health_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     app.register_blueprint(ai_relay_bp)
+    app.register_blueprint(ai_media_bp)
 
 
 
