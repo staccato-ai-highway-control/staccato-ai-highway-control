@@ -59,6 +59,17 @@ CCTV_SOURCE_REFRESH_ENABLED = (
 )
 CCTV_SOURCE_REFRESH_INTERVAL_SECONDS = float(os.environ.get("CCTV_SOURCE_REFRESH_INTERVAL_SECONDS", "3.0"))
 
+APP_ENV = os.environ.get("APP_ENV", os.environ.get("ENVIRONMENT", "development")).strip().lower()
+IS_PRODUCTION = APP_ENV in {"prod", "production"}
+DEV_AUTH_ENABLED = (
+    os.environ.get("DEV_AUTH_ENABLED", "0" if IS_PRODUCTION else "1").strip().lower()
+    not in {"0", "false", "no", "off"}
+)
+FASTAPI_DOCS_ENABLED = (
+    os.environ.get("FASTAPI_DOCS_ENABLED", "0" if IS_PRODUCTION else "1").strip().lower()
+    not in {"0", "false", "no", "off"}
+)
+
 DEV_LOGIN_ID = os.environ.get("DEV_LOGIN_ID", "admin").strip()
 DEV_PASSWORD = os.environ.get("DEV_PASSWORD", "").strip()
 DEV_ACCESS_TOKEN = os.environ.get("DEV_ACCESS_TOKEN", "").strip()
@@ -138,6 +149,7 @@ FLASK_RELAY_EVENTS_URL = os.environ.get(
 FLASK_RELAY_TIMEOUT_SECONDS = float(os.environ.get("FLASK_RELAY_TIMEOUT_SECONDS", "1.5"))
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "").strip()
 REPORT_DETECT_MAX_UPLOAD_BYTES = int(os.environ.get("REPORT_DETECT_MAX_UPLOAD_BYTES", str(100 * 1024 * 1024)))
+REPORT_DETECT_MAX_CONCURRENT = int(os.environ.get("REPORT_DETECT_MAX_CONCURRENT", "1"))
 
 # require_non_empty_secret 기능을 수행하는 함수입니다.
 def require_non_empty_secret(name: str, value: str) -> None:
@@ -145,8 +157,9 @@ def require_non_empty_secret(name: str, value: str) -> None:
         raise RuntimeError(f"{name} is required. Set it in ai-vm/.env or environment variables.")
 
 
-require_non_empty_secret("DEV_PASSWORD", DEV_PASSWORD)
-require_non_empty_secret("DEV_ACCESS_TOKEN", DEV_ACCESS_TOKEN)
+if DEV_AUTH_ENABLED:
+    require_non_empty_secret("DEV_PASSWORD", DEV_PASSWORD)
+    require_non_empty_secret("DEV_ACCESS_TOKEN", DEV_ACCESS_TOKEN)
 require_non_empty_secret("INTERNAL_API_TOKEN", INTERNAL_API_TOKEN)
 
 EVENT_CLIP_PRE_SECONDS = float(os.environ.get("EVENT_CLIP_PRE_SECONDS", "5.0"))
