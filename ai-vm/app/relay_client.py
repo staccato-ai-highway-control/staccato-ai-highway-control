@@ -74,7 +74,7 @@ class RelayClient:
     # 모니터링/API 응답에 쓰는 현재 상태 payload를 만듭니다.
     def to_status_payload(self) -> dict[str, Any]:
         return {
-            "events_url": self.events_url,
+            "events_url_configured": bool(self.events_url),
             "internal_api_token_configured": bool(INTERNAL_API_TOKEN),
             "sent_events": self.sent_events,
             "failed_events": self.failed_events,
