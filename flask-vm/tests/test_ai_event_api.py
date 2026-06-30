@@ -4,7 +4,9 @@
 
 # 설명: os 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import os
+from datetime import datetime, timedelta
 
+import jwt
 # 설명: pytest 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import pytest
 
@@ -13,7 +15,7 @@ from app import create_app
 # 설명: app.extensions에서 db 이름을 가져와 아래 로직에서 재사용한다.
 from app.extensions import db
 # 설명: app.models에서 AiEvent, Incident 이름을 가져와 아래 로직에서 재사용한다.
-from app.models import AiEvent, Incident
+from app.models import AiEvent, Incident, User
 # 설명: app.modules.incident_event.service에서 IncidentEventService, IncidentEventValidationError 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.incident_event.service import (
     IncidentEventService,
@@ -64,6 +66,46 @@ def client(app):
     return app.test_client()
 
 
+
+
+def _auth_header(app, role="CONTROL_ADMIN"):
+    with app.app_context():
+        suffix = str(datetime.utcnow().timestamp()).replace(".", "_")
+        user = User(
+            login_id=f"ai_event_{role.lower()}_{suffix}",
+            email=f"ai_event_{role.lower()}_{suffix}@test.local",
+            password_hash="hashed_pw",
+            name="AI Event Test User",
+            role=role,
+            account_status="ACTIVE",
+            created_at=datetime.utcnow(),
+        )
+        db.session.add(user)
+        db.session.commit()
+        token = jwt.encode(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "iat": datetime.utcnow(),
+                "exp": datetime.utcnow() + timedelta(hours=1),
+            },
+            app.config["JWT_SECRET_KEY"],
+            algorithm="HS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def admin_header(app):
+    return _auth_header(app, "CONTROL_ADMIN")
+
+
+@pytest.fixture
+def viewer_header(app):
+    return _auth_header(app, "VIEWER")
+
+
 # 설명: `_payload` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
 def _payload(**overrides):
     # 설명: `payload`에 이후 전달하거나 누적할 구조화 데이터를 초기화한다.
@@ -106,12 +148,10 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
     assert body["status"] == "created"
     # 설명: 테스트 전제 또는 결과인 `body['event']['event_id'] == 'evt_20260526_0001'` 조건이 참인지 검증한다.
     assert body["event"]["event_id"] == "evt_20260526_0001"
-    # 설명: 테스트 전제 또는 결과인 `body['event']['video_url'].endswith('.mp4')` 조건이 참인지 검증한다.
-    assert body["event"]["video_url"].endswith(".mp4")
-    # 설명: 테스트 전제 또는 결과인 `body['event']['snapshot_url'].endswith('.jpg')` 조건이 참인지 검증한다.
-    assert body["event"]["snapshot_url"].endswith(".jpg")
-    # 설명: 테스트 전제 또는 결과인 `body['event']['stream_url'].endswith('.mjpeg')` 조건이 참인지 검증한다.
-    assert body["event"]["stream_url"].endswith(".mjpeg")
+    assert body["event"]["video_url"] == "/api/ai-media/events/evt_20260526_0001/video"
+    assert body["event"]["snapshot_url"] == "/api/ai-media/events/evt_20260526_0001/snapshot"
+    assert body["event"]["stream_url"] == "/api/ai-media/events/evt_20260526_0001/stream"
+    assert "192.168.0.186:5001" not in str(body["event"])
     # 설명: 테스트 전제 또는 결과인 `body['event']['bbox'] == [820, 430, 940, 510]` 조건이 참인지 검증한다.
     assert body["event"]["bbox"] == [820, 430, 940, 510]
     # 설명: 테스트 전제 또는 결과인 `body['event']['bbox_metadata']['valid'] is True` 조건이 참인지 검증한다.
@@ -135,12 +175,10 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
         assert event.camera_id == "camera-1"
         # 설명: 테스트 전제 또는 결과인 `event.event_type == 'STOPPED_VEHICLE'` 조건이 참인지 검증한다.
         assert event.event_type == "STOPPED_VEHICLE"
-        # 설명: 테스트 전제 또는 결과인 `event.video_url == 'http://192.168.0.186:5001/events/evt_20260526_0001.mp4'` 조건이 참인지 검증한다.
-        assert event.video_url == "http://192.168.0.186:5001/events/evt_20260526_0001.mp4"
-        # 설명: 테스트 전제 또는 결과인 `event.snapshot_url == 'http://192.168.0.186:5001/events/evt_20260526_0001.jpg'` 조건이 참인지 검증한다.
-        assert event.snapshot_url == "http://192.168.0.186:5001/events/evt_20260526_0001.jpg"
-        # 설명: 테스트 전제 또는 결과인 `event.stream_url == 'http://192.168.0.186:5001/streams/camera-1.mjpeg'` 조건이 참인지 검증한다.
-        assert event.stream_url == "http://192.168.0.186:5001/streams/camera-1.mjpeg"
+        assert event.video_url == "/api/ai-media/events/evt_20260526_0001/video"
+        assert event.snapshot_url == "/api/ai-media/events/evt_20260526_0001/snapshot"
+        assert event.stream_url == "/api/ai-media/events/evt_20260526_0001/stream"
+        assert event.raw_event_json["video_url"] == "http://127.0.0.1:5001/events/evt_20260526_0001.mp4"
         # 설명: 테스트 전제 또는 결과인 `event.bbox_json == [820, 430, 940, 510]` 조건이 참인지 검증한다.
         assert event.bbox_json == [820, 430, 940, 510]
         # 설명: 테스트 전제 또는 결과인 `event.raw_event_json['message'] == 'Stopped vehicle detected in shoulder ROI'` 조건이 참인지 검증한다.
@@ -157,12 +195,12 @@ def test_post_api_events_persists_event_media_bbox_and_raw_json(client, app):
 
 
 # 설명: `test_get_api_events_detail_and_replay_return_saved_event` 함수는 예상 동작과 회귀 조건을 검증하는 테스트 함수다.
-def test_get_api_events_detail_and_replay_return_saved_event(client):
+def test_get_api_events_detail_and_replay_return_saved_event(client, admin_header):
     # 설명: `client.post`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     client.post("/api/events", json=_payload())
 
     # 설명: `list_response`에 `client.get` 호출 결과를 저장해 다음 처리에서 사용한다.
-    list_response = client.get("/api/events")
+    list_response = client.get("/api/events", headers=admin_header)
     # 설명: 테스트 전제 또는 결과인 `list_response.status_code == 200` 조건이 참인지 검증한다.
     assert list_response.status_code == 200
     # 설명: `list_body`에 `list_response.get_json` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -173,7 +211,7 @@ def test_get_api_events_detail_and_replay_return_saved_event(client):
     assert list_body["events"][0]["event_id"] == "evt_20260526_0001"
 
     # 설명: `detail_response`에 `client.get` 호출 결과를 저장해 다음 처리에서 사용한다.
-    detail_response = client.get("/api/events/evt_20260526_0001")
+    detail_response = client.get("/api/events/evt_20260526_0001", headers=admin_header)
     # 설명: 테스트 전제 또는 결과인 `detail_response.status_code == 200` 조건이 참인지 검증한다.
     assert detail_response.status_code == 200
     # 설명: `detail_body`에 `detail_response.get_json` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -182,15 +220,13 @@ def test_get_api_events_detail_and_replay_return_saved_event(client):
     assert detail_body["event"]["camera_id"] == "camera-1"
 
     # 설명: `replay_response`에 `client.get` 호출 결과를 저장해 다음 처리에서 사용한다.
-    replay_response = client.get("/api/replays/evt_20260526_0001")
+    replay_response = client.get("/api/replays/evt_20260526_0001", headers=admin_header)
     # 설명: 테스트 전제 또는 결과인 `replay_response.status_code == 200` 조건이 참인지 검증한다.
     assert replay_response.status_code == 200
     # 설명: `replay_body`에 `replay_response.get_json` 호출 결과를 저장해 다음 처리에서 사용한다.
     replay_body = replay_response.get_json()
-    # 설명: 테스트 전제 또는 결과인 `replay_body['replay']['video_url'].endswith('.mp4')` 조건이 참인지 검증한다.
-    assert replay_body["replay"]["video_url"].endswith(".mp4")
-    # 설명: 테스트 전제 또는 결과인 `replay_body['replay']['snapshot_url'].endswith('.jpg')` 조건이 참인지 검증한다.
-    assert replay_body["replay"]["snapshot_url"].endswith(".jpg")
+    assert replay_body["replay"]["video_url"] == "/api/ai-media/events/evt_20260526_0001/video"
+    assert replay_body["replay"]["snapshot_url"] == "/api/ai-media/events/evt_20260526_0001/snapshot"
     # 설명: 테스트 전제 또는 결과인 `replay_body['replay']['event']['raw_event_json']['event_id'] == 'evt_20260526_0...` 조건이 참인지 검증한다.
     assert replay_body["replay"]["event"]["raw_event_json"]["event_id"] == "evt_20260526_0001"
 
@@ -243,8 +279,8 @@ def test_post_api_events_updates_existing_event_by_event_id(client, app):
         assert AiEvent.query.count() == 1
         # 설명: `event`에 `db.session.get` 호출 결과를 저장해 다음 처리에서 사용한다.
         event = db.session.get(AiEvent, "evt_20260526_0001")
-        # 설명: 테스트 전제 또는 결과인 `event.video_url.endswith('_v2.mp4')` 조건이 참인지 검증한다.
-        assert event.video_url.endswith("_v2.mp4")
+        assert event.video_url == "/api/ai-media/events/evt_20260526_0001/video"
+        assert event.raw_event_json["video_url"].endswith("_v2.mp4")
 
 
 # 설명: `test_post_api_events_requires_internal_token_when_configured` 함수는 예상 동작과 회귀 조건을 검증하는 테스트 함수다.
@@ -310,3 +346,13 @@ def test_post_api_events_rolls_back_ai_event_when_incident_creation_fails(
         assert db.session.get(AiEvent, "evt_atomic_failure") is None
         # 설명: 테스트 전제 또는 결과인 `Incident.query.filter_by(incident_code='evt_atomic_failure').count() == 0` 조건이 참인지 검증한다.
         assert Incident.query.filter_by(incident_code="evt_atomic_failure").count() == 0
+
+
+def test_get_api_events_requires_browser_auth_and_role(client, admin_header, viewer_header):
+    created = client.post("/api/events", json=_payload(event_id="evt_authz"))
+    assert created.status_code == 201
+
+    assert client.get("/api/events").status_code == 401
+    assert client.get("/api/events", headers=viewer_header).status_code == 403
+    assert client.get("/api/events", headers=admin_header).status_code == 200
+    assert client.get("/api/replays/evt_authz", headers=admin_header).status_code == 200

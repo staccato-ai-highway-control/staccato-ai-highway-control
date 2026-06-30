@@ -269,7 +269,8 @@ class CameraWorker:
         return {
             "camera_id": self.camera_id,
             "camera_name": self.name,
-            "source_url": self.source_url,
+            "source_url_configured": bool(self.source_url),
+            "source_identity": self.source_identity,
             "source_refresh": {
                 "enabled": self.source_refresh_enabled,
                 "count": self.source_refresh_count,

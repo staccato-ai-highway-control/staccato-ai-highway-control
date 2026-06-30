@@ -30,7 +30,7 @@ from .config import (
     ROI_BASE_WIDTH,
 )
 from .detector import Detection
-from .roi_config import get_camera_rois
+from .roi_config import get_camera_rois, normalize_roi_type
 
 
 # 이전 프레임에서 추적 중인 차량의 위치 상태입니다.
@@ -139,6 +139,9 @@ class EventDetector:
                 continue
 
             event_type = self._event_type_for_rois(item.roi_ids)
+            if event_type is None:
+                continue
+
             roi_id = item.roi_ids[0]
             if not self._can_emit(item.track_id, event_type, roi_id, timestamp):
                 continue
@@ -352,8 +355,14 @@ class EventDetector:
 
     # _event_type_for_rois 내부 보조 함수로 주요 처리 흐름을 분리합니다.
     @staticmethod
-    def _event_type_for_rois(roi_ids: list[str]) -> str:
-        if "LEFT_SHOULDER" in roi_ids or "RIGHT_SHOULDER" in roi_ids:
+    def _event_type_for_rois(roi_ids: list[str]) -> str | None:
+        roi_types = {
+            normalize_roi_type(None, roi_id=roi_id)
+            for roi_id in roi_ids
+        }
+        if roi_types.intersection({"MEDIAN", "IGNORE_ZONE", "UNKNOWN"}):
+            return None
+        if roi_types.intersection({"SHOULDER", "EMERGENCY_BAY"}):
             return "SHOULDER_STOP"
         return "LANE_STOP"
 

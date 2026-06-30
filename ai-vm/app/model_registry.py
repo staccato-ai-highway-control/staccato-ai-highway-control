@@ -167,10 +167,10 @@ class ReportModelRegistry:
 
     def _create_detector(self, spec: ReportModelSpec) -> Any:
         if spec.model_id == "yolo11s":
-            return YoloDetector(
-                model_paths=[str(spec.model_path)],
-                enable_far_crop=False,
-            )
+            # 신고 목록의 기본 분석기와 완전히 동일한 detector를 사용한다.
+            from .detector import detector as primary_detector
+
+            return primary_detector
 
         if spec.model_id == "rtdetr":
             return RTDETRDetector(

@@ -177,7 +177,7 @@ class EventClipWorker:
             "failed_clips": self.failed_clips,
             "sent_events": self.sent_events,
             "write_queue_size": self._write_queue.qsize(),
-            "media_dir": str(EVENT_MEDIA_DIR),
+            "media_dir_configured": bool(EVENT_MEDIA_DIR),
             "last_error": self.last_error,
             "relay": self.relay_client.to_status_payload(),
         }

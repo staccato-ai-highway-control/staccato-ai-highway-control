@@ -5,9 +5,10 @@
 # 설명: os 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import os
 # 설명: datetime에서 datetime 이름을 가져와 아래 로직에서 재사용한다.
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 설명: pytest 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
+import jwt
 import pytest
 
 # 설명: app에서 create_app 이름을 가져와 아래 로직에서 재사용한다.
@@ -16,6 +17,7 @@ from app import create_app
 from app.extensions import db
 # 설명: app.models에서 Cctv, CctvRoi, CctvSlot, CctvStatusLog 이름을 가져와 아래 로직에서 재사용한다.
 from app.models import Cctv, CctvRoi, CctvSlot, CctvStatusLog
+from app.models.auth_models import User
 # 설명: db_cleanup에서 cleanup_database 이름을 가져와 아래 로직에서 재사용한다.
 from db_cleanup import cleanup_database
 
@@ -62,6 +64,46 @@ def client(app):
 
 
 # 설명: `_create_cctv` 함수는 새 데이터나 리소스를 생성하는 함수다.
+
+
+def _auth_header(app, role: str):
+    with app.app_context():
+        user = User(
+            login_id=f"cctv_{role.lower()}_{datetime.utcnow().timestamp()}".replace(".", "_"),
+            email=f"cctv_{role.lower()}_{datetime.utcnow().timestamp()}@test.local",
+            password_hash="hashed_pw",
+            name="CCTV Test User",
+            role=role,
+            account_status="ACTIVE",
+            created_at=datetime.utcnow(),
+        )
+        db.session.add(user)
+        db.session.commit()
+
+        token = jwt.encode(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "iat": datetime.utcnow(),
+                "exp": datetime.utcnow() + timedelta(hours=1),
+            },
+            app.config["JWT_SECRET_KEY"],
+            algorithm="HS256",
+        )
+        return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def admin_header(app):
+    return _auth_header(app, "SUPER_ADMIN")
+
+
+@pytest.fixture
+def viewer_header(app):
+    return _auth_header(app, "VIEWER")
+
+
 def _create_cctv(*, code: str, name: str, is_active: int, road_name: str = "Road-1"):
     # 설명: `item`에 `Cctv` 호출 결과를 저장해 다음 처리에서 사용한다.
     item = Cctv(
@@ -277,7 +319,7 @@ def test_cctv_rois_and_stream_status(client, app):
 
 
 # 설명: `test_cctv_slots_can_be_saved_and_loaded` 함수는 예상 동작과 회귀 조건을 검증하는 테스트 함수다.
-def test_cctv_slots_can_be_saved_and_loaded(client, app):
+def test_cctv_slots_can_be_saved_and_loaded(client, app, admin_header):
     # 설명: `app.app_context()` 컨텍스트의 자원 수명주기를 보장하며 내부 작업을 실행한다.
     with app.app_context():
         # 설명: `_create_cctv`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
@@ -288,6 +330,7 @@ def test_cctv_slots_can_be_saved_and_loaded(client, app):
     # 설명: `response`에 `client.put` 호출 결과를 저장해 다음 처리에서 사용한다.
     response = client.put(
         "/api/cctv-slots",
+        headers=admin_header,
         json={
             "slots": [
                 {
@@ -325,10 +368,11 @@ def test_cctv_slots_can_be_saved_and_loaded(client, app):
 
 
 # 설명: `test_cctv_create_update_patch_and_delete` 함수는 예상 동작과 회귀 조건을 검증하는 테스트 함수다.
-def test_cctv_create_update_patch_and_delete(client, app):
+def test_cctv_create_update_patch_and_delete(client, app, admin_header):
     # 설명: `create_response`에 `client.post` 호출 결과를 저장해 다음 처리에서 사용한다.
     create_response = client.post(
         "/api/cctvs",
+        headers=admin_header,
         json={
             "cctv_code": "CCTV-CRUD",
             "cctv_name": "CRUD Camera",
@@ -346,6 +390,7 @@ def test_cctv_create_update_patch_and_delete(client, app):
     # 설명: `patch_response`에 `client.patch` 호출 결과를 저장해 다음 처리에서 사용한다.
     patch_response = client.patch(
         f"/api/cctvs/{cctv_id}",
+        headers=admin_header,
         json={"is_active": 0, "cctv_name": "CRUD Camera Updated"},
     )
     # 설명: 테스트 전제 또는 결과인 `patch_response.status_code == 200` 조건이 참인지 검증한다.
@@ -358,6 +403,7 @@ def test_cctv_create_update_patch_and_delete(client, app):
     # 설명: `put_response`에 `client.put` 호출 결과를 저장해 다음 처리에서 사용한다.
     put_response = client.put(
         f"/api/cctvs/{cctv_id}",
+        headers=admin_header,
         json={
             "stream_url": "http://127.0.0.1/streams/CCTV-CRUD-updated.mjpeg",
             "location_name": "Updated Location",
@@ -369,7 +415,7 @@ def test_cctv_create_update_patch_and_delete(client, app):
     assert put_response.get_json()["item"]["stream_url"].endswith("updated.mjpeg")
 
     # 설명: `delete_response`에 `client.delete` 호출 결과를 저장해 다음 처리에서 사용한다.
-    delete_response = client.delete(f"/api/cctvs/{cctv_id}")
+    delete_response = client.delete(f"/api/cctvs/{cctv_id}", headers=admin_header)
     # 설명: 테스트 전제 또는 결과인 `delete_response.status_code == 200` 조건이 참인지 검증한다.
     assert delete_response.status_code == 200
     # 설명: 테스트 전제 또는 결과인 `delete_response.get_json()['deleted_id'] == cctv_id` 조건이 참인지 검증한다.
@@ -381,7 +427,7 @@ def test_cctv_create_update_patch_and_delete(client, app):
 # 설명: `test_cctv_code_database_unique_constraint` 함수는 예상 동작과 회귀 조건을 검증하는 테스트 함수다.
 def test_cctv_code_database_unique_constraint(app):
     # 설명: datetime에서 datetime 이름을 가져와 아래 로직에서 재사용한다.
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     # 설명: pytest 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
     import pytest
@@ -477,3 +523,184 @@ def test_cctv_code_database_unique_constraint(app):
 
         # 설명: 현재 DB 트랜잭션에서 아직 확정되지 않은 변경을 모두 취소한다.
         db.session.rollback()
+
+
+def test_cctv_rois_accept_code_identifier(client, app, admin_header):
+    """ROI API는 숫자 PK와 CCTV 코드 식별자를 모두 허용해야 합니다."""
+    with app.app_context():
+        cctv = _create_cctv(
+            code="CCTV-ROI-CODE",
+            name="ROI Code Camera",
+            is_active=1,
+        )
+        db.session.commit()
+        cctv_id = cctv.id
+
+    payload = {
+        "items": [
+            {
+                "roi_type": "SHOULDER",
+                "roi_name": "Shoulder ROI",
+                "polygon_json": [[10, 20], [100, 20], [100, 120]],
+                "is_active": True,
+            }
+        ]
+    }
+
+    put_response = client.put("/api/cctvs/CCTV-ROI-CODE/rois", headers=admin_header, json=payload)
+    assert put_response.status_code == 200
+    assert put_response.get_json()["cctv_id"] == cctv_id
+    assert put_response.get_json()["count"] == 1
+
+    code_get_response = client.get("/api/cctvs/CCTV-ROI-CODE/rois")
+    assert code_get_response.status_code == 200
+    assert code_get_response.get_json()["cctv_id"] == cctv_id
+    assert code_get_response.get_json()["items"][0]["roi_type"] == "SHOULDER"
+
+    id_get_response = client.get(f"/api/cctvs/{cctv_id}/rois")
+    assert id_get_response.status_code == 200
+    assert id_get_response.get_json()["count"] == 1
+
+
+def test_cctv_write_requires_admin_role(client, app, viewer_header):
+    create_response = client.post("/api/cctvs", json={"cctv_code": "CCTV-NOAUTH", "cctv_name": "No Auth"})
+    assert create_response.status_code == 401
+
+    viewer_response = client.post(
+        "/api/cctvs",
+        headers=viewer_header,
+        json={"cctv_code": "CCTV-VIEWER", "cctv_name": "Viewer"},
+    )
+    assert viewer_response.status_code == 403
+
+
+def test_cctv_roi_update_requires_admin_and_valid_polygon(client, app, admin_header, viewer_header):
+    with app.app_context():
+        cctv = _create_cctv(code="CCTV-ROI-AUTH", name="ROI Auth Camera", is_active=1)
+        db.session.commit()
+        cctv_id = cctv.id
+
+    payload = {
+        "items": [
+            {
+                "roi_type": "SHOULDER",
+                "polygon_json": [[10, 20], [100, 20], [100, 120]],
+            }
+        ]
+    }
+
+    assert client.put(f"/api/cctvs/{cctv_id}/rois", json=payload).status_code == 401
+    assert client.put(f"/api/cctvs/{cctv_id}/rois", headers=viewer_header, json=payload).status_code == 403
+
+    bad_payload = {"items": [{"roi_type": "SHOULDER", "polygon_json": [[-1, 20], [100, 20], [100, 120]]}]}
+    bad_response = client.put(f"/api/cctvs/{cctv_id}/rois", headers=admin_header, json=bad_payload)
+    assert bad_response.status_code == 400
+
+    ok_response = client.put(f"/api/cctvs/{cctv_id}/rois", headers=admin_header, json=payload)
+    assert ok_response.status_code == 200
+
+
+def test_manual_event_requires_admin_and_filters_payload(client, app, admin_header, viewer_header, monkeypatch):
+    with app.app_context():
+        cctv = _create_cctv(code="CCTV-MANUAL", name="Manual Camera", is_active=1)
+        db.session.commit()
+
+    assert client.post("/api/cctvs/CCTV-MANUAL/manual-events", json={}).status_code == 401
+    assert client.post("/api/cctvs/CCTV-MANUAL/manual-events", headers=viewer_header, json={}).status_code == 403
+
+    captured = {}
+
+    class Response:
+        ok = True
+        status_code = 201
+
+        def json(self):
+            return {"ok": True}
+
+    def fake_post(url, json, headers, timeout):
+        captured["payload"] = json
+        captured["headers"] = headers
+        return Response()
+
+    monkeypatch.setattr("app.modules.cctv.routes.http_requests.post", fake_post)
+    response = client.post(
+        "/api/cctvs/CCTV-MANUAL/manual-events",
+        headers=admin_header,
+        json={"event_type": "MANUAL_EVENT", "source": "WEB", "admin_only": "blocked"},
+    )
+
+    assert response.status_code == 201
+    assert captured["payload"]["event_type"] == "MANUAL_EVENT"
+    assert "admin_only" not in captured["payload"]
+
+
+
+def test_cctvs_ai_vm_source_requires_auth_and_uses_internal_bearer(client, app, admin_header, monkeypatch):
+    app.config["AI_VM_BASE_URL"] = "http://127.0.0.1:5001"
+    app.config["INTERNAL_API_TOKEN"] = "test-internal-token"
+
+    unauthenticated = client.get("/api/cctvs?source=ai-vm")
+    assert unauthenticated.status_code == 401
+
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"items":[{"camera_id":"AI-1","camera_name":"AI Camera"}]}'
+
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        captured["authorization"] = req.get_header("Authorization")
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr("app.modules.cctv.routes.urllib.request.urlopen", fake_urlopen)
+    response = client.get("/api/cctvs?source=ai-vm", headers=admin_header)
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["success"] is True
+    assert body["source"] == "ITS"
+    assert body["count"] == 1
+    assert body["items"][0]["camera_id"] == "AI-1"
+    assert captured["url"] == "http://127.0.0.1:5001/traffic/api/cctv"
+    assert captured["authorization"] == "Bearer test-internal-token"
+    assert captured["timeout"] == 15
+
+
+def test_cameras_ai_vm_source_uses_internal_bearer(client, app, admin_header, monkeypatch):
+    app.config["AI_VM_BASE_URL"] = "http://127.0.0.1:5001"
+    app.config["INTERNAL_API_TOKEN"] = "test-internal-token"
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return b'{"items":[{"camera_id":"AI-2","camera_name":"AI Camera 2"}]}'
+
+    def fake_urlopen(req, timeout):
+        captured["url"] = req.full_url
+        captured["authorization"] = req.get_header("Authorization")
+        return FakeResponse()
+
+    monkeypatch.setattr("app.modules.cctv.routes.urllib.request.urlopen", fake_urlopen)
+    response = client.get("/api/cameras?source=its", headers=admin_header)
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["success"] is True
+    assert body["ok"] is True
+    assert body["cameras"][0]["camera_id"] == "AI-2"
+    assert captured["url"] == "http://127.0.0.1:5001/traffic/api/cctv"
+    assert captured["authorization"] == "Bearer test-internal-token"

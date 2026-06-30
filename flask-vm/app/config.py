@@ -50,15 +50,41 @@ def build_database_url():
     )
 
 
+def _csv_values(raw_value):
+    if not raw_value:
+        return []
+    return [value.strip().rstrip("/") for value in raw_value.split(",") if value.strip()]
+
+
+def build_cors_origins(app_env):
+    raw_origins = os.getenv("CORS_ORIGINS")
+    if str(app_env).lower() == "production":
+        candidates = _csv_values(raw_origins) or _csv_values(
+            os.getenv("PRODUCTION_FRONTEND_ORIGIN")
+            or os.getenv("FRONTEND_BASE_URL")
+        )
+        https_origins = [origin for origin in candidates if origin.startswith("https://")]
+        return ",".join(https_origins) or "https://mbc-sw.iptime.org:3221"
+
+    return raw_origins or "*"
+
+
+def build_socketio_cors_origins(app_env, cors_origins):
+    if str(app_env).lower() == "production":
+        return cors_origins
+    return os.getenv("SOCKETIO_CORS_ORIGINS", cors_origins)
+
+
 # 설명: `Config` 클래스를 정의하고 기본 object의 동작 또는 계약을 확장한다.
 class Config:
     # 설명: `SERVICE_NAME`의 기준값 또는 기본값을 'flask-server'로 설정한다.
     SERVICE_NAME = "flask-server"
 
     # 설명: `ENV`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
-    ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development"))
-    # 설명: `DEBUG`에 os.getenv('FLASK_DEBUG', '0').lower() in ['1', 'true', 'yes'] 표현식의 계산 결과를 저장한다.
-    DEBUG = os.getenv("FLASK_DEBUG", "0").lower() in ["1", "true", "yes"]
+    ENV = os.getenv("APP_ENV", os.getenv("FLASK_ENV", "development")).lower()
+    IS_PRODUCTION = ENV == "production"
+    # 운영 환경에서는 환경 변수 값과 무관하게 Flask debug를 비활성화한다.
+    DEBUG = False if IS_PRODUCTION else os.getenv("FLASK_DEBUG", "0").lower() in ["1", "true", "yes"]
 
     # 설명: `SECRET_KEY`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
     SECRET_KEY = os.getenv("SECRET_KEY", "local-dev-secret-key")
@@ -78,9 +104,9 @@ class Config:
     # 설명: `FRONTEND_BASE_URL`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
     FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://192.168.0.188:3000")
     # 설명: `CORS_ORIGINS`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
-    CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+    CORS_ORIGINS = build_cors_origins(ENV)
     # 설명: `SOCKETIO_CORS_ORIGINS`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
-    SOCKETIO_CORS_ORIGINS = os.getenv("SOCKETIO_CORS_ORIGINS", CORS_ORIGINS)
+    SOCKETIO_CORS_ORIGINS = build_socketio_cors_origins(ENV, CORS_ORIGINS)
 
     # 설명: `INTERNAL_API_TOKEN`에 `os.getenv` 호출 결과를 저장해 다음 처리에서 사용한다.
     INTERNAL_API_TOKEN = os.getenv("INTERNAL_API_TOKEN", "")

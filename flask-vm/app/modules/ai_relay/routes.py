@@ -13,6 +13,8 @@ from flask import Blueprint, jsonify, request
 
 # 설명: app.modules.internal_auth에서 require_internal_api_token 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.internal_auth import require_internal_api_token
+from app.modules.ai_media.service import has_event_media_access
+from app.utils.security import require_auth
 # 설명: app.modules.incident_event.service에서 IncidentEventService, IncidentEventValidationError 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.incident_event.service import (
     IncidentEventService,
@@ -125,7 +127,10 @@ def create_event():
 
 # 설명: `get_events` 함수는 단일 값이나 리소스를 조회하는 함수다.
 @ai_relay_bp.get("/events")
+@require_auth
 def get_events():
+    if not has_event_media_access(request.current_user):
+        return jsonify({"ok": False, "success": False, "error": "Permission denied."}), 403
     # 설명: `events`에 `list_events` 호출 결과를 저장해 다음 처리에서 사용한다.
     events = list_events(
         limit=request.args.get("limit", default=100, type=int),
@@ -147,7 +152,10 @@ def get_events():
 
 # 설명: `get_event_detail` 함수는 단일 값이나 리소스를 조회하는 함수다.
 @ai_relay_bp.get("/events/<event_id>")
+@require_auth
 def get_event_detail(event_id: str):
+    if not has_event_media_access(request.current_user):
+        return jsonify({"ok": False, "success": False, "error": "Permission denied."}), 403
     # 설명: `event`에 `get_event` 호출 결과를 저장해 다음 처리에서 사용한다.
     event = get_event(event_id)
     # 설명: `event is None` 조건 결과에 따라 실행 경로를 분기한다.
@@ -161,7 +169,10 @@ def get_event_detail(event_id: str):
 
 # 설명: `get_replay` 함수는 단일 값이나 리소스를 조회하는 함수다.
 @ai_relay_bp.get("/replays/<event_id>")
+@require_auth
 def get_replay(event_id: str):
+    if not has_event_media_access(request.current_user):
+        return jsonify({"ok": False, "success": False, "error": "Permission denied."}), 403
     # 설명: `event`에 `get_event` 호출 결과를 저장해 다음 처리에서 사용한다.
     event = get_event(event_id)
     # 설명: `event is None` 조건 결과에 따라 실행 경로를 분기한다.
