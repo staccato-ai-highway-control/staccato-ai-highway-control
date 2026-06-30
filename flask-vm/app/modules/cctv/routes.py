@@ -30,6 +30,8 @@ from flask import Blueprint, current_app, jsonify, request
 from app.extensions import db
 # 설명: app.models에서 Cctv, CctvRoi, CctvSlot, CctvStatusLog 이름을 가져와 아래 로직에서 재사용한다.
 from app.models import Cctv, CctvRoi, CctvSlot, CctvStatusLog
+from app.models.auth_models import SecurityLog
+from app.utils.security import require_auth, require_roles
 
 
 # 설명: `cctv_bp`에 `Blueprint` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -49,6 +51,24 @@ CCTV_WRITE_FIELDS = {
     "is_active",
     "installed_at",
 }
+
+CCTV_ADMIN_ROLES = ("SUPER_ADMIN", "ADMIN", "CONTROL_ADMIN", "CONTROL_CENTER")
+CCTV_DELETE_ROLES = ("SUPER_ADMIN", "ADMIN")
+VALID_ROI_TYPES = {"DRIVING_LANE", "SHOULDER", "IGNORE_ZONE"}
+ROI_MIN_POINTS = 3
+ROI_MAX_COORDINATE = Decimal("10000")
+MANUAL_EVENT_ALLOWED_FIELDS = {"event_type", "source", "memo", "reason", "severity"}
+MANUAL_EVENT_TYPES = {
+    "MANUAL",
+    "MANUAL_EVENT",
+    "LANE_STOP",
+    "SHOULDER_STOP",
+    "ACCIDENT",
+    "CONGESTION",
+    "FALLEN_OBJECT",
+    "UNKNOWN",
+}
+MANUAL_EVENT_SOURCES = {"WEB", "ADMIN", "CONTROL_CENTER", "MANUAL"}
 
 
 # 설명: `_parse_is_active` 함수는 외부 입력을 내부 타입으로 해석하는 함수다.
@@ -126,6 +146,90 @@ def _parse_date(value, field_name: str):
     except ValueError as exc:
         # 설명: 현재 처리를 중단하고 ValueError(f'{field_name} must be YYYY-MM-DD.')를 호출자에게 전달한다.
         raise ValueError(f"{field_name} must be YYYY-MM-DD.") from exc
+
+
+def _current_user_id():
+    user = getattr(request, "current_user", None)
+    return getattr(user, "id", None)
+
+
+def _add_security_log(action_type: str, target_type: str, target_id: int, message: dict) -> None:
+    db.session.add(SecurityLog(
+        actor_user_id=_current_user_id(),
+        action_type=action_type,
+        target_type=target_type,
+        target_id=target_id,
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get("User-Agent"),
+        log_message=json.dumps(message, ensure_ascii=False, sort_keys=True),
+        created_at=_utc_now_naive(),
+    ))
+
+
+def _parse_roi_coordinate(value, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a number.")
+
+    try:
+        coordinate = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a number.") from exc
+
+    if coordinate < 0 or coordinate > ROI_MAX_COORDINATE:
+        raise ValueError(f"{field_name} must be between 0 and {ROI_MAX_COORDINATE}.")
+
+    return float(coordinate)
+
+
+def _validate_roi_polygon(polygon_json):
+    if not isinstance(polygon_json, list) or not polygon_json:
+        raise ValueError("polygon_json must be a non-empty list of coordinate pairs.")
+
+    if len(polygon_json) < ROI_MIN_POINTS:
+        raise ValueError(f"polygon_json must contain at least {ROI_MIN_POINTS} points.")
+
+    validated = []
+    for index, point in enumerate(polygon_json):
+        if isinstance(point, dict):
+            x = point.get("x")
+            y = point.get("y")
+            validated.append({
+                "x": _parse_roi_coordinate(x, f"polygon_json[{index}].x"),
+                "y": _parse_roi_coordinate(y, f"polygon_json[{index}].y"),
+            })
+        elif isinstance(point, list) and len(point) >= 2:
+            validated.append([
+                _parse_roi_coordinate(point[0], f"polygon_json[{index}][0]"),
+                _parse_roi_coordinate(point[1], f"polygon_json[{index}][1]"),
+            ])
+        else:
+            raise ValueError("Each polygon point must be an object with x/y or a coordinate pair.")
+
+    return validated
+
+
+def _build_manual_event_payload(cctv: Cctv, body: dict) -> dict:
+    event_type = str(body.get("event_type") or "MANUAL_EVENT").strip().upper()
+    source = str(body.get("source") or "WEB").strip().upper()
+
+    if event_type not in MANUAL_EVENT_TYPES:
+        raise ValueError(f"Invalid event_type. Must be one of {sorted(MANUAL_EVENT_TYPES)}.")
+    if source not in MANUAL_EVENT_SOURCES:
+        raise ValueError(f"Invalid source. Must be one of {sorted(MANUAL_EVENT_SOURCES)}.")
+
+    payload = {
+        "camera_id": cctv.cctv_code,
+        "source_url": cctv.stream_url or "",
+        "name": cctv.cctv_name,
+        "event_type": event_type,
+        "source": source,
+    }
+
+    for field in MANUAL_EVENT_ALLOWED_FIELDS - {"event_type", "source"}:
+        if field in body and body[field] is not None:
+            payload[field] = body[field]
+
+    return payload
 
 
 # 설명: `_bool_to_int` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
@@ -308,10 +412,19 @@ def _fetch_its_cctvs_from_ai_vm() -> list[dict]:
         # 설명: `url`에 f'{url}?{query}' 표현식의 계산 결과를 저장한다.
         url = f"{url}?{query}"
 
+    headers = {"User-Agent": "STACCATO-FLASK-VM/1.0"}
+    internal_token = str(
+        current_app.config.get("INTERNAL_API_TOKEN")
+        or os.environ.get("INTERNAL_API_TOKEN")
+        or ""
+    ).strip()
+    if internal_token:
+        headers["Authorization"] = f"Bearer {internal_token}"
+
     # 설명: `req`에 `urllib.request.Request` 호출 결과를 저장해 다음 처리에서 사용한다.
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "STACCATO-FLASK-VM/1.0"},
+        headers=headers,
     )
 
     # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
@@ -347,6 +460,15 @@ def _fetch_its_cctvs_from_ai_vm() -> list[dict]:
 def _is_its_source_request() -> bool:
     # 설명: 호출자에게 str(request.args.get('source') or '').strip().lower() in {'its', 'ai-vm', 'aivm'} 값을 함수 결과로 반환한다.
     return str(request.args.get("source") or "").strip().lower() in {"its", "ai-vm", "aivm"}
+
+
+@require_auth
+def _require_ai_source_auth():
+    return None
+
+
+def _ai_source_auth_error():
+    return _require_ai_source_auth()
 
 
 # 설명: `_get_cctv_by_code` 함수는 단일 값이나 리소스를 조회하는 함수다.
@@ -502,6 +624,9 @@ def _update_slot_from_payload(slot: CctvSlot, payload: dict) -> None:
 def list_cctvs():
     # 설명: `_is_its_source_request()` 조건 결과에 따라 실행 경로를 분기한다.
     if _is_its_source_request():
+        auth_error = _ai_source_auth_error()
+        if auth_error:
+            return auth_error
         # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
         try:
             # 설명: `items`에 `_fetch_its_cctvs_from_ai_vm` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -535,6 +660,7 @@ def list_cctvs():
 
 # 설명: `create_cctv` 함수는 새 데이터나 리소스를 생성하는 함수다.
 @cctv_bp.post("/cctvs")
+@require_roles(*CCTV_ADMIN_ROLES)
 def create_cctv():
     # 설명: `payload`에 `request.get_json` 호출 결과를 저장해 다음 처리에서 사용한다.
     payload = request.get_json(silent=True)
@@ -627,6 +753,7 @@ def get_cctv_detail(cctv_id: int):
 # 설명: `update_cctv` 함수는 기존 데이터의 허용된 값을 변경하는 함수다.
 @cctv_bp.put("/cctvs/<int:cctv_id>")
 @cctv_bp.patch("/cctvs/<int:cctv_id>")
+@require_roles(*CCTV_ADMIN_ROLES)
 def update_cctv(cctv_id: int):
     # 설명: `item`에 `db.session.get` 호출 결과를 저장해 다음 처리에서 사용한다.
     item = db.session.get(Cctv, cctv_id)
@@ -684,6 +811,7 @@ def update_cctv(cctv_id: int):
 
 # 설명: `delete_cctv` 함수는 대상을 삭제 또는 소프트 삭제 처리하는 함수다.
 @cctv_bp.delete("/cctvs/<int:cctv_id>")
+@require_roles(*CCTV_DELETE_ROLES)
 def delete_cctv(cctv_id: int):
     # 설명: `item`에 `db.session.get` 호출 결과를 저장해 다음 처리에서 사용한다.
     item = db.session.get(Cctv, cctv_id)
@@ -739,6 +867,7 @@ def get_cctv_rois(cctv_identifier: str):
         "items": [_serialize_roi(roi) for roi in rois],
     }), 200
 @cctv_bp.put("/cctvs/<cctv_identifier>/rois")
+@require_roles(*CCTV_ADMIN_ROLES)
 def put_cctv_rois(cctv_identifier: str):
     # 숫자 PK와 CCTV 코드(CCTV-001)를 모두 지원합니다.
     item = _get_cctv_by_id_or_code(cctv_identifier)
@@ -755,8 +884,6 @@ def put_cctv_rois(cctv_identifier: str):
     if not isinstance(items_payload, list):
         return jsonify({"success": False, "error": "items must be a list."}), 400
 
-    valid_roi_types = {"DRIVING_LANE", "SHOULDER", "IGNORE_ZONE"}
-
     try:
         now = _utc_now_naive()
         saved_rois = []
@@ -766,12 +893,11 @@ def put_cctv_rois(cctv_identifier: str):
                 raise ValueError("Each ROI item must be an object.")
 
             roi_type = str(roi_data.get("roi_type") or "").strip().upper()
-            if roi_type not in valid_roi_types:
-                raise ValueError(f"Invalid roi_type: {roi_type!r}. Must be one of {sorted(valid_roi_types)}.")
+            if roi_type not in VALID_ROI_TYPES:
+                raise ValueError(f"Invalid roi_type: {roi_type!r}. Must be one of {sorted(VALID_ROI_TYPES)}.")
 
             polygon_json = roi_data.get("polygon_json")
-            if not isinstance(polygon_json, list):
-                raise ValueError("polygon_json must be a list of coordinate pairs.")
+            polygon_json = _validate_roi_polygon(polygon_json)
 
             is_active_raw = roi_data.get("is_active", True)
             is_active = 0 if is_active_raw in (False, 0, "false", "0", "no") else 1
@@ -808,6 +934,11 @@ def put_cctv_rois(cctv_identifier: str):
             ~CctvRoi.roi_type.in_(updated_types),
         ).update({"is_active": 0, "updated_at": now}, synchronize_session="fetch")
 
+        _add_security_log("CCTV_ROI_UPDATED", "CCTV", cctv_id, {
+            "cctv_id": cctv_id,
+            "roi_types": sorted(updated_types),
+            "roi_count": len(saved_rois),
+        })
         db.session.commit()
     except ValueError as exc:
         db.session.rollback()
@@ -892,6 +1023,7 @@ def get_cctv_slots():
 
 # 설명: `put_cctv_slots` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
 @cctv_bp.put("/cctv-slots")
+@require_roles(*CCTV_ADMIN_ROLES)
 def put_cctv_slots():
     # 설명: `payload`에 `request.get_json` 호출 결과를 저장해 다음 처리에서 사용한다.
     payload = request.get_json(silent=True)
@@ -984,6 +1116,9 @@ def put_cctv_slots():
 def list_cameras():
     # 설명: `_is_its_source_request()` 조건 결과에 따라 실행 경로를 분기한다.
     if _is_its_source_request():
+        auth_error = _ai_source_auth_error()
+        if auth_error:
+            return auth_error
         # 설명: 실패 가능성이 있는 작업을 실행하고 아래 예외 처리에서 오류 응답이나 정리를 담당한다.
         try:
             # 설명: `items`에 `_fetch_its_cctvs_from_ai_vm` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -1041,6 +1176,7 @@ def get_camera(camera_id: str):
 
 
 @cctv_bp.post("/cctvs/<camera_id>/manual-events")
+@require_roles(*CCTV_ADMIN_ROLES)
 def create_manual_event(camera_id: str):
     cctv = _get_cctv_by_id_or_code(camera_id)
     if cctv is None:
@@ -1058,15 +1194,23 @@ def create_manual_event(camera_id: str):
         or ""
     ).strip()
 
-    ai_payload = {
-        "camera_id": cctv.cctv_code,
-        "source_url": cctv.stream_url or "",
-        "name": cctv.cctv_name,
-    }
+    extra_body = request.get_json(silent=True) or {}
+    if not isinstance(extra_body, dict):
+        return jsonify({"success": False, "error": "JSON object body is required."}), 400
 
-    extra_body = request.get_json(silent=True)
-    if isinstance(extra_body, dict):
-        ai_payload.update(extra_body)
+    try:
+        ai_payload = _build_manual_event_payload(cctv, extra_body)
+        _add_security_log("CCTV_MANUAL_EVENT_REQUESTED", "CCTV", cctv.id, {
+            "user_id": _current_user_id(),
+            "cctv_id": cctv.id,
+            "camera_id": cctv.cctv_code,
+            "event_type": ai_payload["event_type"],
+            "source": ai_payload["source"],
+        })
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(exc)}), 400
 
     headers = {"Content-Type": "application/json"}
     if internal_token:
