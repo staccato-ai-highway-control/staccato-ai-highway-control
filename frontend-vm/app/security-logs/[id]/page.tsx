@@ -111,17 +111,6 @@ export default function SecurityLogDetailPage({ params }: { params: Promise<{ id
       setPreviewable(canPreview);
 
       if (!canPreview) {
-        if (process.env.NODE_ENV === "development") {
-          console.log("[security-log-preview]", {
-            id: nextResource.id,
-            category: nextResource.category,
-            file_name: nextResource.file_name,
-            file_type: nextResource.file_type,
-            previewable: canPreview,
-            blob_type: null,
-            blob_size: null,
-          });
-        }
         setPreview(PREVIEW_UNAVAILABLE);
         setLoading(false);
         return;
@@ -140,23 +129,9 @@ export default function SecurityLogDetailPage({ params }: { params: Promise<{ id
         const isBlob = typeof Blob !== "undefined" && blob instanceof Blob;
         setBlobType(isBlob ? blob.type : null);
         setBlobSize(isBlob ? blob.size : null);
-        if (process.env.NODE_ENV === "development") {
-          console.log("[security-log-preview]", {
-            id: nextResource.id,
-            category: nextResource.category,
-            file_name: nextResource.file_name,
-            file_type: nextResource.file_type,
-            previewable: canPreview,
-            blob_type: isBlob ? blob.type : null,
-            blob_size: isBlob ? blob.size : null,
-          });
-        }
         if (!isBlob) throw new Error("다운로드 응답이 Blob 형식이 아닙니다.");
         const text = await blob.text();
         setTextLength(text.length);
-        if (process.env.NODE_ENV === "development") {
-          console.log("[security-log-preview:text]", text.slice(0, 200));
-        }
         setPreview(blob.size === 0 || text.length === 0 ? EMPTY_PREVIEW : text);
       } catch (error) {
         if (!disposed) {

@@ -90,6 +90,11 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return queryString ? `?${queryString}` : "";
 }
 
+function buildCctvStreamUrl(id: string, cctvCode?: string | number | null) {
+  const cctvId = String(cctvCode ?? id).trim();
+  return cctvId ? `/api/cctvs/${encodeURIComponent(cctvId)}/stream` : undefined;
+}
+
 // 코드 설명: normalizeStatus 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
 function normalizeStatus(status?: string, active?: boolean | number) {
   // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: status === "ACTIVE"
@@ -132,7 +137,7 @@ function normalizeCctv(raw: RawCctv): Cctv {
     locationName,
     direction: raw.direction ?? "-",
     status: normalizeStatus(raw.status, isActive),
-    streamUrl: raw.streamUrl ?? raw.stream_url,
+    streamUrl: buildCctvStreamUrl(id, cctvCode),
     imageUrl: raw.imageUrl,
     isLive: Boolean(raw.streamUrl ?? raw.stream_url),
     isAiDetected: raw.isAiDetected ?? false,
@@ -312,7 +317,6 @@ export async function saveCameraSlotConfig(config: CameraSlotConfig[]) {
   // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
   const response = await apiClient<CctvSlotListResponse>("/api/cctv-slots", {
     method: "PUT",
-    auth: false,
     body: payload,
   });
 
@@ -398,7 +402,6 @@ export async function saveCctvRois(cctvId: string, config: CameraRoiConfig): Pro
 
   await apiClient(`/api/cctvs/${cctvId}/rois`, {
     method: "PUT",
-    auth: false,
     body: { items },
   });
 }
@@ -406,7 +409,6 @@ export async function saveCctvRois(cctvId: string, config: CameraRoiConfig): Pro
 export async function createManualCctvEvent(cameraId: string): Promise<void> {
   await apiClient(`/api/cctvs/${cameraId}/manual-events`, {
     method: "POST",
-    auth: false,
     body: {},
   });
 }

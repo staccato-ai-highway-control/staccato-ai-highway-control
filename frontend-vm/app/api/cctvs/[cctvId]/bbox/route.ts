@@ -2,59 +2,71 @@
  * 파일 역할: CCTV 요청을 백엔드 또는 외부 미디어 서버로 중계하는 Next.js Route Handler입니다.
  * 유지보수 참고: 브라우저에 노출할 응답 상태와 헤더를 정리하며, 서버 주소나 내부 오류 정보가 그대로 전달되지 않도록 주의합니다.
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { authFailureResponse, requireServerAuth } from "@/lib/serverAuth";
 
-// 코드 설명: dynamic 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
 export const dynamic = "force-dynamic";
 
-// 코드 설명: AI_VM_BASE_URL 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-const AI_VM_BASE_URL =
-  process.env.AI_VM_BASE_URL ||
-  process.env.NEXT_PUBLIC_AI_VM_BASE_URL ||
-  "http://192.168.0.186:5001";
+const FLASK_API_BASE_URL =
+  process.env.FLASK_API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "http://192.168.0.187:5000";
 
-// 코드 설명: GET 함수가 입력값을 처리하고 호출부에 필요한 결과를 반환합니다.
+const CCTV_ACCESS_ROLES = ["SUPER_ADMIN", "CONTROL_ADMIN", "DISPATCH_ADMIN"] as const;
+
+function normalizeAiCameraId(cctvId: string) {
+  const decoded = decodeURIComponent(cctvId);
+  const match = decoded.match(/^CCTV-0*([1-9]\d*)$/i);
+
+  if (match) {
+    return `camera-${Number(match[1])}`;
+  }
+
+  return decoded;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ cctvId: string }> }
 ) {
-  // 코드 설명: { cctvId } 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
+  const auth = await requireServerAuth(request, CCTV_ACCESS_ROLES);
+  if (!auth.ok) return authFailureResponse(auth);
+
   const { cctvId } = await context.params;
-  // 코드 설명: upstreamUrl 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
+  const cameraId = normalizeAiCameraId(cctvId);
   const upstreamUrl = new URL(
-    `/internal/cameras/${encodeURIComponent(cctvId)}/detections`,
-    AI_VM_BASE_URL.replace(/\/$/, "")
+    `/api/ai-media/cctvs/${encodeURIComponent(cameraId)}/detections`,
+    FLASK_API_BASE_URL.replace(/\/$/, "")
   );
 
-  // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: request.nextUrl.searchParams.forEach((value, key) => { upstreamUrl.sear…
   request.nextUrl.searchParams.forEach((value, key) => {
-    // 코드 설명: 이 명령을 실행해 현재 단계의 부수 효과를 반영합니다: upstreamUrl.searchParams.set(key, value);
     upstreamUrl.searchParams.set(key, value);
   });
 
-  // 코드 설명: 비동기 요청이나 변환 중 발생할 수 있는 예외를 잡기 위해 보호된 실행 구간을 시작합니다.
   try {
-    // 코드 설명: response 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
     const response = await fetch(upstreamUrl, {
       method: "GET",
       cache: "no-store",
+      headers: { Authorization: `Bearer ${auth.token}`, Accept: "application/json" },
     });
 
-    // 코드 설명: data 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
-    const data = await response.json().catch(() => null);
+    if (!response.body) {
+      return Response.json(
+        { success: false, error: "CCTV detections not available" },
+        { status: response.status || 502 }
+      );
+    }
 
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: NextResponse.json(data ?? { success: false, error: "Invalid AI VM respo…
-    return NextResponse.json(data ?? { success: false, error: "Invalid AI VM response" }, {
+    return new Response(response.body, {
       status: response.status,
-    });
-  } catch (error) {
-    // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: NextResponse.json( { success: false, camera_id: cctvId, error: error in…
-    return NextResponse.json(
-      {
-        success: false,
-        camera_id: cctvId,
-        error: error instanceof Error ? error.message : "Failed to fetch CCTV detections",
+      headers: {
+        "Content-Type": response.headers.get("content-type") || "application/json",
+        "Cache-Control": "no-store",
       },
+    });
+  } catch {
+    return Response.json(
+      { success: false, error: "Failed to fetch CCTV detections" },
       { status: 502 }
     );
   }
