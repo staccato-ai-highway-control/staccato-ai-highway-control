@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 from app.extensions import db
 from app.models import (
@@ -69,9 +71,106 @@ class ReportModelComparisonService:
         }
 
     @staticmethod
-    def _serialize_run(run: ReportModelComparisonRun) -> dict:
+    def _is_private_ai_media_url(value) -> bool:
+        if not isinstance(value, str) or not value.strip():
+            return False
+
+        try:
+            parsed = urlsplit(value.strip())
+            return parsed.scheme in {"http", "https"} and parsed.port == 5001
+        except ValueError:
+            return False
+
+    @classmethod
+    def _comparison_media_type(cls, run: ReportModelComparisonRun) -> str:
+        summary = (
+            run.result_summary
+            if isinstance(run.result_summary, dict)
+            else {}
+        )
+        annotated_media = summary.get("annotated_media")
+        annotated_media = (
+            annotated_media
+            if isinstance(annotated_media, dict)
+            else {}
+        )
+
+        if (
+            summary.get("annotated_video_url")
+            or annotated_media.get("video_url")
+        ):
+            return "video"
+
+        if (
+            summary.get("annotated_image_url")
+            or annotated_media.get("image_url")
+        ):
+            return "snapshot"
+
+        return "video"
+
+    @classmethod
+    def _browser_safe_comparison_result_summary(
+        cls,
+        result_summary,
+        run: ReportModelComparisonRun,
+    ):
+        if not isinstance(result_summary, dict):
+            return result_summary
+
+        from app.modules.ai_media.service import (
+            gateway_model_comparison_media_url,
+        )
+
+        data = deepcopy(result_summary)
+
+        def replace_private_url(container: dict, key: str, media_type: str):
+            value = container.get(key)
+            if cls._is_private_ai_media_url(value):
+                container[key] = gateway_model_comparison_media_url(
+                    run.id,
+                    media_type,
+                )
+
+        replace_private_url(data, "annotated_video_url", "video")
+        replace_private_url(data, "annotated_image_url", "snapshot")
+
+        annotated_media = data.get("annotated_media")
+        if isinstance(annotated_media, dict):
+            replace_private_url(annotated_media, "video_url", "video")
+            replace_private_url(annotated_media, "image_url", "snapshot")
+
+        replace_private_url(
+            data,
+            "annotated_media_url",
+            cls._comparison_media_type(run),
+        )
+
+        return data
+
+    @classmethod
+    def _serialize_run(cls, run: ReportModelComparisonRun) -> dict:
+        from app.modules.ai_media.service import (
+            gateway_model_comparison_media_url,
+        )
+
         data = run.to_dict()
         data["status"] = run.run_status
+
+        if cls._is_private_ai_media_url(data.get("annotated_media_url")):
+            data["annotated_media_url"] = (
+                gateway_model_comparison_media_url(
+                    run.id,
+                    cls._comparison_media_type(run),
+                )
+            )
+
+        data["result_summary"] = (
+            cls._browser_safe_comparison_result_summary(
+                data.get("result_summary"),
+                run,
+            )
+        )
         return data
 
     @classmethod

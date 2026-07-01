@@ -17,12 +17,21 @@ import requests
 from flask import Response, current_app, jsonify, request, stream_with_context
 
 from app.extensions import db
-from app.models import AiEvent, Cctv, IncidentReport, ReportAnalysisJob
+from app.models import (
+    AiEvent,
+    Cctv,
+    IncidentReport,
+    ReportAnalysisJob,
+    ReportModelComparisonBatch,
+    ReportModelComparisonRun,
+)
 from app.modules.report_upload.service import ReportUploadService
 
 AI_MEDIA_ADMIN_ROLES = {"SUPER_ADMIN", "ADMIN", "CONTROL_ADMIN", "CONTROL_CENTER"}
 EVENT_MEDIA_TYPES = {"snapshot", "video", "stream"}
 REPORT_MEDIA_TYPES = {"snapshot", "video"}
+MODEL_COMPARISON_MEDIA_TYPES = {"snapshot", "video"}
+MODEL_COMPARISON_MEDIA_ADMIN_ROLES = {"SUPER_ADMIN", "CONTROL_ADMIN"}
 STREAM_MEDIA_TYPES = {"stream"}
 CAMERA_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,100}$")
 CAMERA_WORKER_ID_PATTERN = re.compile(r"^camera-(\d+)$", re.IGNORECASE)
@@ -94,6 +103,12 @@ def gateway_report_media_url(job_id: int, media_type: str) -> str:
     return f"/api/ai-media/report-analysis/jobs/{job_id}/{media_type}"
 
 
+def gateway_model_comparison_media_url(run_id: int, media_type: str) -> str:
+    return (
+        f"/api/ai-media/report-model-comparisons/runs/{run_id}/{media_type}"
+    )
+
+
 def gateway_cctv_stream_url(camera_id: str) -> str:
     return f"/api/ai-media/cctvs/{camera_id}/stream.mjpeg"
 
@@ -116,6 +131,13 @@ def has_cctv_stream_access(user) -> bool:
 
 def has_report_media_access(report: IncidentReport, user) -> bool:
     return bool(user and ReportUploadService._can_manage_report(report, user))
+
+
+def has_model_comparison_media_access(user) -> bool:
+    return bool(
+        user
+        and getattr(user, "role", None) in MODEL_COMPARISON_MEDIA_ADMIN_ROLES
+    )
 
 
 def event_media_target(event_id: str, media_type: str, user) -> UpstreamTarget:
@@ -514,3 +536,69 @@ def _default_mimetype(media_type: str) -> str:
     if media_type == "detections":
         return "application/json"
     return "application/octet-stream"
+
+
+def _comparison_run_media_value(
+    run: ReportModelComparisonRun,
+    media_type: str,
+):
+    summary = run.result_summary if isinstance(run.result_summary, dict) else {}
+    annotated_media = summary.get("annotated_media")
+    annotated_media = annotated_media if isinstance(annotated_media, dict) else {}
+
+    keys = (
+        (
+            "annotated_image_url",
+            "image_url",
+            "snapshot_url",
+            "snapshot_path",
+            "preview_url",
+        )
+        if media_type == "snapshot"
+        else (
+            "annotated_video_url",
+            "video_url",
+            "clip_url",
+            "clip_path",
+            "output_video_url",
+            "result_video_url",
+        )
+    )
+
+    for key in keys:
+        value = summary.get(key)
+        if value:
+            return value
+
+        value = annotated_media.get(key)
+        if value:
+            return value
+
+    raise AiMediaError("AI media URL is not available.", 404)
+
+
+def comparison_run_media_target(
+    run_id: int,
+    media_type: str,
+    user,
+) -> UpstreamTarget:
+    if media_type not in MODEL_COMPARISON_MEDIA_TYPES:
+        raise AiMediaError("Unsupported media_type.", 404)
+
+    if not has_model_comparison_media_access(user):
+        raise AiMediaError("Permission denied.", 403)
+
+    run = db.session.get(ReportModelComparisonRun, run_id)
+    if run is None:
+        raise AiMediaError("Model comparison run not found.", 404)
+
+    batch = db.session.get(ReportModelComparisonBatch, run.batch_id)
+    if batch is None:
+        raise AiMediaError("Model comparison batch not found.", 404)
+
+    report = db.session.get(IncidentReport, batch.report_id)
+    if report is None:
+        raise AiMediaError("Report not found.", 404)
+
+    value = _comparison_run_media_value(run, media_type)
+    return UpstreamTarget(_validate_ai_vm_url(value), media_type)

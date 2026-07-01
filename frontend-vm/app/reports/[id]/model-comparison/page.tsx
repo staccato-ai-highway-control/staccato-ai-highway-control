@@ -159,7 +159,10 @@ function MetricChart({
 // ─── 결과 카드 ─────────────────────────────────────────────────────────────
 
 function isVideoUrl(url: string) {
-  return /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url);
+  return (
+    /\.(mp4|webm|ogg|mov|avi|mkv)(\?|$)/i.test(url) ||
+    /\/video(?:\?|$)/i.test(url)
+  );
 }
 
 function ResultCard({
