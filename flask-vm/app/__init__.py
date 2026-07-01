@@ -75,6 +75,7 @@ from app.modules.bug_report import bug_report_bp
 from app.modules.replay import replay_bp
 # 설명: app.modules.resources에서 resources_bp 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.resources import resources_bp
+from app.modules.security_logs import security_logs_bp
 
 
 
@@ -173,6 +174,7 @@ def register_blueprints(app):
     app.register_blueprint(replay_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     app.register_blueprint(resources_bp)
+    app.register_blueprint(security_logs_bp)
 
 
 

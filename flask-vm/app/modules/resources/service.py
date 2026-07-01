@@ -43,6 +43,7 @@ MAX_SIZE = 100
 DEFAULT_VISIBILITY = "ADMIN_ALL"
 # 설명: `MAX_RESOURCE_FILE_SIZE`에 50 * 1024 * 1024 표현식의 계산 결과를 저장한다.
 MAX_RESOURCE_FILE_SIZE = 50 * 1024 * 1024
+ACCESS_LOG_CATEGORY = "ACCESS_LOG"
 
 
 # 설명: `list_resources` 함수는 조건에 맞는 목록을 조회하는 함수다.
@@ -54,6 +55,7 @@ def list_resources(args, current_user=None) -> tuple[dict, int]:
 
     # 설명: `query`에 `ProjectResource.query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
     query = ProjectResource.query.filter(ProjectResource.deleted_at.is_(None))
+    query = query.filter(ProjectResource.category != ACCESS_LOG_CATEGORY)
 
     # 설명: `category`에 `_normalize_choice` 호출 결과를 저장해 다음 처리에서 사용한다.
     category = _normalize_choice(args.get("category"))
@@ -64,6 +66,8 @@ def list_resources(args, current_user=None) -> tuple[dict, int]:
             # 설명: 호출자에게 (_invalid_choice('category', ALLOWED_RESOURCE_CATEGORIES), 400) 값을 함수 결과로 반환한다.
             return _invalid_choice("category", ALLOWED_RESOURCE_CATEGORIES), 400
         # 설명: `query`에 `query.filter` 호출 결과를 저장해 다음 처리에서 사용한다.
+        if category == ACCESS_LOG_CATEGORY:
+            return {"message": "Resource not found."}, 404
         query = query.filter(ProjectResource.category == category)
 
     # 설명: `keyword`에 `_clean_text` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -101,7 +105,7 @@ def get_resource_detail(resource_id: int, current_user=None) -> tuple[dict, int]
     # 설명: `resource`에 `_get_active_resource` 호출 결과를 저장해 다음 처리에서 사용한다.
     resource = _get_active_resource(resource_id)
     # 설명: `resource is None` 조건 결과에 따라 실행 경로를 분기한다.
-    if resource is None:
+    if resource is None or _is_access_log(resource):
         # 설명: 호출자에게 ({'message': 'Resource not found.'}, 404) 값을 함수 결과로 반환한다.
         return {"message": "Resource not found."}, 404
 
@@ -126,6 +130,9 @@ def create_resource(form, file, current_user) -> tuple[dict, int]:
         return _invalid_choice("category", ALLOWED_RESOURCE_CATEGORIES), 400
 
     # 설명: `visibility`에 _normalize_choice(form.get('visibility')) or DEFAULT_VISIBILITY 표현식의 계산 결과를 저장한다.
+    if category == ACCESS_LOG_CATEGORY:
+        return {"message": "ACCESS_LOG resources cannot be created through /api/resources."}, 403
+
     visibility = _normalize_choice(form.get("visibility")) or DEFAULT_VISIBILITY
     # 설명: `visibility not in ALLOWED_RESOURCE_VISIBILITIES` 조건 결과에 따라 실행 경로를 분기한다.
     if visibility not in ALLOWED_RESOURCE_VISIBILITIES:
@@ -179,7 +186,7 @@ def update_resource(resource_id: int, form, file, current_user) -> tuple[dict, i
     # 설명: `resource`에 `_get_active_resource` 호출 결과를 저장해 다음 처리에서 사용한다.
     resource = _get_active_resource(resource_id)
     # 설명: `resource is None` 조건 결과에 따라 실행 경로를 분기한다.
-    if resource is None:
+    if resource is None or _is_access_log(resource):
         # 설명: 호출자에게 ({'message': 'Resource not found.'}, 404) 값을 함수 결과로 반환한다.
         return {"message": "Resource not found."}, 404
 
@@ -213,6 +220,8 @@ def update_resource(resource_id: int, form, file, current_user) -> tuple[dict, i
             # 설명: 호출자에게 (_invalid_choice('category', ALLOWED_RESOURCE_CATEGORIES), 400) 값을 함수 결과로 반환한다.
             return _invalid_choice("category", ALLOWED_RESOURCE_CATEGORIES), 400
         # 설명: `resource.category`에 category 표현식의 계산 결과를 저장한다.
+        if category == ACCESS_LOG_CATEGORY:
+            return {"message": "ACCESS_LOG resources cannot be set through /api/resources."}, 403
         resource.category = category
 
     # 설명: `'visibility' in form` 조건 결과에 따라 실행 경로를 분기한다.
@@ -265,7 +274,7 @@ def delete_resource(resource_id: int, current_user) -> tuple[dict, int]:
     # 설명: `resource`에 `_get_active_resource` 호출 결과를 저장해 다음 처리에서 사용한다.
     resource = _get_active_resource(resource_id)
     # 설명: `resource is None` 조건 결과에 따라 실행 경로를 분기한다.
-    if resource is None:
+    if resource is None or _is_access_log(resource):
         # 설명: 호출자에게 ({'message': 'Resource not found.'}, 404) 값을 함수 결과로 반환한다.
         return {"message": "Resource not found."}, 404
 
@@ -295,7 +304,7 @@ def download_resource(resource_id: int):
     # 설명: `resource`에 `_get_active_resource` 호출 결과를 저장해 다음 처리에서 사용한다.
     resource = _get_active_resource(resource_id)
     # 설명: `resource is None` 조건 결과에 따라 실행 경로를 분기한다.
-    if resource is None:
+    if resource is None or _is_access_log(resource):
         # 설명: 호출자에게 ({'message': 'Resource not found.'}, 404) 값을 함수 결과로 반환한다.
         return {"message": "Resource not found."}, 404
 
@@ -498,3 +507,8 @@ def _positive_int(value, default: int, maximum: int) -> int:
 def _utc_now_naive() -> datetime:
     # 설명: 호출자에게 datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0) 값을 함수 결과로 반환한다.
     return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+
+
+
+def _is_access_log(resource) -> bool:
+    return str(getattr(resource, "category", "") or "").upper() == ACCESS_LOG_CATEGORY
