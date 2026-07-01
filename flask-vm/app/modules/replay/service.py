@@ -7,6 +7,7 @@ from __future__ import annotations
 
 # 설명: pathlib에서 Path 이름을 가져와 아래 로직에서 재사용한다.
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 # 설명: sqlalchemy에서 or_ 이름을 가져와 아래 로직에서 재사용한다.
 from sqlalchemy import or_
 
@@ -24,6 +25,8 @@ from app.models import (
     RealtimeEvent,
 )
 
+
+from app.models.ai_event_models import AiEvent
 
 # 설명: `REPORT_SOURCE`의 기준값 또는 기본값을 'REPORT'로 설정한다.
 REPORT_SOURCE = "REPORT"
@@ -181,9 +184,10 @@ def serialize_replay_item(incident) -> dict:
     # 설명: `snapshot`에 `_latest_snapshot` 호출 결과를 저장해 다음 처리에서 사용한다.
     snapshot = _latest_snapshot(incident.id)
     # 설명: `snapshot_url`에 `resolve_snapshot_url` 호출 결과를 저장해 다음 처리에서 사용한다.
-    snapshot_url = resolve_snapshot_url(incident)
+    source_type = determine_source_type(incident)
+    snapshot_url = resolve_snapshot_url(incident, source_type=source_type)
     # 설명: `replay_url`에 `resolve_replay_url` 호출 결과를 저장해 다음 처리에서 사용한다.
-    replay_url = resolve_replay_url(incident)
+    replay_url = resolve_replay_url(incident, source_type=source_type)
     # 설명: `has_video`에 _is_video_attachment(attachment) or bool(replay_url) 표현식의 계산 결과를 저장한다.
     has_video = _is_video_attachment(attachment) or bool(replay_url)
 
@@ -195,7 +199,7 @@ def serialize_replay_item(incident) -> dict:
         "description": _description(incident, report),
         "incident_type": incident.incident_type,
         "incident_source_type": _incident_source_type(incident),
-        "source_type": determine_source_type(incident),
+        "source_type": source_type,
         "status": incident.incident_status,
         "risk_level": incident.risk_level,
         "risk_score": _risk_score(report),
@@ -245,6 +249,46 @@ def determine_source_type(incident) -> str:
 def _is_external_url(value: str | None) -> bool:
     # 설명: 호출자에게 bool(value and (value.startswith('http://') or value.startswith('https://'))) 값을 함수 결과로 반환한다.
     return bool(value and (value.startswith("http://") or value.startswith("https://")))
+
+
+def _is_private_ai_media_url(value: str | None) -> bool:
+    """Browser에 노출하면 안 되는 AI VM 직접 media URL인지 판별한다."""
+    if not value:
+        return False
+
+    try:
+        parsed = urlsplit(value)
+        return parsed.scheme in {"http", "https"} and parsed.port == 5001
+    except ValueError:
+        return False
+
+
+def _latest_ai_event_for_replay(
+    incident,
+    source_type: str | None = None,
+) -> AiEvent | None:
+    """AI stream 기반 Incident에 연결된 AiEvent만 반환한다."""
+    if (source_type or determine_source_type(incident)) == REPORT_SOURCE:
+        return None
+
+    incident_code = getattr(incident, "incident_code", None)
+    if not incident_code:
+        return None
+
+    return db.session.get(AiEvent, incident_code)
+
+
+def _ai_event_gateway_url(
+    ai_event: AiEvent | None,
+    media_type: str,
+) -> str | None:
+    """AI Event의 canonical Flask Gateway media URL을 만든다."""
+    event_id = getattr(ai_event, "event_id", None)
+    if not event_id:
+        return None
+
+    safe_event_id = quote(str(event_id), safe="._:-")
+    return f"/api/ai-media/events/{safe_event_id}/{media_type}"
 
 
 # 설명: `_storage_roots` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
@@ -354,6 +398,9 @@ def _resolve_storage_media_url(path_value: str | None) -> str | None:
         # 설명: 호출자에게 None 값을 함수 결과로 반환한다.
         return None
 
+    if _is_private_ai_media_url(value):
+        return None
+
     # 설명: `_is_external_url(value)` 조건 결과에 따라 실행 경로를 분기한다.
     if _is_external_url(value):
         # 설명: 호출자에게 value 값을 함수 결과로 반환한다.
@@ -414,7 +461,14 @@ def _latest_realtime_event(incident_id: int) -> RealtimeEvent | None:
 
 
 # 설명: `resolve_snapshot_url` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
-def resolve_snapshot_url(incident) -> str | None:
+def resolve_snapshot_url(
+    incident,
+    source_type: str | None = None,
+) -> str | None:
+    ai_event = _latest_ai_event_for_replay(incident, source_type)
+    if ai_event is not None:
+        return _ai_event_gateway_url(ai_event, "snapshot")
+
     # 설명: `snapshot`에 `_latest_snapshot` 호출 결과를 저장해 다음 처리에서 사용한다.
     snapshot = _latest_snapshot(incident.id)
     # 설명: `snapshot is None` 조건 결과에 따라 실행 경로를 분기한다.
@@ -427,7 +481,14 @@ def resolve_snapshot_url(incident) -> str | None:
 
 
 # 설명: `resolve_replay_url` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
-def resolve_replay_url(incident) -> str | None:
+def resolve_replay_url(
+    incident,
+    source_type: str | None = None,
+) -> str | None:
+    ai_event = _latest_ai_event_for_replay(incident, source_type)
+    if ai_event is not None and getattr(ai_event, "video_url", None):
+        return _ai_event_gateway_url(ai_event, "video")
+
     # 설명: `realtime_event`에 `_latest_realtime_event` 호출 결과를 저장해 다음 처리에서 사용한다.
     realtime_event = _latest_realtime_event(incident.id)
 
