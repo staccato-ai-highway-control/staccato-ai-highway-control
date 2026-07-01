@@ -222,6 +222,7 @@ def test_event_media_auth_role_and_bearer_header(client, app, users_and_headers,
 
     assert response.status_code == 200
     assert response.data == b"jpeg-bytes"
+    assert captured["url"].endswith("/events/evt_media.jpg")
     assert captured["headers"]["Authorization"] == "Bearer test-internal-token"
     assert "Authorization" not in users_and_headers["admin_header"] or captured["headers"]["Authorization"] != users_and_headers["admin_header"]["Authorization"]
     assert captured["stream"] is True
@@ -238,13 +239,48 @@ def test_missing_internal_token_fails_safely(client, app, users_and_headers):
     assert "test-internal-token" not in response.get_data(as_text=True)
 
 
-def test_path_traversal_is_blocked(client, app, users_and_headers):
+def test_event_media_ignores_untrusted_legacy_snapshot_url_and_uses_canonical_target(
+    client,
+    app,
+    users_and_headers,
+    monkeypatch,
+):
     with app.app_context():
-        _create_event(event_id="evt_traversal", snapshot_url="http://127.0.0.1:5001/events/%2e%2e/secret.jpg")
+        _create_event(
+            event_id="evt_traversal",
+            snapshot_url="http://127.0.0.1:5001/events/%2e%2e/secret.jpg",
+        )
         db.session.commit()
 
-    response = client.get("/api/ai-media/events/evt_traversal/snapshot", headers=users_and_headers["admin_header"])
-    assert response.status_code == 400
+    captured = {}
+
+    def fake_get(url, headers, stream, timeout):
+        captured.update(
+            {
+                "url": url,
+                "headers": headers,
+                "stream": stream,
+                "timeout": timeout,
+            }
+        )
+        return FakeUpstreamResponse(
+            [b"jpeg-bytes"],
+            headers={"Content-Type": "image/jpeg"},
+        )
+
+    monkeypatch.setattr("app.modules.ai_media.service.requests.get", fake_get)
+
+    response = client.get(
+        "/api/ai-media/events/evt_traversal/snapshot",
+        headers=users_and_headers["admin_header"],
+    )
+
+    assert response.status_code == 200
+    assert response.data == b"jpeg-bytes"
+    assert captured["url"].endswith("/events/evt_traversal.jpg")
+    assert "%2e%2e" not in captured["url"].lower()
+    assert captured["headers"]["Authorization"] == "Bearer test-internal-token"
+    assert captured["stream"] is True
 
 
 def test_mjpeg_chunk_streaming_and_close(client, app, users_and_headers, monkeypatch):
@@ -349,7 +385,7 @@ def test_mp4_range_is_forwarded_and_206_headers_preserved(client, app, users_and
     captured = {}
 
     def fake_get(url, headers, stream, timeout):
-        captured["headers"] = headers
+        captured.update({"url": url, "headers": headers})
         return FakeUpstreamResponse(
             [b"partial-video"],
             status_code=206,
@@ -368,6 +404,7 @@ def test_mp4_range_is_forwarded_and_206_headers_preserved(client, app, users_and
     )
 
     assert response.status_code == 206
+    assert captured["url"].endswith("/events/evt_range.mp4")
     assert captured["headers"]["Range"] == "bytes=0-11"
     assert response.headers["Content-Range"] == "bytes 0-11/100"
     assert response.headers["Accept-Ranges"] == "bytes"
