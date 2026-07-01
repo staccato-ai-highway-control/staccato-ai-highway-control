@@ -5,6 +5,8 @@
 # 설명: __future__에서 annotations 이름을 가져와 아래 로직에서 재사용한다.
 from __future__ import annotations
 
+from urllib.parse import quote, urlsplit
+
 # 설명: logging 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import logging
 # 설명: uuid 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
@@ -22,6 +24,7 @@ from app.models import DetectionLog, Incident, IncidentSnapshot, RealtimeEvent
 from app.modules.socketio import emitters as socket_emitters
 # 설명: app.utils.bbox에서 build_bbox_metadata 이름을 가져와 아래 로직에서 재사용한다.
 from app.utils.bbox import build_bbox_metadata
+from app.modules.ai_media.service import gateway_event_media_url
 
 
 # 설명: `logger`에 `logging.getLogger` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -243,6 +246,43 @@ def _safe_cctv_id(payload: dict):
 
 
 # 설명: `_build_socket_payload` 함수는 후속 처리에 사용할 구조를 조립하는 함수다.
+
+def _is_private_ai_media_url(value: str | None) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+
+    try:
+        parsed = urlsplit(value)
+        return parsed.scheme in {"http", "https"} and parsed.port == 5001
+    except ValueError:
+        return False
+
+
+def _browser_safe_event_media_url(
+    value: str | None,
+    *,
+    source_payload: dict,
+    incident_code: str | None,
+    media_type: str,
+) -> str | None:
+    if not _is_private_ai_media_url(value):
+        return value
+
+    event_id = (
+        source_payload.get("event_id")
+        or source_payload.get("source_event_id")
+        or source_payload.get("ai_event_id")
+        or incident_code
+    )
+    if not event_id:
+        return None
+
+    return gateway_event_media_url(
+        quote(str(event_id), safe="._:-"),
+        media_type,
+    )
+
+
 def _build_socket_payload(
     incident: Incident,
     detection_log: DetectionLog,
@@ -250,6 +290,24 @@ def _build_socket_payload(
     source_payload: dict,
 ) -> dict:
     # 설명: 호출자에게 {'type': 'INCIDENT_CREATED', 'event_name': 'incident.created', 'incident_id': i... 값을 함수 결과로 반환한다.
+    snapshot_path = snapshot.file_path if snapshot else (
+        source_payload.get("snapshot_path") or source_payload.get("snapshot_url")
+    )
+    clip_path = source_payload.get("clip_path") or source_payload.get("video_url")
+
+    snapshot_path = _browser_safe_event_media_url(
+        snapshot_path,
+        source_payload=source_payload,
+        incident_code=incident.incident_code,
+        media_type="snapshot",
+    )
+    clip_path = _browser_safe_event_media_url(
+        clip_path,
+        source_payload=source_payload,
+        incident_code=incident.incident_code,
+        media_type="video",
+    )
+
     return {
         "type": "INCIDENT_CREATED",
         "event_name": "incident.created",
@@ -274,8 +332,8 @@ def _build_socket_payload(
             frame_width=source_payload.get("frame_width"),
             frame_height=source_payload.get("frame_height"),
         ),
-        "snapshot_path": snapshot.file_path if snapshot else source_payload.get("snapshot_path"),
-        "clip_path": source_payload.get("clip_path"),
+        "snapshot_path": snapshot_path,
+        "clip_path": clip_path,
     }
 
 
