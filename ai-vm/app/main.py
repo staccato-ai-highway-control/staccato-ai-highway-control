@@ -708,7 +708,10 @@ def camera_latest_snapshot(
 
 # 저장된 이벤트 스냅샷 이미지를 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.jpg")
-def event_snapshot(event_id: str):
+def event_snapshot(
+    event_id: str,
+    _auth: None = Depends(require_internal_token),
+):
     path = EVENT_MEDIA_DIR / "snapshots" / f"{_safe_event_id(event_id)}.jpg"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Event snapshot not found.")
@@ -721,7 +724,10 @@ def event_snapshot(event_id: str):
 
 # 저장된 이벤트 재생 영상을 파일 응답으로 반환합니다.
 @app.get("/events/{event_id}.mp4")
-def event_video(event_id: str):
+def event_video(
+    event_id: str,
+    _auth: None = Depends(require_internal_token),
+):
     path = EVENT_MEDIA_DIR / "videos" / f"{_safe_event_id(event_id)}.mp4"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Event video not found.")
