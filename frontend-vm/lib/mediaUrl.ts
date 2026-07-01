@@ -7,6 +7,7 @@ import { API_BASE_URL } from "@/lib/constants";
 const FLASK_MEDIA_PREFIXES = ["/api/", "/backend-api/", "/event_media/", "/uploads/", "/static/", "/media/"];
 const EVENT_MEDIA_TYPES = new Set(["snapshot", "video", "stream"]);
 const REPORT_ANALYSIS_MEDIA_TYPES = new Set(["snapshot", "video"]);
+const MODEL_COMPARISON_MEDIA_TYPES = new Set(["snapshot", "video"]);
 
 function isPrivateAiOrigin(url: URL) {
   if (url.port !== "5001") return false;
@@ -23,6 +24,16 @@ function normalizeAiMediaPath(pathname: string) {
   const reportMatch = pathname.match(/^\/(?:api\/)?(?:ai-media\/)?report-analysis\/jobs\/(\d+)\/([^/]+)\/?$/);
   if (reportMatch && REPORT_ANALYSIS_MEDIA_TYPES.has(reportMatch[2])) {
     return `/api/ai-media/report-analysis/jobs/${encodeURIComponent(reportMatch[1])}/${encodeURIComponent(reportMatch[2])}`;
+  }
+
+  const comparisonMatch = pathname.match(
+    /^\/(?:api\/)?(?:ai-media\/)?report-model-comparisons\/runs\/(\d+)\/([^/]+)\/?$/
+  );
+  if (
+    comparisonMatch &&
+    MODEL_COMPARISON_MEDIA_TYPES.has(comparisonMatch[2])
+  ) {
+    return `/api/ai-media/report-model-comparisons/runs/${encodeURIComponent(comparisonMatch[1])}/${encodeURIComponent(comparisonMatch[2])}`;
   }
 
   return null;
