@@ -6,12 +6,14 @@
 from __future__ import annotations
 # 설명: pathlib에서 Path 이름을 가져와 아래 로직에서 재사용한다.
 from pathlib import Path
+from urllib.parse import quote, urlsplit
 
 # 설명: flask에서 Blueprint, jsonify, request 이름을 가져와 아래 로직에서 재사용한다.
 from flask import Blueprint, jsonify, request
 
 # 설명: app.models에서 RealtimeEvent 이름을 가져와 아래 로직에서 재사용한다.
 from app.models import RealtimeEvent
+from app.modules.ai_media.service import gateway_event_media_url
 # 설명: app.utils.bbox에서 build_bbox_metadata 이름을 가져와 아래 로직에서 재사용한다.
 from app.utils.bbox import build_bbox_metadata
 
@@ -24,6 +26,42 @@ DEFAULT_RECENT_INCIDENT_LIMIT = 30
 MAX_RECENT_INCIDENT_LIMIT = 100
 # 설명: `DEFAULT_INCIDENT_MESSAGE`의 기준값 또는 기본값을 '이상상황이 감지되었습니다.'로 설정한다.
 DEFAULT_INCIDENT_MESSAGE = "이상상황이 감지되었습니다."
+
+
+def _is_private_ai_media_url(value: str | None) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+
+    try:
+        parsed = urlsplit(value)
+        return parsed.scheme in {"http", "https"} and parsed.port == 5001
+    except ValueError:
+        return False
+
+
+def _browser_safe_event_media_url(
+    value: str | None,
+    *,
+    payload: dict,
+    media_type: str,
+) -> str | None:
+    if not _is_private_ai_media_url(value):
+        return value
+
+    event_id = (
+        payload.get("ai_event_id")
+        or payload.get("source_event_id")
+        or payload.get("event_id")
+        or payload.get("incident_code")
+    )
+    if not event_id:
+        return None
+
+    return gateway_event_media_url(
+        quote(str(event_id), safe="._:-"),
+        media_type,
+    )
+
 
 
 # 설명: `realtime_bp`에 `Blueprint` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -82,8 +120,16 @@ def _normalize_incident_payload(event: RealtimeEvent) -> dict:
         "bbox_metadata": payload.get("bbox_metadata") or build_bbox_metadata(
             payload.get("bbox")
         ),
-        "snapshot_path": payload.get("snapshot_path"),
-        "clip_path": payload.get("clip_path"),
+        "snapshot_path": _browser_safe_event_media_url(
+            payload.get("snapshot_path") or payload.get("snapshot_url"),
+            payload=payload,
+            media_type="snapshot",
+        ),
+        "clip_path": _browser_safe_event_media_url(
+            payload.get("clip_path") or payload.get("video_url"),
+            payload=payload,
+            media_type="video",
+        ),
     }
 
 
