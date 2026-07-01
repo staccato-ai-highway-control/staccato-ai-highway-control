@@ -5,7 +5,7 @@ import { use, useEffect, useState } from "react";
 import { ArrowLeft, Download, FileWarning, ShieldCheck } from "lucide-react";
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { downloadResourceFile, getResource, getResourceDownloadBlob } from "@/features/resources/api";
+import { downloadSecurityLogFile, getSecurityLog, getSecurityLogDownloadBlob } from "@/features/securityLogs/api";
 import type { ResourceItem } from "@/features/resources/types";
 import { isApiError } from "@/lib/apiClient";
 
@@ -91,7 +91,7 @@ export default function SecurityLogDetailPage({ params }: { params: Promise<{ id
       setDownloadError("");
       let nextResource: ResourceItem;
       try {
-        nextResource = await getResource(id);
+        nextResource = await getSecurityLog(id);
       } catch (error) {
         if (!disposed) {
           setDetailFailed(true);
@@ -125,7 +125,7 @@ export default function SecurityLogDetailPage({ params }: { params: Promise<{ id
 
 
       try {
-        const blob = await getResourceDownloadBlob(id);
+        const blob = await getSecurityLogDownloadBlob(id);
         const isBlob = typeof Blob !== "undefined" && blob instanceof Blob;
         setBlobType(isBlob ? blob.type : null);
         setBlobSize(isBlob ? blob.size : null);
@@ -156,7 +156,7 @@ export default function SecurityLogDetailPage({ params }: { params: Promise<{ id
     const fileName = String(resource.category).toUpperCase() === "ACCESS_LOG" && !/\.[^\/]+$/.test(resource.file_name)
       ? `${resource.file_name}.txt`
       : resource.file_name;
-    try { await downloadResourceFile(resource.id, fileName); }
+    try { await downloadSecurityLogFile(resource.id, fileName); }
     catch { setDownloadError("파일을 다운로드하지 못했습니다."); }
   }
 
