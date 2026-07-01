@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Download, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import { RequireSuperAdmin } from "@/components/auth/RequireSuperAdmin";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { downloadResourceFile, getSecurityLogResources } from "@/features/resources/api";
+import { downloadSecurityLogFile, getSecurityLogs } from "@/features/securityLogs/api";
 import type { ResourceItem } from "@/features/resources/types";
 
 const PAGE_SIZE = 10;
@@ -39,7 +39,7 @@ export default function SecurityLogsPage() {
     if (!silent) setLoading(true);
     setErrorMessage("");
     try {
-      const response = await getSecurityLogResources({ page: 1, size: 1000, keyword: submittedKeyword || undefined });
+      const response = await getSecurityLogs({ page: 1, size: 1000, keyword: submittedKeyword || undefined });
       setLogs(response.items ?? []);
       const nextPages = Math.max(1, Math.ceil((response.items?.length ?? 0) / PAGE_SIZE));
       setPage((current) => Math.min(current, nextPages));
@@ -68,7 +68,7 @@ export default function SecurityLogsPage() {
 
   async function handleDownload(log: ResourceItem) {
     if (!log.file_name || log.allowed_actions?.download !== true) return;
-    try { await downloadResourceFile(log.id, log.file_name); } catch { setErrorMessage("파일 다운로드에 실패했습니다."); }
+    try { await downloadSecurityLogFile(log.id, log.file_name); } catch { setErrorMessage("파일 다운로드에 실패했습니다."); }
   }
 
   function openDetail(id: ResourceItem["id"]) {
