@@ -6,6 +6,7 @@
 import hashlib
 # 설명: copy에서 deepcopy 이름을 가져와 아래 로직에서 재사용한다.
 from copy import deepcopy
+from urllib.parse import urlsplit
 # 설명: os 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
 import os
 # 설명: uuid 모듈을 현재 파일에서 사용할 수 있도록 가져온다.
@@ -145,6 +146,56 @@ class ReportUploadService:
         # 설명: 호출자에게 result 값을 함수 결과로 반환한다.
         return result
 
+    @staticmethod
+    def _is_private_ai_media_url(value):
+        if not isinstance(value, str):
+            return False
+
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            return False
+
+        return parsed.scheme in {"http", "https"} and parsed.port == 5001
+
+    @staticmethod
+    def _browser_safe_analysis_media_response(result_summary, job_id):
+        if not isinstance(result_summary, dict):
+            return result_summary
+
+        result = deepcopy(result_summary)
+
+        from app.modules.ai_media.service import gateway_report_media_url
+
+        def gateway_if_private(value, media_type):
+            if not ReportUploadService._is_private_ai_media_url(value):
+                return value
+            return gateway_report_media_url(int(job_id), media_type)
+
+        result["annotated_video_url"] = gateway_if_private(
+            result.get("annotated_video_url"),
+            "video",
+        )
+        result["annotated_image_url"] = gateway_if_private(
+            result.get("annotated_image_url"),
+            "snapshot",
+        )
+
+        annotated_media = result.get("annotated_media")
+        if isinstance(annotated_media, dict):
+            annotated_media = dict(annotated_media)
+            annotated_media["video_url"] = gateway_if_private(
+                annotated_media.get("video_url"),
+                "video",
+            )
+            annotated_media["image_url"] = gateway_if_private(
+                annotated_media.get("image_url"),
+                "snapshot",
+            )
+            result["annotated_media"] = annotated_media
+
+        return result
+
     # 설명: `_analysis_job_response` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
     @staticmethod
     def _analysis_job_response(job):
@@ -156,8 +207,9 @@ class ReportUploadService:
         # 설명: `data`에 `ReportUploadService._to_dict` 호출 결과를 저장해 다음 처리에서 사용한다.
         data = ReportUploadService._to_dict(job)
         # 설명: `data['result_summary']`에 `ReportUploadService._analysis_result_response` 호출 결과를 저장해 다음 처리에서 사용한다.
-        data["result_summary"] = ReportUploadService._analysis_result_response(
-            data.get("result_summary")
+        data["result_summary"] = ReportUploadService._browser_safe_analysis_media_response(
+            ReportUploadService._analysis_result_response(data.get("result_summary")),
+            job.id,
         )
         # 설명: `analysis_status`에 `ReportUploadService._normalize_analysis_status` 호출 결과를 저장해 다음 처리에서 사용한다.
         analysis_status = ReportUploadService._normalize_analysis_status(job.job_status)
