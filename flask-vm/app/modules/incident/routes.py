@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 # 설명: decimal에서 Decimal 이름을 가져와 아래 로직에서 재사용한다.
 from decimal import Decimal
+from urllib.parse import quote, urlsplit
 
 # 설명: flask에서 Blueprint, jsonify, request 이름을 가져와 아래 로직에서 재사용한다.
 from flask import Blueprint, jsonify, request
@@ -203,6 +204,28 @@ def _latest_ai_event_for_incident(incident: Incident) -> AiEvent | None:
     return db.session.get(AiEvent, incident_code)
 
 
+def _is_private_ai_media_url(value: str | None) -> bool:
+    """Browser에 노출하면 안 되는 AI VM 직접 media URL인지 판별한다."""
+    if not value:
+        return False
+
+    try:
+        parsed = urlsplit(value)
+        return parsed.scheme in {"http", "https"} and parsed.port == 5001
+    except ValueError:
+        return False
+
+
+def _ai_event_snapshot_gateway_url(ai_event: AiEvent | None) -> str:
+    """AI Event의 canonical Flask Gateway snapshot URL을 만든다."""
+    event_id = getattr(ai_event, "event_id", None)
+    if not event_id:
+        return ""
+
+    safe_event_id = quote(str(event_id), safe="._:-")
+    return f"/api/ai-media/events/{safe_event_id}/snapshot"
+
+
 # 설명: `_to_frontend_incident` 함수는 캡슐화된 처리 절차를 수행하는 함수다.
 def _to_frontend_incident(incident: Incident) -> dict:
     # 설명: `cctv`에 `_get_cctv` 호출 결과를 저장해 다음 처리에서 사용한다.
@@ -241,16 +264,14 @@ def _to_frontend_incident(incident: Incident) -> dict:
         str(incident.cctv_id) if incident.cctv_id else ""
     ) or (ai_event.camera_id if ai_event and ai_event.camera_id else "")
 
-    # 설명: `snapshot_url`의 기준값 또는 기본값을 ''로 설정한다.
-    snapshot_url = ""
-    # 설명: `snapshot and snapshot.file_path` 조건 결과에 따라 실행 경로를 분기한다.
-    if snapshot and snapshot.file_path:
-        # 설명: `snapshot_url`에 snapshot.file_path 표현식의 계산 결과를 저장한다.
-        snapshot_url = snapshot.file_path
-    # 설명: `ai_event and ai_event.snapshot_url` 조건 결과에 따라 실행 경로를 분기한다.
-    elif ai_event and ai_event.snapshot_url:
-        # 설명: `snapshot_url`에 ai_event.snapshot_url 표현식의 계산 결과를 저장한다.
-        snapshot_url = ai_event.snapshot_url
+    # IncidentSnapshot의 browser-safe 경로는 기존 우선순위를 유지합니다.
+    snapshot_url = snapshot.file_path if snapshot and snapshot.file_path else ""
+
+    # AI VM 직접 URL은 browser에 노출하지 않고, 연결된 AI Event Gateway로 대체합니다.
+    if _is_private_ai_media_url(snapshot_url):
+        snapshot_url = _ai_event_snapshot_gateway_url(ai_event)
+    elif not snapshot_url:
+        snapshot_url = _ai_event_snapshot_gateway_url(ai_event)
 
     # 설명: `video_url`에 ai_event.video_url if ai_event and ai_event.video_url else '' 표현식의 계산 결과를 저장한다.
     video_url = ai_event.video_url if ai_event and ai_event.video_url else ""

@@ -128,15 +128,33 @@ def event_media_target(event_id: str, media_type: str, user) -> UpstreamTarget:
     if event is None:
         raise AiMediaError("AI event not found.", 404)
 
+    # Event clip media is canonically addressed by event_id on the AI VM.
+    # Do not treat browser-facing Flask Gateway paths stored in legacy payloads
+    # as AI VM upstream URLs.
+    canonical_url = _canonical_event_media_url(event_id, media_type)
+    if canonical_url:
+        return UpstreamTarget(_validate_ai_vm_url(canonical_url), media_type)
+
+    # Stream does not have an event_id-based canonical endpoint. Preserve the
+    # existing allowlisted upstream lookup for that media type only.
     raw_event = event.raw_event_json if isinstance(event.raw_event_json, dict) else {}
     value = _first_non_empty(
         raw_event.get(f"{media_type}_url"),
         raw_event.get(f"{media_type}_path"),
-        raw_event.get("clip_path") if media_type == "video" else None,
-        raw_event.get("snapshot_path") if media_type == "snapshot" else None,
         getattr(event, f"{media_type}_url", None),
     )
     return UpstreamTarget(_validate_ai_vm_url(value), media_type)
+
+
+def _canonical_event_media_url(event_id: str, media_type: str) -> str | None:
+    """Build the allowlisted AI VM event media endpoint."""
+
+    safe_event_id = quote(event_id, safe="._:-")
+    if media_type == "snapshot":
+        return f"{_ai_vm_base_url()}/events/{safe_event_id}.jpg"
+    if media_type == "video":
+        return f"{_ai_vm_base_url()}/events/{safe_event_id}.mp4"
+    return None
 
 
 def report_media_target(job_id: int, media_type: str, user) -> UpstreamTarget:
