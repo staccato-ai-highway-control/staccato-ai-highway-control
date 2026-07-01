@@ -25,7 +25,7 @@ import {
 } from "@/features/admin/api";
 import type { AdminUser, SignupRequestApiItem } from "@/features/admin/types";
 import type { UserRole } from "@/features/auth/types";
-import { downloadResourceFile, getSecurityLogResources } from "@/features/resources/api";
+import { downloadSecurityLogFile, getSecurityLogs } from "@/features/securityLogs/api";
 import type { ResourceItem } from "@/features/resources/types";
 
 // ─── 공통 상수 ────────────────────────────────────────────────────────────────
@@ -524,7 +524,7 @@ function LogsTab() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const res = await getSecurityLogResources({ page: 1, size: 1000 });
+      const res = await getSecurityLogs({ page: 1, size: 1000 });
       setLogs(res.items ?? []);
       setPage(1);
     } catch (e) {
@@ -550,7 +550,7 @@ function LogsTab() {
 
   async function handleDownload(log: ResourceItem) {
     if (!log.file_name) return;
-    await downloadResourceFile(log.id, log.file_name);
+    await downloadSecurityLogFile(log.id, log.file_name);
   }
 
   return (
