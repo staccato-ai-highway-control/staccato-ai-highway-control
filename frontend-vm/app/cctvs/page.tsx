@@ -116,22 +116,20 @@ export default function CctvsPage() {
       // 코드 설명: nextCctvs 값을 선언해 이후 계산, 조건 판단 또는 화면 렌더링에서 재사용합니다.
       const nextCctvs = await getCameras({ limit: 8 });
       const allowedCctvs = nextCctvs.filter(isTemporarilyAllowedCctv);
+      const isSelectedCctvAllowed = allowedCctvs.some((cctv) => cctv.id === selectedCctvId);
+      const nextSelectedCctvId =
+        allowedCctvs.length === 0 ? "" : isSelectedCctvAllowed ? selectedCctvId : allowedCctvs[0].id;
+      if (selectedCctvId && !isSelectedCctvAllowed) {
+        setIsRoiSettingsOpen(false);
+      }
       // 코드 설명: setCctvs 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setCctvs(allowedCctvs);
       setSelectedDetailCctv((currentCctv) => {
         if (!currentCctv || isTemporarilyAllowedCctv(currentCctv)) return currentCctv;
         return null;
       });
-      if (allowedCctvs.length !== nextCctvs.length) {
-        setIsRoiSettingsOpen(false);
-      }
       // 코드 설명: setSelectedCctvId 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
-      setSelectedCctvId((currentId) => {
-        // 코드 설명: 다음 조건이 참일 때만 분기 내부 로직을 실행합니다: allowedCctvs.length === 0
-        if (allowedCctvs.length === 0) return "";
-        // 코드 설명: 계산 또는 요청 처리 결과를 호출부에 반환합니다: allowedCctvs.some((cctv) => cctv.id === currentId) ? currentId : allowed…
-        return allowedCctvs.some((cctv) => cctv.id === currentId) ? currentId : allowedCctvs[0].id;
-      });
+      setSelectedCctvId(nextSelectedCctvId);
     } catch (error) {
       // 코드 설명: setErrorMessage 상태 갱신 함수로 새 값을 저장하고 React 재렌더링을 요청합니다.
       setErrorMessage(error instanceof Error ? error.message : "CCTV 정보를 불러오지 못했습니다.");
