@@ -26,7 +26,11 @@ import { getCameras, type CameraSlotConfig } from "@/features/cctvs/api";
 import type { Cctv } from "@/types/cctv";
 
 // CCTV-005~007 장애 완화를 위한 임시 UI 격리 정책입니다. 안정화 후 제거 대상입니다.
-const TEMP_ALLOWED_CCTV_CODES = new Set(["CCTV-001", "CCTV-002", "CCTV-003", "CCTV-004"]);
+const TEMP_ALLOWED_CCTV_CODES = new Set([
+  "CCTV-001",
+  "CCTV-002",
+  "CCTV-003",
+]);
 
 function getCctvIsolationKey(cctv: Cctv) {
   return cctv.cctvCode || cctv.id;
