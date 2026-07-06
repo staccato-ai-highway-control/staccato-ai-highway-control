@@ -51,6 +51,7 @@ from app.modules.auth.routes import auth_bp
 # - 파일 위치: app/modules/incident/
 # ============================================================
 from app.modules.incident.routes import incident_bp
+from app.modules.incident_event.routes import incident_event_bp
 # 설명: app.modules.realtime.routes에서 realtime_bp 이름을 가져와 아래 로직에서 재사용한다.
 from app.modules.realtime.routes import realtime_bp
 
@@ -159,6 +160,7 @@ def register_blueprints(app):
     # Incident / Report
     # ========================================================
     app.register_blueprint(incident_bp)
+    app.register_blueprint(incident_event_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
     app.register_blueprint(realtime_bp)
     # 설명: `app.register_blueprint`를 호출해 필요한 부수 효과 또는 후속 처리를 수행한다.
