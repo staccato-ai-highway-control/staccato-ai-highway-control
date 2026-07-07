@@ -25,11 +25,10 @@ import { getCameras, type CameraSlotConfig } from "@/features/cctvs/api";
 // 코드 설명: @/types/cctv 모듈의 타입, 함수 또는 UI 요소를 현재 파일에서 사용하도록 가져옵니다.
 import type { Cctv } from "@/types/cctv";
 
-// CCTV-005~007 장애 완화를 위한 임시 UI 격리 정책입니다. 안정화 후 제거 대상입니다.
+// CCTV-003~007 장애 완화를 위한 임시 UI 격리 정책입니다. 안정화 후 제거 대상입니다.
 const TEMP_ALLOWED_CCTV_CODES = new Set([
   "CCTV-001",
   "CCTV-002",
-  "CCTV-003",
 ]);
 
 function getCctvIsolationKey(cctv: Cctv) {
