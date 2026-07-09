@@ -10,6 +10,8 @@ STACCATO는 고속도로 CCTV 영상에서 차량을 탐지하고 추적하여, 
 |---|---|
 | 서비스 접속 | [STACCATO 서비스 바로가기](https://mbc-sw.iptime.org:3221/) |
 | 시연 영상 | [YouTube에서 STACCATO 시연 영상 보기](https://youtu.be/l2xOOqAfufo) |
+| 발표 자료 | [2조-STACCATO 최종.pptx](https://github.com/user-attachments/files/29840629/2.-STACCATO.pptx) |
+
 
 > 🎬 [STACCATO 최종 시연 영상 바로가기](https://youtu.be/l2xOOqAfufo)
 
