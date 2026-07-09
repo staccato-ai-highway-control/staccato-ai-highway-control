@@ -1,0 +1,10 @@
+[Unit]
+Description=Run STACCATO Daily Bug Report Automation every day
+
+[Timer]
+OnCalendar=*-*-* 18:10:00 Asia/Seoul
+Persistent=true
+Unit=staccato-daily-bug-report.service
+
+[Install]
+WantedBy=timers.target
