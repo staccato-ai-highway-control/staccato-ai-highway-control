@@ -1,62 +1,60 @@
-# STACCATO
-<img width="2166" height="726" alt="STACCATO 프로젝트 배너" src="https://github.com/user-attachments/assets/ef215914-e5cc-488a-abaf-7aa5f5210fbf" />
+﻿# STACCATO
+<img width="2166" height="726" alt="STACCATO ?꾨줈?앺듃 諛곕꼫" src="https://github.com/user-attachments/assets/ef215914-e5cc-488a-abaf-7aa5f5210fbf" />
 
-STACCATO는 고속도로 CCTV 영상에서 차량을 탐지하고 추적하여, 갓길 정차와 급감속 등 위험 징후를 이벤트로 생성하고 관제 화면에서 확인할 수 있도록 지원하는 AI 기반 관제 시스템입니다.
+STACCATO??怨좎냽?꾨줈 CCTV ?곸긽?먯꽌 李⑤웾???먯??섍퀬 異붿쟻?섏뿬, 媛볤만 ?뺤감? 湲됯컧?????꾪뿕 吏뺥썑瑜??대깽?몃줈 ?앹꽦?섍퀬 愿???붾㈃?먯꽌 ?뺤씤?????덈룄濡?吏?먰븯??AI 湲곕컲 愿???쒖뒪?쒖엯?덈떎.
 
 
-## 서비스 및 시연
+## ?쒕퉬??諛??쒖뿰
 
-| 구분 | 링크 |
+| 援щ텇 | 留곹겕 |
 |---|---|
-| 서비스 접속 | [STACCATO 서비스 바로가기](https://mbc-sw.iptime.org:3221/) |
-| 시연 영상 | [YouTube에서 STACCATO 시연 영상 보기](https://youtu.be/l2xOOqAfufo) |
-| 발표 자료 | [STACCATO 발표 자료 바로보기](docs/presentation/staccato-final-presentation.pdf) |
+| ?쒕퉬???묒냽 | [STACCATO ?쒕퉬??諛붾줈媛湲?(https://mbc-sw.iptime.org:3221/) |
+| ?쒖뿰 ?곸긽 | [YouTube?먯꽌 STACCATO ?쒖뿰 ?곸긽 蹂닿린](https://youtu.be/l2xOOqAfufo) |
+| 諛쒗몴 ?먮즺 | [STACCATO 諛쒗몴 ?먮즺 諛붾줈蹂닿린](docs/presentation/staccato-final-presentation.pdf) |
  
 
 
-> 🎬 [STACCATO 최종 시연 영상 바로가기](https://youtu.be/l2xOOqAfufo)
+> ?렗 [STACCATO 理쒖쥌 ?쒖뿰 ?곸긽 諛붾줈媛湲?(https://youtu.be/l2xOOqAfufo)
 
-> 현재 시연·개발 환경은 자체서명 인증서를 사용하므로 브라우저에서 보안 경고가 표시될 수 있습니다.
+> ?꾩옱 ?쒖뿰쨌媛쒕컻 ?섍꼍? ?먯껜?쒕챸 ?몄쬆?쒕? ?ъ슜?섎?濡?釉뚮씪?곗??먯꽌 蹂댁븞 寃쎄퀬媛 ?쒖떆?????덉뒿?덈떎.
 
-> 최종 MVP 범위 상세 문서: [`docs/mvp/final-mvp-scope.md`](docs/mvp/final-mvp-scope.md)
+> 理쒖쥌 MVP 踰붿쐞 ?곸꽭 臾몄꽌: [`docs/mvp/final-mvp-scope.md`](docs/mvp/final-mvp-scope.md)
 
-## 최종 MVP 개요
+## 理쒖쥌 MVP 媛쒖슂
 
-STACCATO는 고속도로 CCTV 기반 차량 탐지, 위험 상황 판단, 이벤트 생성, 실시간 관제 연동을 지원하는 AI 기반 관제 시스템입니다.
+STACCATO??怨좎냽?꾨줈 CCTV 湲곕컲 李⑤웾 ?먯?, ?꾪뿕 ?곹솴 ?먮떒, ?대깽???앹꽦, ?ㅼ떆媛?愿???곕룞??吏?먰븯??AI 湲곕컲 愿???쒖뒪?쒖엯?덈떎.
 
-최종 MVP 핵심 기능:
+理쒖쥌 MVP ?듭떖 湲곕뒫:
 
-- YOLOv11 기반 차량 탐지
-- Bbox 중심점 이동량 기반 정차 차량 추정
-- ROI 및 Rule Engine 기반 이상 이벤트 탐지
-- Flask API Gateway 및 MySQL 메타데이터 저장
-- Socket.IO 기반 실시간 알림
-- 관제 화면, 신고 등록·분석, 회원가입·로그인, 마이페이지
-- Snapshot 및 MP4 Replay 메타데이터 연동
+- YOLOv11 湲곕컲 李⑤웾 ?먯?
+- Bbox 以묒떖???대룞??湲곕컲 ?뺤감 李⑤웾 異붿젙
+- ROI 諛?Rule Engine 湲곕컲 ?댁긽 ?대깽???먯?
+- Flask API Gateway 諛?MySQL 硫뷀??곗씠?????- Socket.IO 湲곕컲 ?ㅼ떆媛??뚮┝
+- 愿???붾㈃, ?좉퀬 ?깅줉쨌遺꾩꽍, ?뚯썝媛?끒룸줈洹몄씤, 留덉씠?섏씠吏
+- Snapshot 諛?MP4 Replay 硫뷀??곗씠???곕룞
 
-최종 MVP 제외 범위:
+理쒖쥌 MVP ?쒖쇅 踰붿쐞:
 
-- 지도 API 연동
-- GPS 기반 위치 표시
-- LLM 및 챗봇 기능
-- Docker Compose 기반 통합 배포
-- 강화학습 및 자동 재학습
-
+- 吏??API ?곕룞
+- GPS 湲곕컲 ?꾩튂 ?쒖떆
+- LLM 諛?梨쀫큸 湲곕뒫
+- Docker Compose 湲곕컲 ?듯빀 諛고룷
+- 媛뺥솕?숈뒿 諛??먮룞 ?ы븰??
 ---
 
 
-## 현재 운영 기준
+## ?꾩옱 ?댁쁺 湲곗?
 
-현재 프로젝트 실행 기준은 VM 분리 구조입니다.
+?꾩옱 ?꾨줈?앺듃 ?ㅽ뻾 湲곗?? VM 遺꾨━ 援ъ“?낅땲??
 
-| 서버 | 실행 환경 |
+| ?쒕쾭 | ?ㅽ뻾 ?섍꼍 |
 |---|---|
-| DB-VM | MySQL 직접 설치 |
-| FLASK-VM | Python 가상환경 |
+| DB-VM | MySQL 吏곸젒 ?ㅼ튂 |
+| FLASK-VM | Python 媛?곹솚寃?|
 | FRONTEND-VM | Node.js / npm |
-| AI VM | FastAPI 기반 AI 추론 서비스 |
+| AI VM | FastAPI 湲곕컲 AI 異붾줎 ?쒕퉬??|
 
-자세한 서버 세팅 기준은 `docs/infra` 문서를 참고합니다.
+?먯꽭???쒕쾭 ?명똿 湲곗?? `docs/infra` 臾몄꽌瑜?李멸퀬?⑸땲??
 
 - `docs/infra/vm-server-status.md`
 - `docs/infra/db-vm-setup.md`
@@ -65,35 +63,36 @@ STACCATO는 고속도로 CCTV 기반 차량 탐지, 위험 상황 판단, 이벤
 - `docs/infra/env-guide.md`
 - `docs/infra/repository-cleanup-policy.md`
 
-주의사항:
+二쇱쓽?ы빆:
 
-- `.env`, `.env.local`, `.venv`, `node_modules`는 Git에 올리지 않습니다.
-- 현재 실행 기준은 VM 분리 구조이며, Docker Compose 기반 통합 실행은 사용하지 않습니다.
-- `DB VM`, `Flask VM`, `Frontend VM`, `AI VM`은 각각 분리된 VM 기준으로 운영합니다.
-- 루트 `docker-compose.yml`과 비-AI VM의 Dockerfile은 삭제되었습니다.
-- 실제 서버 실행 상태, DB 데이터, 설치된 패키지는 Git pull만으로 복제되지 않습니다.
+- `.env`, `.env.local`, `.venv`, `node_modules`??Git???щ━吏 ?딆뒿?덈떎.
+- ?꾩옱 ?ㅽ뻾 湲곗?? VM 遺꾨━ 援ъ“?대ŉ, Docker Compose 湲곕컲 ?듯빀 ?ㅽ뻾? ?ъ슜?섏? ?딆뒿?덈떎.
+- `DB VM`, `Flask VM`, `Frontend VM`, `AI VM`? 媛곴컖 遺꾨━??VM 湲곗??쇰줈 ?댁쁺?⑸땲??
+- 猷⑦듃 `docker-compose.yml`怨?鍮?AI VM??Dockerfile? ??젣?섏뿀?듬땲??
+- ?ㅼ젣 ?쒕쾭 ?ㅽ뻾 ?곹깭, DB ?곗씠?? ?ㅼ튂???⑦궎吏??Git pull留뚯쑝濡?蹂듭젣?섏? ?딆뒿?덈떎.
 
 ---
 
-## 사용자 및 운영 문서
+## ?ъ슜??諛??댁쁺 臾몄꽌
 
-STACCATO의 사용자 사용법, 관리자 운영 방법, 최종 릴리즈 검증 결과는 아래 문서를 참고합니다.
+STACCATO???ъ슜???ъ슜踰? 愿由ъ옄 ?댁쁺 諛⑸쾿, 理쒖쥌 由대━利?寃利?寃곌낵???꾨옒 臾몄꽌瑜?李멸퀬?⑸땲??
 
-| 문서 | 설명 |
+| 臾몄꽌 | ?ㅻ챸 |
 |---|---|
-| [사용자 매뉴얼](docs/STACCATO_USER_MANUAL.md) | 서비스 접속, 로그인, 이벤트 조회, 영상 확인, 실시간 알림 확인 방법 |
-| [관리자 매뉴얼](docs/STACCATO_ADMIN_MANUAL.md) | 이벤트 관리, 사용자 신고 확인, 운영 점검 항목 |
-| [릴리즈 체크리스트](docs/STACCATO_RELEASE_CHECKLIST.md) | 최종 MVP 릴리즈 전 검증 결과 |
-| [운영 문서](docs/operations/ai-vm-control.md) | AI VM 서비스 제어 및 운영 참고 문서 |
-| [인프라 문서](docs/infra/vm-server-status.md) | VM 분리 구조와 서버 상태 기준 |
+| [?ъ슜??留ㅻ돱??(docs/STACCATO_USER_MANUAL.md) | ?쒕퉬???묒냽, 濡쒓렇?? ?대깽??議고쉶, ?곸긽 ?뺤씤, ?ㅼ떆媛??뚮┝ ?뺤씤 諛⑸쾿 |
+| [愿由ъ옄 留ㅻ돱??(docs/STACCATO_ADMIN_MANUAL.md) | ?대깽??愿由? ?ъ슜???좉퀬 ?뺤씤, ?댁쁺 ?먭? ??ぉ |
+| [由대━利?泥댄겕由ъ뒪??(docs/STACCATO_RELEASE_CHECKLIST.md) | 理쒖쥌 MVP 由대━利???寃利?寃곌낵 |
+| [?댁쁺 臾몄꽌](docs/operations/ai-vm-control.md) | AI VM ?쒕퉬???쒖뼱 諛??댁쁺 李멸퀬 臾몄꽌 |
+| [?명봽??臾몄꽌](docs/infra/vm-server-status.md) | VM 遺꾨━ 援ъ“? ?쒕쾭 ?곹깭 湲곗? |
 
-## 기본 사용 흐름
+## 湲곕낯 ?ъ슜 ?먮쫫
 
-1. 브라우저에서 STACCATO 서비스에 접속합니다.
-2. 계정으로 로그인합니다.
-3. 대시보드 또는 관제 화면에서 이벤트 목록을 확인합니다.
-4. 이벤트 상세 화면에서 스냅샷, 탐지 정보, 영상을 확인합니다.
-5. 필요한 경우 이벤트 영상을 다운로드합니다.
-6. 실시간 알림 영역에서 신규 이벤트 발생 여부를 확인합니다.
+1. 釉뚮씪?곗??먯꽌 STACCATO ?쒕퉬?ㅼ뿉 ?묒냽?⑸땲??
+2. 怨꾩젙?쇰줈 濡쒓렇?명빀?덈떎.
+3. ??쒕낫???먮뒗 愿???붾㈃?먯꽌 ?대깽??紐⑸줉???뺤씤?⑸땲??
+4. ?대깽???곸꽭 ?붾㈃?먯꽌 ?ㅻ깄?? ?먯? ?뺣낫, ?곸긽???뺤씤?⑸땲??
+5. ?꾩슂??寃쎌슦 ?대깽???곸긽???ㅼ슫濡쒕뱶?⑸땲??
+6. ?ㅼ떆媛??뚮┝ ?곸뿭?먯꽌 ?좉퇋 ?대깽??諛쒖깮 ?щ?瑜??뺤씤?⑸땲??
+
 
 
