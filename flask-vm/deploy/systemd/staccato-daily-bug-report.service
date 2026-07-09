@@ -1,0 +1,12 @@
+[Unit]
+Description=STACCATO Daily Bug Report Automation
+After=network-online.target staccato-flask.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=staccato
+WorkingDirectory=/home/staccato/staccato/flask-vm
+Environment=PYTHONPATH=/home/staccato/staccato/flask-vm
+Environment=DAILY_BUG_REPORT_START_DATE=2026-07-10
+ExecStart=/home/staccato/staccato/flask-vm/.venv/bin/python /home/staccato/staccato/flask-vm/scripts/create_daily_bug_report.py
